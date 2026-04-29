@@ -34,6 +34,14 @@ export const env = createEnv({
     STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
     STRIPE_PRICE_PRO_YEARLY: z.string().optional(),
 
+    /** ЮKassa shopId + secretKey из личного кабинета:
+     *  https://yookassa.ru/my/merchant/integration/api-keys */
+    YOOKASSA_SHOP_ID: z.string().optional(),
+    YOOKASSA_SECRET_KEY: z.string().optional(),
+
+    /** Цена коуч-сессии в копейках. Default 1000 (10 ₽). */
+    AI_COACH_PRICE_KOPECKS: z.coerce.number().int().positive().optional(),
+
     CRON_SECRET: z.string().min(16).optional(),
 
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),

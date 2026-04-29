@@ -68,3 +68,23 @@ export const subscriptionStatus = pgEnum("subscription_status", [
   "incomplete_expired",
   "paused",
 ]);
+
+export const creditTxType = pgEnum("credit_tx_type", [
+  "purchase",
+  "spend",
+  "refund",
+  "adjustment",
+]);
+
+export const creditTxRefType = pgEnum("credit_tx_ref_type", [
+  "yookassa_payment",
+  "ai_coach_session",
+  "manual",
+]);
+
+export const paymentStatus = pgEnum("payment_status", [
+  "pending",
+  "waiting_for_capture",
+  "succeeded",
+  "canceled",
+]);

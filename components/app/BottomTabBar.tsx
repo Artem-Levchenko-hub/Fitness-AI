@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, BookOpen, Dumbbell, Home, User } from "lucide-react";
+import { Activity, Dumbbell, Home, User, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -10,7 +10,7 @@ const TABS = [
   { href: "/dashboard", icon: Home, label: "Главная" },
   { href: "/workouts", icon: Activity, label: "Тренировки" },
   { href: "/exercises", icon: Dumbbell, label: "Упражнения" },
-  { href: "/notes", icon: BookOpen, label: "Заметки" },
+  { href: "/billing", icon: Wallet, label: "Баланс" },
   { href: "/settings", icon: User, label: "Профиль" },
 ] as const;
 

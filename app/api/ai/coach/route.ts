@@ -5,6 +5,8 @@ import { requireUser } from "@/lib/auth/require-user";
 import { buildCoachContext } from "@/lib/ai/context-builder";
 import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
 import { COACH_SYSTEM_PROMPT } from "@/lib/ai/prompts";
+import { aiCoachPriceKopecks } from "@/lib/billing/pricing";
+import { debit } from "@/lib/repos/credits.repo";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,6 +36,31 @@ export async function POST(request: Request) {
     parsed = bodySchema.parse(await request.json());
   } catch {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  // Списание credits только при ПЕРВОМ user-сообщении сессии. Дальнейшие
+  // сообщения этой беседы — бесплатно (один разговор = один debit).
+  // Считаем по количеству user-messages: если их 1 — это начало.
+  const userMessages = parsed.messages.filter((m) => m.role === "user");
+  if (userMessages.length === 1) {
+    const price = aiCoachPriceKopecks();
+    const debitResult = await debit(
+      user.id,
+      price,
+      `AI-коуч: разбор тренировки`,
+      { id: parsed.workoutId, type: "ai_coach_session" },
+    );
+    if (!debitResult.ok) {
+      return Response.json(
+        {
+          error: "insufficient_funds",
+          message: `Недостаточно баланса. Пополните на странице /billing — анализ стоит ${price / 100} ₽.`,
+          balance: debitResult.balance,
+          priceKopecks: price,
+        },
+        { status: 402 },
+      );
+    }
   }
 
   const context = await buildCoachContext(user.id, parsed.workoutId);

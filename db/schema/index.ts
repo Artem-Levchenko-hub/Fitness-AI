@@ -6,3 +6,4 @@ export * from "./workouts";
 export * from "./notes";
 export * from "./ai";
 export * from "./billing";
+export * from "./credits";

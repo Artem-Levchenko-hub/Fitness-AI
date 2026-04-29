@@ -8,6 +8,13 @@
       "when": 1777493199956,
       "tag": "0000_greedy_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777498649957,
+      "tag": "0001_chilly_warbound",
+      "breakpoints": true
     }
   ]
 }
