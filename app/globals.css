@@ -1,26 +1,147 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
+/* Functional Calm — design tokens (R-36).
+   Light = :root. Dark = .dark (next-themes class).
+   Naming совместимо с shadcn/ui new-york. Палитра в OKLCH —
+   perceptual uniform, лучшее управление контрастом и градациями. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: oklch(98% 0 0);
+  --foreground: oklch(15% 0 0);
+
+  --card: oklch(100% 0 0);
+  --card-foreground: oklch(15% 0 0);
+
+  --popover: oklch(100% 0 0);
+  --popover-foreground: oklch(15% 0 0);
+
+  --primary: oklch(50% 0.15 270);
+  --primary-foreground: oklch(98% 0 0);
+
+  --secondary: oklch(95% 0 0);
+  --secondary-foreground: oklch(15% 0 0);
+
+  --muted: oklch(95% 0 0);
+  --muted-foreground: oklch(42% 0 0);
+
+  --accent: oklch(95% 0 0);
+  --accent-foreground: oklch(15% 0 0);
+
+  --destructive: oklch(55% 0.22 29);
+  --destructive-foreground: oklch(98% 0 0);
+
+  --success: oklch(55% 0.18 142);
+  --success-foreground: oklch(98% 0 0);
+
+  --warning: oklch(68% 0.18 85);
+  --warning-foreground: oklch(15% 0 0);
+
+  --pr: oklch(65% 0.18 60);
+  --pr-foreground: oklch(15% 0 0);
+
+  --border: oklch(90% 0 0);
+  --input: oklch(90% 0 0);
+  --ring: oklch(50% 0.15 270);
+
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: oklch(14% 0 0);
+  --foreground: oklch(95% 0 0);
+
+  --card: oklch(18% 0 0);
+  --card-foreground: oklch(95% 0 0);
+
+  --popover: oklch(18% 0 0);
+  --popover-foreground: oklch(95% 0 0);
+
+  --primary: oklch(77% 0.18 270);
+  --primary-foreground: oklch(14% 0 0);
+
+  --secondary: oklch(22% 0 0);
+  --secondary-foreground: oklch(95% 0 0);
+
+  --muted: oklch(22% 0 0);
+  --muted-foreground: oklch(72% 0 0);
+
+  --accent: oklch(22% 0 0);
+  --accent-foreground: oklch(95% 0 0);
+
+  --destructive: oklch(62% 0.24 29);
+  --destructive-foreground: oklch(95% 0 0);
+
+  --success: oklch(72% 0.2 142);
+  --success-foreground: oklch(14% 0 0);
+
+  --warning: oklch(84% 0.16 85);
+  --warning-foreground: oklch(14% 0 0);
+
+  --pr: oklch(87% 0.2 60);
+  --pr-foreground: oklch(14% 0 0);
+
+  --border: oklch(28% 0 0);
+  --input: oklch(28% 0 0);
+  --ring: oklch(77% 0.18 270);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-pr: var(--pr);
+  --color-pr-foreground: var(--pr-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -32,6 +32,19 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# editor / IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# test artifacts
+/playwright-report
+/playwright/.cache
+/test-results
+/coverage
 
 # vercel
 .vercel
