@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { getTemplateWithItems } from "@/lib/repos/templates.repo";
 import { deleteTemplateAction } from "@/server/actions/templates";
+import { startWorkoutFromTemplateAction } from "@/server/actions/workouts";
 
 export const metadata: Metadata = { title: "Шаблон" };
 
@@ -36,12 +37,13 @@ export default async function TemplateDetailPage({ params }: Props) {
         ) : null}
       </header>
 
-      <Button asChild size="lg" className="mb-6 w-full">
-        <Link href={`/workouts/start?templateId=${tpl.id}`}>
+      <form action={startWorkoutFromTemplateAction} className="mb-6">
+        <input type="hidden" name="templateId" value={tpl.id} />
+        <Button type="submit" size="lg" className="w-full">
           <Play className="size-4" />
           Начать тренировку
-        </Link>
-      </Button>
+        </Button>
+      </form>
 
       <ol className="space-y-2">
         {tpl.items.map((item, idx) => (
