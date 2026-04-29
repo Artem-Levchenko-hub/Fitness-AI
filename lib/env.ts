@@ -13,7 +13,8 @@ export const env = createEnv({
       .transform((v) => v === "true"),
 
     RESEND_API_KEY: z.string().min(1),
-    EMAIL_FROM: z.string().email(),
+    /** RFC 5322 формат: "Display Name <email@host>" или просто "email@host". */
+    EMAIL_FROM: z.string().min(3),
 
     DEEPSEEK_API_KEY: z.string().min(1).optional(),
     DEEPSEEK_BASE_URL: z
