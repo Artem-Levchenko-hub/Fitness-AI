@@ -17,8 +17,6 @@ export type ExerciseActionState =
   | { status: "error"; message: string; fieldErrors?: Record<string, string> }
   | { status: "success" };
 
-const initial: ExerciseActionState = { status: "idle" };
-
 function parseFormData(formData: FormData) {
   const primary = formData.getAll("primary").map(String);
   const secondary = formData.getAll("secondary").map(String);
@@ -82,5 +80,3 @@ export async function deleteCustomExerciseAction(formData: FormData) {
   revalidatePath("/exercises");
   redirect("/exercises");
 }
-
-export { initial as exerciseActionInitial };

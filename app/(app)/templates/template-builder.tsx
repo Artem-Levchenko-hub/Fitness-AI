@@ -1,0 +1,444 @@
+"use client";
+
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, Loader2, Plus, Trash2 } from "lucide-react";
+import { startTransition, useActionState, useState } from "react";
+
+import {
+  ExercisePicker,
+  type PickerExercise,
+} from "@/components/app/ExercisePicker";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import type { TemplateActionState } from "@/server/actions/templates";
+import type { TemplateFormValues } from "@/server/schemas/templates";
+import { cn } from "@/lib/utils";
+
+export type BuilderItem = {
+  /** Локальный uid (не БД) — для key + dnd-kit. */
+  uid: string;
+  exerciseId: string;
+  targetSets: number;
+  targetRepsMin: number;
+  targetRepsMax: number;
+  targetWeightKg: number | null;
+  targetRestSeconds: number;
+  notes: string;
+};
+
+type Props = {
+  exercises: ReadonlyArray<PickerExercise>;
+  initial?: {
+    name: string;
+    description: string;
+    items: BuilderItem[];
+  };
+  action: (
+    prev: TemplateActionState,
+    formData: FormData,
+  ) => Promise<TemplateActionState>;
+  submitLabel?: string;
+};
+
+const DEFAULT_ITEM: Omit<BuilderItem, "uid" | "exerciseId"> = {
+  targetSets: 3,
+  targetRepsMin: 8,
+  targetRepsMax: 12,
+  targetWeightKg: null,
+  targetRestSeconds: 120,
+  notes: "",
+};
+
+export function TemplateBuilder({
+  exercises,
+  initial,
+  action,
+  submitLabel = "Сохранить шаблон",
+}: Props) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [items, setItems] = useState<BuilderItem[]>(
+    initial?.items ?? [],
+  );
+
+  const [state, formAction, pending] = useActionState<
+    TemplateActionState,
+    FormData
+  >(action, { status: "idle" });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setItems((prev) => {
+      const oldIndex = prev.findIndex((i) => i.uid === active.id);
+      const newIndex = prev.findIndex((i) => i.uid === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }
+
+  function addItem() {
+    setItems((prev) => [
+      ...prev,
+      { uid: crypto.randomUUID(), exerciseId: "", ...DEFAULT_ITEM },
+    ]);
+  }
+
+  function removeItem(uid: string) {
+    setItems((prev) => prev.filter((i) => i.uid !== uid));
+  }
+
+  function updateItem(uid: string, patch: Partial<BuilderItem>) {
+    setItems((prev) =>
+      prev.map((i) => (i.uid === uid ? { ...i, ...patch } : i)),
+    );
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const payload: TemplateFormValues = {
+      name: name.trim(),
+      description: description.trim() || undefined,
+      items: items
+        .filter((i) => i.exerciseId)
+        .map((i) => ({
+          exerciseId: i.exerciseId,
+          targetSets: i.targetSets,
+          targetRepsMin: i.targetRepsMin,
+          targetRepsMax: i.targetRepsMax,
+          targetWeightKg: i.targetWeightKg ?? "",
+          targetRestSeconds: i.targetRestSeconds,
+          notes: i.notes,
+        })),
+    };
+    const fd = new FormData();
+    fd.append("payload", JSON.stringify(payload));
+    startTransition(() => formAction(fd));
+  }
+
+  const canSubmit =
+    !pending && name.trim().length >= 2 && items.some((i) => i.exerciseId);
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-2">
+        <Label htmlFor="name">Название шаблона</Label>
+        <Input
+          id="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Например: Спина + бицепс A"
+          maxLength={80}
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">Описание (опционально)</Label>
+        <Textarea
+          id="description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Что характерно для этой тренировки"
+          rows={2}
+          maxLength={500}
+        />
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold tracking-tight">
+            Упражнения ({items.length})
+          </h2>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="bg-card border-border text-muted-foreground rounded-2xl border border-dashed p-6 text-center text-sm">
+            Пока ни одного упражнения. Добавьте первое — и можно сохранять.
+          </div>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis]}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={items.map((i) => i.uid)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="space-y-3">
+                {items.map((item, idx) => (
+                  <SortableItem
+                    key={item.uid}
+                    item={item}
+                    index={idx}
+                    exercises={exercises}
+                    onChange={(patch) => updateItem(item.uid, patch)}
+                    onRemove={() => removeItem(item.uid)}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
+        )}
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={addItem}
+          className="mt-3 w-full"
+          size="lg"
+        >
+          <Plus className="size-4" />
+          Добавить упражнение
+        </Button>
+      </div>
+
+      {state.status === "error" ? (
+        <p
+          className="bg-destructive/10 text-destructive border-destructive/20 rounded-md border px-3 py-2 text-sm"
+          role="alert"
+        >
+          {state.message}
+        </p>
+      ) : null}
+
+      <Button
+        type="submit"
+        size="lg"
+        className="w-full"
+        disabled={!canSubmit}
+        aria-busy={pending}
+      >
+        {pending ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            Сохраняем…
+          </>
+        ) : (
+          submitLabel
+        )}
+      </Button>
+    </form>
+  );
+}
+
+function SortableItem({
+  item,
+  index,
+  exercises,
+  onChange,
+  onRemove,
+}: {
+  item: BuilderItem;
+  index: number;
+  exercises: ReadonlyArray<PickerExercise>;
+  onChange: (patch: Partial<BuilderItem>) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.uid });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "bg-card border-border rounded-xl border p-3",
+        isDragging && "ring-primary/40 shadow-lg ring-2",
+      )}
+    >
+      <div className="mb-3 flex items-start gap-2">
+        <button
+          type="button"
+          aria-label="Перетащить"
+          className="text-muted-foreground hover:text-foreground touch-none p-1"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-5" />
+        </button>
+        <span className="text-muted-foreground bg-muted flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium tabular-nums">
+          {index + 1}
+        </span>
+        <div className="min-w-0 flex-1">
+          <ExercisePicker
+            exercises={exercises}
+            value={item.exerciseId || null}
+            onChange={(id) => onChange({ exerciseId: id })}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onRemove}
+          aria-label="Удалить упражнение"
+          className="text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <NumField
+          label="Подходы"
+          value={item.targetSets}
+          min={1}
+          max={20}
+          onChange={(v) => onChange({ targetSets: v ?? 1 })}
+        />
+        <RangeField
+          label="Повторения"
+          min={item.targetRepsMin}
+          max={item.targetRepsMax}
+          onMinChange={(v) => onChange({ targetRepsMin: v })}
+          onMaxChange={(v) => onChange({ targetRepsMax: v })}
+        />
+        <NumField
+          label="Вес (кг)"
+          value={item.targetWeightKg}
+          step={2.5}
+          allowEmpty
+          onChange={(v) => onChange({ targetWeightKg: v })}
+        />
+        <NumField
+          label="Отдых (сек)"
+          value={item.targetRestSeconds}
+          min={15}
+          max={900}
+          step={15}
+          onChange={(v) => onChange({ targetRestSeconds: v ?? 60 })}
+        />
+      </div>
+    </li>
+  );
+}
+
+function NumField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  allowEmpty,
+}: {
+  label: string;
+  value: number | null;
+  onChange: (n: number | null) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  allowEmpty?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+        {label}
+      </span>
+      <Input
+        type="number"
+        inputMode="decimal"
+        min={min}
+        max={max}
+        step={step}
+        value={value ?? ""}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "") {
+            onChange(allowEmpty ? null : 0);
+            return;
+          }
+          const n = Number(raw);
+          if (!Number.isFinite(n)) return;
+          onChange(n);
+        }}
+        className="tabular mt-1 h-9 text-center"
+      />
+    </label>
+  );
+}
+
+function RangeField({
+  label,
+  min,
+  max,
+  onMinChange,
+  onMaxChange,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  onMinChange: (n: number) => void;
+  onMaxChange: (n: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+        {label}
+      </span>
+      <div className="mt-1 flex items-center gap-1">
+        <Input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={100}
+          value={min}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n)) onMinChange(n);
+          }}
+          className="tabular h-9 text-center"
+        />
+        <span className="text-muted-foreground text-xs">–</span>
+        <Input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={100}
+          value={max}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n)) onMaxChange(n);
+          }}
+          className="tabular h-9 text-center"
+        />
+      </div>
+    </label>
+  );
+}

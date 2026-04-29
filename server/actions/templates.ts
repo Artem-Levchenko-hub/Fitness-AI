@@ -17,8 +17,6 @@ export type TemplateActionState =
   | { status: "error"; message: string }
   | { status: "success"; templateId: string };
 
-const initial: TemplateActionState = { status: "idle" };
-
 const payloadSchema = z.object({
   payload: z.string().min(1),
 });
@@ -82,5 +80,3 @@ export async function deleteTemplateAction(formData: FormData) {
   revalidatePath("/templates");
   redirect("/templates");
 }
-
-export { initial as templateActionInitial };
