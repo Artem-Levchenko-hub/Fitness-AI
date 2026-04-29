@@ -1,0 +1,16 @@
+export const MUSCLE_GROUPS = [
+  { key: "chest" as const, nameRu: "Грудь", nameEn: "Chest" },
+  { key: "back_lats" as const, nameRu: "Широчайшие", nameEn: "Lats" },
+  { key: "back_traps" as const, nameRu: "Трапеция и ромбовидные", nameEn: "Traps & Rhomboids" },
+  { key: "shoulders_front" as const, nameRu: "Передние дельты", nameEn: "Front delts" },
+  { key: "shoulders_side" as const, nameRu: "Средние дельты", nameEn: "Side delts" },
+  { key: "shoulders_rear" as const, nameRu: "Задние дельты", nameEn: "Rear delts" },
+  { key: "biceps" as const, nameRu: "Бицепс", nameEn: "Biceps" },
+  { key: "triceps" as const, nameRu: "Трицепс", nameEn: "Triceps" },
+  { key: "forearms" as const, nameRu: "Предплечья", nameEn: "Forearms" },
+  { key: "core" as const, nameRu: "Кор", nameEn: "Core" },
+  { key: "glutes" as const, nameRu: "Ягодицы", nameEn: "Glutes" },
+  { key: "quads" as const, nameRu: "Квадрицепс", nameEn: "Quads" },
+  { key: "hamstrings" as const, nameRu: "Бицепс бедра", nameEn: "Hamstrings" },
+  { key: "calves" as const, nameRu: "Икры", nameEn: "Calves" },
+];
