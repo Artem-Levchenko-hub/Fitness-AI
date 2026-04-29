@@ -15,7 +15,7 @@ export const env = createEnv({
     RESEND_API_KEY: z.string().min(1),
     EMAIL_FROM: z.string().email(),
 
-    DEEPSEEK_API_KEY: z.string().min(1),
+    DEEPSEEK_API_KEY: z.string().min(1).optional(),
     DEEPSEEK_BASE_URL: z
       .string()
       .url()
