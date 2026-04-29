@@ -39,8 +39,8 @@ export default async function TemplateDetailPage({ params }: Props) {
 
       <form action={startWorkoutFromTemplateAction} className="mb-6">
         <input type="hidden" name="templateId" value={tpl.id} />
-        <Button type="submit" size="lg" className="w-full">
-          <Play className="size-4" />
+        <Button type="submit" size="xl" className="w-full">
+          <Play className="size-5" />
           Начать тренировку
         </Button>
       </form>

@@ -216,7 +216,7 @@ export function TemplateBuilder({
           className="mt-3 w-full"
           size="lg"
         >
-          <Plus className="size-4" />
+          <Plus className="size-5" />
           Добавить упражнение
         </Button>
       </div>
@@ -232,7 +232,7 @@ export function TemplateBuilder({
 
       <Button
         type="submit"
-        size="lg"
+        size="xl"
         className="w-full"
         disabled={!canSubmit}
         aria-busy={pending}

@@ -43,8 +43,8 @@ export function ActiveWorkoutView({ workout }: Props) {
 
       <form action={finishWorkoutAction} className="pt-2">
         <input type="hidden" name="workoutId" value={workout.id} />
-        <Button type="submit" size="lg" variant="default" className="w-full">
-          <CheckCircle2 className="size-4" />
+        <Button type="submit" size="xl" variant="default" className="w-full">
+          <CheckCircle2 className="size-5" />
           Завершить тренировку
         </Button>
       </form>

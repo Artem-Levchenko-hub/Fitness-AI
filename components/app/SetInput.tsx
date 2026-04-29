@@ -186,8 +186,8 @@ export function SetInput({
 
       <Button
         type="submit"
-        size="lg"
-        className={cn("w-full text-base font-semibold")}
+        size="xl"
+        className={cn("w-full")}
         disabled={pending || !weight || !reps}
         aria-busy={pending}
       >

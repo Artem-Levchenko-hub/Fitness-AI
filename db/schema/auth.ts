@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  date,
   index,
   integer,
   pgTable,
@@ -24,6 +25,14 @@ export const users = pgTable("users", {
   timezone: text("timezone").notNull().default("Europe/Moscow"),
   experience: experienceLevel("experience").notNull().default("intermediate"),
   locale: localeEnum("locale").notNull().default("ru"),
+
+  /** Опционально — для расчёта возраста и более точных рекомендаций AI. */
+  birthDate: date("birth_date"),
+  /** Рост в см, опционально. */
+  heightCm: integer("height_cm"),
+  /** Пол в свободной форме (male/female/other) — опционально, AI может
+   *  адаптировать рекомендации (например, женские ProT нормы отличаются). */
+  sex: text("sex"),
 
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()

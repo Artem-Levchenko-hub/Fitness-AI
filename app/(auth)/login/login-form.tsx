@@ -85,14 +85,14 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
 
       <Button
         type="submit"
-        size="lg"
+        size="xl"
         className="w-full"
         disabled={pending}
         aria-busy={pending}
       >
         {pending ? (
           <>
-            <Loader2 className="size-4 animate-spin" />
+            <Loader2 className="size-5 animate-spin" />
             Отправляем код…
           </>
         ) : (
@@ -179,7 +179,7 @@ function CodeStep({
           />
         </div>
 
-        <Button type="submit" size="lg" className="w-full" disabled={code.length !== 6}>
+        <Button type="submit" size="xl" className="w-full" disabled={code.length !== 6}>
           Войти
         </Button>
       </form>

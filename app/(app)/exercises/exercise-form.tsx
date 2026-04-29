@@ -149,7 +149,7 @@ export function ExerciseForm({
       <div className="flex gap-3 pt-2">
         <Button
           type="submit"
-          size="lg"
+          size="xl"
           className="flex-1"
           disabled={pending || primary.size === 0}
           aria-busy={pending}
