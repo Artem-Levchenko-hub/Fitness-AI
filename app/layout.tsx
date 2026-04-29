@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Lora } from "next/font/google";
 
 import { Providers } from "./providers";
 import "./globals.css";
@@ -13,6 +13,12 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const lora = Lora({
+  variable: "--font-serif",
+  subsets: ["latin", "cyrillic"],
   display: "swap",
 });
 
@@ -34,8 +40,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f4ef" },
+    { media: "(prefers-color-scheme: dark)", color: "#22221f" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -51,7 +57,7 @@ export default function RootLayout({
     <html
       lang="ru"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} ${lora.variable}`}
     >
       <body className="min-h-dvh bg-background text-foreground antialiased">
         <Providers>{children}</Providers>

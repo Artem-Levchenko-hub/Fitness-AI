@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 type SendVerificationRequestParams = {
   identifier: string;
   url: string;
+  token: string;
   expires: Date;
   provider: { from?: string; apiKey?: string };
 };
@@ -18,16 +19,18 @@ function resendClient() {
   return _resend;
 }
 
-export async function sendMagicLinkEmail({
+/** Шлёт письмо с 6-значным OTP-кодом + резервной ссылкой для десктопа. */
+export async function sendOtpEmail({
   identifier: email,
   url,
+  token,
 }: SendVerificationRequestParams) {
   const result = await resendClient().emails.send({
     from: env.EMAIL_FROM,
     to: email,
-    subject: `Войти в ${APP_NAME}`,
-    text: textBody(url),
-    html: htmlBody(url),
+    subject: `${formatCode(token)} — код входа в ${APP_NAME}`,
+    text: textBody(token, url),
+    html: htmlBody(token, url),
   });
 
   if (result.error) {
@@ -35,42 +38,62 @@ export async function sendMagicLinkEmail({
   }
 }
 
-function textBody(url: string) {
+function formatCode(code: string): string {
+  // 123456 → "123 456"
+  return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+}
+
+function textBody(code: string, url: string): string {
   return [
-    `Войдите в ${APP_NAME}, перейдя по ссылке:`,
+    `Ваш код входа в ${APP_NAME}: ${formatCode(code)}`,
     "",
+    `Введите его на странице входа. Код действует ${EXPIRES_MINUTES} минут.`,
+    "",
+    `Если кода нет под рукой — можно просто открыть ссылку:`,
     url,
     "",
-    `Ссылка действительна ${EXPIRES_MINUTES} минут. Если вы не запрашивали этот вход — просто проигнорируйте письмо.`,
+    `Если вы не запрашивали код — просто проигнорируйте письмо.`,
   ].join("\n");
 }
 
-function htmlBody(url: string) {
+function htmlBody(code: string, url: string): string {
+  const formatted = formatCode(code);
   return `<!DOCTYPE html>
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Войти в ${APP_NAME}</title>
+    <title>Код входа в ${APP_NAME}</title>
   </head>
-  <body style="margin:0;padding:32px 16px;background:#0a0a0a;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <body style="margin:0;padding:32px 16px;background:#f6f4ef;color:#22221f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:480px;margin:0 auto;">
       <tr>
-        <td style="padding:32px;background:#171717;border-radius:16px;border:1px solid #262626;">
-          <h1 style="margin:0 0 8px;font-size:24px;font-weight:600;letter-spacing:-0.02em;color:#fafafa;">Войти в ${APP_NAME}</h1>
-          <p style="margin:0 0 28px;color:#a3a3a3;line-height:1.55;font-size:15px;">
-            Нажмите кнопку ниже, чтобы войти. Ссылка действительна ${EXPIRES_MINUTES} минут.
+        <td style="padding:40px 32px;background:#ffffff;border-radius:14px;border:1px solid #e8e4dc;">
+          <p style="margin:0 0 6px;font-size:13px;color:#7a7468;letter-spacing:0.04em;text-transform:uppercase;">Код входа</p>
+          <h1 style="margin:0 0 28px;font-size:22px;font-weight:600;letter-spacing:-0.01em;color:#22221f;">
+            ${APP_NAME}
+          </h1>
+
+          <div style="background:#f6f4ef;border:1px solid #e8e4dc;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+            <p style="margin:0 0 8px;font-size:11px;color:#7a7468;letter-spacing:0.08em;text-transform:uppercase;">Введите этот код на странице входа</p>
+            <p style="margin:0;font-family:'SF Mono','Geist Mono',Menlo,Consolas,monospace;font-size:36px;font-weight:600;letter-spacing:0.18em;color:#22221f;">
+              ${formatted}
+            </p>
+          </div>
+
+          <p style="margin:0 0 6px;font-size:13px;color:#52503f;line-height:1.55;">
+            Код действует ${EXPIRES_MINUTES} минут. Введите его на странице входа.
           </p>
-          <a href="${url}" style="display:inline-block;background:#a78bfa;color:#0a0a0a;font-weight:600;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:15px;">
-            Войти
+          <p style="margin:0 0 24px;font-size:13px;color:#52503f;line-height:1.55;">
+            Если кода нет под рукой — можно сразу открыть ссылку:
+          </p>
+
+          <a href="${url}" style="display:inline-block;background:#2c4a3c;color:#f6f4ef;font-weight:500;padding:11px 22px;border-radius:10px;text-decoration:none;font-size:14px;">
+            Войти одним кликом
           </a>
-          <p style="margin:32px 0 0;font-size:12px;color:#737373;line-height:1.5;">
-            Если кнопка не работает, скопируйте и откройте ссылку:
-            <br />
-            <a href="${url}" style="color:#a78bfa;word-break:break-all;">${url}</a>
-          </p>
-          <p style="margin:24px 0 0;font-size:12px;color:#737373;">
-            Если вы не запрашивали этот вход — просто проигнорируйте письмо.
+
+          <p style="margin:32px 0 0;font-size:12px;color:#9a9485;line-height:1.5;border-top:1px solid #ece8df;padding-top:20px;">
+            Если вы не запрашивали этот код — просто проигнорируйте письмо.
           </p>
         </td>
       </tr>

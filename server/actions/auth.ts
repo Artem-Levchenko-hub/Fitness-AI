@@ -16,15 +16,18 @@ const emailSchema = z.object({
 export type SignInState =
   | { status: "idle" }
   | { status: "error"; message: string }
-  | { status: "sent"; email: string };
+  | { status: "sent"; email: string; callbackUrl: string };
 
 export async function signInWithEmail(
   _prev: SignInState | null,
   formData: FormData,
 ): Promise<SignInState> {
+  const rawEmail = formData.get("email");
+  const rawCallback = formData.get("callbackUrl");
+
   const parsed = emailSchema.safeParse({
-    email: formData.get("email"),
-    callbackUrl: formData.get("callbackUrl"),
+    email: typeof rawEmail === "string" ? rawEmail : "",
+    callbackUrl: typeof rawCallback === "string" && rawCallback ? rawCallback : undefined,
   });
 
   if (!parsed.success) {
@@ -34,18 +37,20 @@ export async function signInWithEmail(
     };
   }
 
+  const callbackUrl = parsed.data.callbackUrl ?? "/dashboard";
+
   try {
     await signIn("resend", {
       email: parsed.data.email,
       redirect: false,
-      redirectTo: parsed.data.callbackUrl ?? "/dashboard",
+      redirectTo: callbackUrl,
     });
-    return { status: "sent", email: parsed.data.email };
+    return { status: "sent", email: parsed.data.email, callbackUrl };
   } catch (err) {
     if (err instanceof AuthError) {
       return {
         status: "error",
-        message: "Не удалось отправить письмо. Попробуйте позже.",
+        message: "Не удалось отправить код. Попробуйте позже.",
       };
     }
     throw err;

@@ -17,11 +17,14 @@ export default async function LoginPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+        <p className="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">
           Fitness SaaS
+        </p>
+        <h1 className="font-serif text-3xl font-normal tracking-tight md:text-4xl">
+          С возвращением
         </h1>
         <p className="text-muted-foreground text-sm">
-          Войдите по ссылке на email — без паролей.
+          Войдите по 6-значному коду из письма — без паролей.
         </p>
       </div>
 

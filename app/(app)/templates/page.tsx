@@ -15,7 +15,7 @@ export default async function TemplatesPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <header className="mb-6 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+        <h1 className="font-serif text-3xl font-normal tracking-tight md:text-4xl">
           Шаблоны
         </h1>
         <Button asChild size="sm">

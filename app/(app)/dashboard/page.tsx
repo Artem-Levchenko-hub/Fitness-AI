@@ -14,14 +14,16 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <header className="mb-8">
-        <p className="text-muted-foreground text-sm">Привет,</p>
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-          {name}
+        <p className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
+          Сегодня
+        </p>
+        <h1 className="font-serif mt-1 text-4xl font-normal tracking-tight md:text-5xl">
+          Привет, {name}
         </h1>
       </header>
 
       <section className="bg-card text-card-foreground border-border mb-6 rounded-2xl border p-6">
-        <h2 className="text-lg font-semibold tracking-tight">
+        <h2 className="font-serif text-2xl font-normal tracking-tight">
           Готовы тренироваться?
         </h2>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">

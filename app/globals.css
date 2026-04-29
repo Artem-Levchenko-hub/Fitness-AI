@@ -2,89 +2,97 @@
 
 @variant dark (&:where(.dark, .dark *));
 
-/* Functional Calm — design tokens (R-36).
-   Light = :root. Dark = .dark (next-themes class).
-   Naming совместимо с shadcn/ui new-york. Палитра в OKLCH —
-   perceptual uniform, лучшее управление контрастом и градациями. */
+/* Scandinavian — warm minimal.
+   Палитра: тёплая бумажная база (off-white с лёгким yellow undertone),
+   глубокий sage primary, муда clay для PR/highlight, hairline borders,
+   тёплый charcoal для текста (не чистый чёрный — он холодный).
+   OKLCH chosen для perceptual uniformity и аккуратных градаций. */
 
 :root {
-  --background: oklch(98% 0 0);
-  --foreground: oklch(15% 0 0);
+  /* Бумажные поверхности */
+  --background: oklch(97.5% 0.005 80);
+  --foreground: oklch(22% 0.008 60);
 
-  --card: oklch(100% 0 0);
-  --card-foreground: oklch(15% 0 0);
+  --card: oklch(99% 0.003 80);
+  --card-foreground: oklch(22% 0.008 60);
 
-  --popover: oklch(100% 0 0);
-  --popover-foreground: oklch(15% 0 0);
+  --popover: oklch(99% 0.003 80);
+  --popover-foreground: oklch(22% 0.008 60);
 
-  --primary: oklch(50% 0.15 270);
-  --primary-foreground: oklch(98% 0 0);
+  /* Brand: deep sage forest — calm, grounded */
+  --primary: oklch(38% 0.06 155);
+  --primary-foreground: oklch(97% 0.005 80);
 
-  --secondary: oklch(95% 0 0);
-  --secondary-foreground: oklch(15% 0 0);
+  --secondary: oklch(94% 0.005 80);
+  --secondary-foreground: oklch(22% 0.008 60);
 
-  --muted: oklch(95% 0 0);
-  --muted-foreground: oklch(42% 0 0);
+  --muted: oklch(94% 0.005 80);
+  --muted-foreground: oklch(50% 0.008 60);
 
-  --accent: oklch(95% 0 0);
-  --accent-foreground: oklch(15% 0 0);
+  --accent: oklch(94% 0.005 80);
+  --accent-foreground: oklch(22% 0.008 60);
 
-  --destructive: oklch(55% 0.22 29);
-  --destructive-foreground: oklch(98% 0 0);
+  /* Семантика */
+  --destructive: oklch(50% 0.17 26);
+  --destructive-foreground: oklch(97% 0.005 80);
 
-  --success: oklch(55% 0.18 142);
-  --success-foreground: oklch(98% 0 0);
+  --success: oklch(52% 0.10 150);
+  --success-foreground: oklch(97% 0.005 80);
 
-  --warning: oklch(68% 0.18 85);
-  --warning-foreground: oklch(15% 0 0);
+  --warning: oklch(72% 0.13 75);
+  --warning-foreground: oklch(22% 0.008 60);
 
-  --pr: oklch(65% 0.18 60);
-  --pr-foreground: oklch(15% 0 0);
+  /* PR / highlight: мягкая глина */
+  --pr: oklch(58% 0.13 35);
+  --pr-foreground: oklch(97% 0.005 80);
 
-  --border: oklch(90% 0 0);
-  --input: oklch(90% 0 0);
-  --ring: oklch(50% 0.15 270);
+  /* Hairline */
+  --border: oklch(89% 0.008 80);
+  --input: oklch(89% 0.008 80);
+  --ring: oklch(38% 0.06 155);
 
   --radius: 0.625rem;
 }
 
 .dark {
-  --background: oklch(14% 0 0);
-  --foreground: oklch(95% 0 0);
+  /* Тёплый deep — не cold blue-grey, а ночное молоко */
+  --background: oklch(18% 0.008 60);
+  --foreground: oklch(94% 0.005 80);
 
-  --card: oklch(18% 0 0);
-  --card-foreground: oklch(95% 0 0);
+  --card: oklch(22% 0.008 60);
+  --card-foreground: oklch(94% 0.005 80);
 
-  --popover: oklch(18% 0 0);
-  --popover-foreground: oklch(95% 0 0);
+  --popover: oklch(22% 0.008 60);
+  --popover-foreground: oklch(94% 0.005 80);
 
-  --primary: oklch(77% 0.18 270);
-  --primary-foreground: oklch(14% 0 0);
+  /* Brand в dark — светлее sage, чтобы держать контраст */
+  --primary: oklch(75% 0.10 150);
+  --primary-foreground: oklch(18% 0.008 60);
 
-  --secondary: oklch(22% 0 0);
-  --secondary-foreground: oklch(95% 0 0);
+  --secondary: oklch(26% 0.008 60);
+  --secondary-foreground: oklch(94% 0.005 80);
 
-  --muted: oklch(22% 0 0);
-  --muted-foreground: oklch(72% 0 0);
+  --muted: oklch(26% 0.008 60);
+  --muted-foreground: oklch(70% 0.008 60);
 
-  --accent: oklch(22% 0 0);
-  --accent-foreground: oklch(95% 0 0);
+  --accent: oklch(26% 0.008 60);
+  --accent-foreground: oklch(94% 0.005 80);
 
-  --destructive: oklch(62% 0.24 29);
-  --destructive-foreground: oklch(95% 0 0);
+  --destructive: oklch(62% 0.18 26);
+  --destructive-foreground: oklch(94% 0.005 80);
 
-  --success: oklch(72% 0.2 142);
-  --success-foreground: oklch(14% 0 0);
+  --success: oklch(70% 0.13 150);
+  --success-foreground: oklch(18% 0.008 60);
 
-  --warning: oklch(84% 0.16 85);
-  --warning-foreground: oklch(14% 0 0);
+  --warning: oklch(82% 0.14 75);
+  --warning-foreground: oklch(18% 0.008 60);
 
-  --pr: oklch(87% 0.2 60);
-  --pr-foreground: oklch(14% 0 0);
+  --pr: oklch(75% 0.13 35);
+  --pr-foreground: oklch(18% 0.008 60);
 
-  --border: oklch(28% 0 0);
-  --input: oklch(28% 0 0);
-  --ring: oklch(77% 0.18 270);
+  --border: oklch(30% 0.008 60);
+  --input: oklch(30% 0.008 60);
+  --ring: oklch(75% 0.10 150);
 }
 
 @theme inline {
@@ -116,6 +124,7 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* --font-serif инжектится через next/font (Lora с cyrillic поддержкой) */
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -129,6 +138,11 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+.font-serif {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
 }
 
 .tabular {
