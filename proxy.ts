@@ -30,9 +30,10 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
-  if (pathname === "/login" && isAuthed) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
+  // Не редиректим /login → /dashboard:
+  // - edge `auth()` без adapter может возвращать ложно-truthy session
+  //   и создать цикл /login → /dashboard → /login.
+  // - залогиненный пользователь, попавший на /login, просто увидит форму.
 
   return NextResponse.next();
 });
