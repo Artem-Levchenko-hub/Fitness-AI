@@ -108,5 +108,6 @@ export async function finishWorkoutAction(formData: FormData) {
   revalidatePath(`/workouts/${workoutId}`);
   revalidatePath("/workouts");
   revalidatePath("/dashboard");
-  redirect("/dashboard");
+  // → AI-коуч анализирует тренировку и ведёт диалог
+  redirect(`/workouts/${workoutId}/coach`);
 }

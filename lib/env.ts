@@ -16,11 +16,16 @@ export const env = createEnv({
     /** RFC 5322 формат: "Display Name <email@host>" или просто "email@host". */
     EMAIL_FROM: z.string().min(3),
 
-    DEEPSEEK_API_KEY: z.string().min(1).optional(),
-    DEEPSEEK_BASE_URL: z
+    /** OpenAI-compat AI gateway (OpenRouter / DeepSeek / любой другой). */
+    AI_API_KEY: z.string().min(1).optional(),
+    AI_BASE_URL: z
       .string()
       .url()
-      .default("https://api.deepseek.com/v1"),
+      .default("https://openrouter.ai/api/v1"),
+    AI_MODEL: z.string().min(1).default("deepseek/deepseek-chat"),
+    /** Опционально для OpenRouter — сайт-идентификатор для рейтинга. */
+    AI_SITE_URL: z.string().url().optional(),
+    AI_SITE_NAME: z.string().optional(),
 
     REDIS_URL: z.string().url().optional(),
 
