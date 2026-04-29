@@ -36,6 +36,14 @@ export const metadata: Metadata = {
   authors: [{ name: "Innertalk Studio" }],
   creator: "Innertalk Studio",
   formatDetection: { telephone: false, email: false, address: false },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Fitness",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {
