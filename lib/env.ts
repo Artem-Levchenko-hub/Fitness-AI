@@ -16,7 +16,7 @@ export const env = createEnv({
     /** RFC 5322 формат: "Display Name <email@host>" или просто "email@host". */
     EMAIL_FROM: z.string().min(3),
 
-    /** OpenAI-compat AI gateway (OpenRouter / DeepSeek / любой другой). */
+    /** OpenAI-compat AI gateway (VseGPT / OpenRouter / любой другой). */
     AI_API_KEY: z.string().min(1).optional(),
     AI_BASE_URL: z
       .string()
@@ -26,6 +26,18 @@ export const env = createEnv({
     /** Опционально для OpenRouter — сайт-идентификатор для рейтинга. */
     AI_SITE_URL: z.string().url().optional(),
     AI_SITE_NAME: z.string().optional(),
+
+    /** ProxyAPI.ru — российский прокси к OpenAI (модели gpt-5.4-nano и т.п.). */
+    PROXYAPI_API_KEY: z.string().min(1).optional(),
+    PROXYAPI_BASE_URL: z
+      .string()
+      .url()
+      .default("https://api.proxyapi.ru/openai/v1"),
+    PROXYAPI_MODEL: z.string().min(1).default("gpt-5.4-nano"),
+
+    /** Google Gemini (1M context, multimodal). */
+    GEMINI_API_KEY: z.string().min(1).optional(),
+    GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
 
     REDIS_URL: z.string().url().optional(),
 
