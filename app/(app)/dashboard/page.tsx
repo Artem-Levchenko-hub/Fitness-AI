@@ -10,6 +10,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { NutritionTile } from "@/components/dashboard/NutritionTile";
+import { SleepTile } from "@/components/dashboard/SleepTile";
+import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   getActiveWorkoutId,
@@ -55,6 +58,18 @@ export default async function DashboardPage() {
         ) : (
           <EmptyMini />
         )}
+      </section>
+
+      <section className="mt-6 space-y-2">
+        <h2 className="text-muted-foreground mb-2 px-1 text-xs font-medium tracking-wide uppercase">
+          Восстановление
+        </h2>
+        <SleepTile userId={user.id} />
+        <NutritionTile userId={user.id} />
+      </section>
+
+      <section className="mt-6">
+        <TrainerTrigger lastWorkoutId={last?.id ?? null} />
       </section>
 
       {completed.length > 0 ? (

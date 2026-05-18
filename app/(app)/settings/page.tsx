@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { PushPrompt } from "@/components/push/PushPrompt";
+import { env } from "@/lib/env";
 import { requireUser } from "@/lib/auth/require-user";
 import { getUserProfile } from "@/lib/repos/body.repo";
 import { signOutAction } from "@/server/actions/auth";
@@ -69,10 +71,44 @@ export default async function SettingsPage() {
       </section>
 
       <section className="bg-card border-border mb-6 rounded-2xl border p-5">
+        <h2 className="mb-3 text-sm font-semibold tracking-tight">
+          Уведомления
+        </h2>
+        <PushPrompt vapidPublicKey={env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+        <p className="text-muted-foreground/70 mt-2 text-xs leading-relaxed">
+          Включите, чтобы тренер мог напомнить записать сон или КБЖУ и
+          присылать готовые разборы.
+        </p>
+      </section>
+
+      <section className="bg-card border-border mb-6 rounded-2xl border p-5">
         <h2 className="mb-2 text-sm font-semibold tracking-tight">
           Связанные разделы
         </h2>
         <div className="space-y-2">
+          <Button
+            asChild
+            variant="ghost"
+            className="text-foreground h-auto w-full justify-start py-3"
+          >
+            <Link href="/sleep" className="flex items-center justify-between">
+              <span>Сон (восстановление)</span>
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            className="text-foreground h-auto w-full justify-start py-3"
+          >
+            <Link
+              href="/nutrition"
+              className="flex items-center justify-between"
+            >
+              <span>Питание (КБЖУ)</span>
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
           <Button
             asChild
             variant="ghost"
