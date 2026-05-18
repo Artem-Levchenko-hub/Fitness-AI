@@ -1,10 +1,14 @@
 "use server";
 
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { db } from "@/db/client";
+import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
+import { env } from "@/lib/env";
 import {
   deleteSet,
   finishWorkout,
@@ -104,10 +108,48 @@ export async function finishWorkoutAction(formData: FormData) {
   const user = await requireUser();
   const workoutId = String(formData.get("workoutId"));
   if (!workoutId) throw new Error("Missing workoutId");
+
   await finishWorkout(user.id, workoutId);
+
+  // Ставим post_workout аналитический job. Если уже стоит (на случай
+  // двойного finish — пользователь дважды тапнул) — не дублируем.
+  const [existing] = await db
+    .select({ id: schema.aiJobs.id })
+    .from(schema.aiJobs)
+    .where(
+      and(
+        eq(schema.aiJobs.workoutId, workoutId),
+        eq(schema.aiJobs.kind, "post_workout"),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    await db.insert(schema.aiJobs).values({
+      userId: user.id,
+      workoutId,
+      kind: "post_workout",
+      status: "pending",
+    });
+
+    // Триггерим воркер сразу. Если упало — cron-runner подхватит в течение минуты.
+    if (env.CRON_SECRET) {
+      try {
+        void fetch(`${env.NEXT_PUBLIC_APP_URL}/api/cron/process-ai-jobs`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
+        });
+      } catch {
+        /* пусто */
+      }
+    }
+  }
+
   revalidatePath(`/workouts/${workoutId}`);
   revalidatePath("/workouts");
   revalidatePath("/dashboard");
-  // → AI-коуч анализирует тренировку и ведёт диалог
-  redirect(`/workouts/${workoutId}/coach`);
+
+  // Trainer (structured JSON оценка) — основной flow. Coach (диалог) теперь
+  // вторичен, доступен через кнопку на trainer/completed-view.
+  redirect(`/workouts/${workoutId}/trainer`);
 }

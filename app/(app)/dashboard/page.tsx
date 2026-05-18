@@ -5,6 +5,7 @@ import {
   Play,
   Plus,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -14,6 +15,10 @@ import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
 import { requireUser } from "@/lib/auth/require-user";
+import {
+  getActiveCardioId,
+  listRecentCardio,
+} from "@/lib/repos/cardio.repo";
 import {
   getActiveWorkoutId,
   listRecentWorkouts,
@@ -26,14 +31,17 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const name = user.name?.split(" ")[0] ?? user.email.split("@")[0];
 
-  const [recent, activeId] = await Promise.all([
+  const [recent, activeId, recentCardio, activeCardioId] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     getActiveWorkoutId(user.id),
+    listRecentCardio(user.id, 5),
+    getActiveCardioId(user.id),
   ]);
 
   const completed = recent.filter((w) => w.status === "completed");
   const last = completed[0] ?? null;
   const week = sumThisWeek(completed);
+  const lastCardio = recentCardio.find((c) => c.status === "completed") ?? null;
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -58,6 +66,10 @@ export default async function DashboardPage() {
         ) : (
           <EmptyMini />
         )}
+      </section>
+
+      <section className="mt-6">
+        <CardioTile activeId={activeCardioId} lastName={lastCardio?.name ?? null} lastDate={lastCardio?.startedAt ?? null} />
       </section>
 
       <section className="mt-6 space-y-2">
@@ -203,6 +215,64 @@ function LastWorkoutMini({ workout }: { workout: RecentWorkout }) {
           </span>
         ) : null}
       </div>
+    </Link>
+  );
+}
+
+function CardioTile({
+  activeId,
+  lastName,
+  lastDate,
+}: {
+  activeId: string | null;
+  lastName: string | null;
+  lastDate: Date | null;
+}) {
+  if (activeId) {
+    return (
+      <Link
+        href={`/cardio/${activeId}`}
+        className="bg-primary text-primary-foreground flex items-center justify-between rounded-2xl px-5 py-4 transition-transform hover:-translate-y-px"
+      >
+        <div className="flex items-center gap-3">
+          <div className="bg-primary-foreground/15 flex size-10 items-center justify-center rounded-full">
+            <Zap className="size-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-medium tracking-[0.18em] uppercase opacity-70">
+              Активная кардио-сессия
+            </p>
+            <p className="text-base font-semibold tracking-tight">
+              Продолжить
+            </p>
+          </div>
+        </div>
+        <ChevronRight className="size-5 opacity-70" aria-hidden="true" />
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href="/cardio/new"
+      className="bg-card hover:bg-accent/40 border-border flex items-center justify-between rounded-2xl border px-5 py-4 transition-colors"
+    >
+      <div className="flex items-center gap-3">
+        <div className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-full">
+          <Zap className="size-5" />
+        </div>
+        <div>
+          <p className="text-[10px] font-medium tracking-[0.18em] uppercase opacity-70">
+            Кардио · HIIT
+          </p>
+          <p className="text-base font-semibold tracking-tight">
+            {lastName && lastDate
+              ? `Последнее: ${lastName} · ${lastDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}`
+              : "Начать сессию"}
+          </p>
+        </div>
+      </div>
+      <ChevronRight className="text-muted-foreground size-5" aria-hidden="true" />
     </Link>
   );
 }

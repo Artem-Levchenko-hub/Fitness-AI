@@ -11,3 +11,4 @@ export * from "./body";
 export * from "./nutrition";
 export * from "./sleep";
 export * from "./push";
+export * from "./cardio";

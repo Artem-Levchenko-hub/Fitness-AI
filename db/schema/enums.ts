@@ -70,6 +70,15 @@ export const pushKind = pgEnum("push_kind", [
   "digest_ready",
 ]);
 
+export const cardioPreset = pgEnum("cardio_preset", [
+  "tabata",
+  "norwegian_4x4",
+  "emom",
+  "custom",
+]);
+
+export const cardioBlockKind = pgEnum("cardio_block_kind", ["work", "rest"]);
+
 export const subscriptionTier = pgEnum("subscription_tier", ["free", "pro"]);
 
 export const subscriptionStatus = pgEnum("subscription_status", [

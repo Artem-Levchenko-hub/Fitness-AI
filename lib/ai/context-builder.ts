@@ -489,6 +489,9 @@ export async function buildTrainerContext(
   const nutrition = await loadRecentNutrition(userId, 7);
   sections.push(formatNutritionBlock(nutrition));
 
+  const cardio = await loadRecentCardio(userId, 5);
+  sections.push(formatCardioBlock(cardio));
+
   sections.push(`# Режим\nKind: \`${opts.kind}\``);
 
   return { prompt: sections.join("\n\n") };
@@ -580,6 +583,108 @@ function formatNutritionBlock(
     return `- ${r.date}: ${macro || "(без макро)"}${r.notes ? ` · ${r.notes}` : ""}`;
   });
   return `# КБЖУ (${rows.length} записей за 7 дней)\n\n${lines.join("\n")}`;
+}
+
+async function loadRecentCardio(userId: string, limit: number) {
+  const rows = await db
+    .select({
+      id: schema.cardioWorkouts.id,
+      name: schema.cardioWorkouts.name,
+      preset: schema.cardioWorkouts.preset,
+      startedAt: schema.cardioWorkouts.startedAt,
+      finishedAt: schema.cardioWorkouts.finishedAt,
+      status: schema.cardioWorkouts.status,
+    })
+    .from(schema.cardioWorkouts)
+    .where(eq(schema.cardioWorkouts.userId, userId))
+    .orderBy(desc(schema.cardioWorkouts.startedAt))
+    .limit(limit);
+
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((r) => r.id);
+  const blocks = await db
+    .select({
+      cardioWorkoutId: schema.cardioBlocks.cardioWorkoutId,
+      kind: schema.cardioBlocks.kind,
+      plannedDurationSec: schema.cardioBlocks.plannedDurationSec,
+      hrAvg: schema.cardioBlocks.hrAvg,
+      rpe: schema.cardioBlocks.rpe,
+      completedAt: schema.cardioBlocks.completedAt,
+    })
+    .from(schema.cardioBlocks)
+    .where(inArray(schema.cardioBlocks.cardioWorkoutId, ids));
+
+  const byCardio = new Map<string, typeof blocks>();
+  for (const b of blocks) {
+    const arr = byCardio.get(b.cardioWorkoutId) ?? [];
+    arr.push(b);
+    byCardio.set(b.cardioWorkoutId, arr);
+  }
+
+  return rows.map((r) => {
+    const bs = byCardio.get(r.id) ?? [];
+    const work = bs.filter((b) => b.kind === "work");
+    const completedWork = work.filter((b) => b.completedAt != null);
+    const hrs = completedWork
+      .map((b) => b.hrAvg)
+      .filter((v): v is number => v != null);
+    const rpes = completedWork
+      .map((b) => b.rpe)
+      .filter((v): v is number => v != null);
+    return {
+      id: r.id,
+      name: r.name,
+      preset: r.preset,
+      startedAt: r.startedAt,
+      durationMin: r.finishedAt
+        ? Math.round((r.finishedAt.getTime() - r.startedAt.getTime()) / 60_000)
+        : null,
+      status: r.status,
+      workRounds: work.length,
+      completedRounds: completedWork.length,
+      hrAvg:
+        hrs.length > 0
+          ? Math.round(hrs.reduce((s, v) => s + v, 0) / hrs.length)
+          : null,
+      rpeAvg:
+        rpes.length > 0
+          ? +(rpes.reduce((s, v) => s + v, 0) / rpes.length).toFixed(1)
+          : null,
+    };
+  });
+}
+
+function formatCardioBlock(
+  rows: Array<{
+    name: string;
+    preset: string;
+    startedAt: Date;
+    durationMin: number | null;
+    status: string;
+    workRounds: number;
+    completedRounds: number;
+    hrAvg: number | null;
+    rpeAvg: number | null;
+  }>,
+): string {
+  if (rows.length === 0) {
+    return "# Кардио\n_(нет кардио-сессий за всё время)_";
+  }
+  const lines = rows.map((r) => {
+    const meta = [
+      `preset=${r.preset}`,
+      r.durationMin != null ? `${r.durationMin} мин` : null,
+      `раунды ${r.completedRounds}/${r.workRounds}`,
+      r.hrAvg != null ? `HR ${r.hrAvg}` : null,
+      r.rpeAvg != null ? `RPE ${r.rpeAvg}` : null,
+      r.status !== "completed" ? `_${r.status}_` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return `- ${formatDate(r.startedAt)} · **${r.name}** · ${meta}`;
+  });
+  return `# Кардио (последние ${rows.length})\n\n${lines.join("\n")}`;
 }
 
 async function loadRecentWorkoutsCompactBlock(

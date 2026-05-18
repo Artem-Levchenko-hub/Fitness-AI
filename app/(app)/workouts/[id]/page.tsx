@@ -279,19 +279,25 @@ function CoachCta({ workoutId }: { workoutId: string }) {
         </div>
         <div className="flex-1">
           <h2 className="text-sm font-semibold tracking-tight">
-            Разбор с коучем
+            Разбор тренировки
           </h2>
           <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-            Коуч посмотрит эту тренировку в контексте всей истории и предложит,
-            что подкрутить.
+            AI-тренер автоматически разбирает каждую завершённую тренировку
+            (структурная оценка). Коуч — отдельный диалог в свободной форме.
           </p>
         </div>
       </div>
-      <div className="mt-4">
-        <Button asChild size="lg" className="w-full sm:w-auto">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <Button asChild size="lg" className="flex-1">
+          <Link href={`/workouts/${workoutId}/trainer`}>
+            <Sparkles className="size-4" />
+            AI-тренер
+          </Link>
+        </Button>
+        <Button asChild size="lg" variant="outline" className="flex-1">
           <Link href={`/workouts/${workoutId}/coach`}>
             <MessageSquare className="size-4" />
-            Поговорить с коучем
+            Чат с коучем
           </Link>
         </Button>
       </div>
