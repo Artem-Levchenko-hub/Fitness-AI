@@ -1,11 +1,20 @@
 import { relations } from "drizzle-orm";
-import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
-import { aiJobStatus } from "./enums";
+import { aiJobKind, aiJobStatus } from "./enums";
 import { workouts } from "./workouts";
 
-/** Результат AI-анализа тренировки. Markdown с инсайтами от DeepSeek. */
+/** Результат AI-анализа. Markdown в content + опционально structured JSON
+ *  в resultJson (для trainer v2). workoutId nullable, т.к. daily_digest
+ *  пишет анализ без конкретной тренировки. */
 export const aiAnalyses = pgTable(
   "ai_analyses",
   {
@@ -15,10 +24,12 @@ export const aiAnalyses = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    workoutId: text("workout_id")
-      .notNull()
-      .references(() => workouts.id, { onDelete: "cascade" }),
+    workoutId: text("workout_id").references(() => workouts.id, {
+      onDelete: "cascade",
+    }),
     content: text("content").notNull(),
+    /** Structured Gemini JSON (TrainerResponse) — nullable для legacy markdown-only. */
+    resultJson: jsonb("result_json"),
     modelVersion: text("model_version").notNull(),
     promptTokens: integer("prompt_tokens"),
     completionTokens: integer("completion_tokens"),
@@ -32,9 +43,9 @@ export const aiAnalyses = pgTable(
   ],
 );
 
-/** Outbox для AI-задач (R-31). После finishWorkout создаём pending row;
- *  node-cron worker подхватывает, выставляет running, вызывает DeepSeek,
- *  пишет в ai_analyses, переводит в succeeded. failed после 3 попыток. */
+/** Outbox для AI-задач (R-31). workoutId nullable для daily_digest.
+ *  kind различает: post_workout (после тренировки), daily_digest (ночной свод),
+ *  on_demand (юзер сам нажал кнопку). */
 export const aiJobs = pgTable(
   "ai_jobs",
   {
@@ -44,12 +55,15 @@ export const aiJobs = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    workoutId: text("workout_id")
-      .notNull()
-      .references(() => workouts.id, { onDelete: "cascade" }),
+    workoutId: text("workout_id").references(() => workouts.id, {
+      onDelete: "cascade",
+    }),
+    kind: aiJobKind("kind").notNull().default("post_workout"),
     status: aiJobStatus("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
+    /** id записи в ai_analyses после успешной обработки. */
+    analysisId: text("analysis_id"),
     scheduledAt: timestamp("scheduled_at", {
       mode: "date",
       withTimezone: true,
@@ -62,6 +76,7 @@ export const aiJobs = pgTable(
   (t) => [
     index("ai_jobs_status_scheduled_idx").on(t.status, t.scheduledAt),
     index("ai_jobs_workout_idx").on(t.workoutId),
+    index("ai_jobs_user_kind_idx").on(t.userId, t.kind, t.scheduledAt),
   ],
 );
 

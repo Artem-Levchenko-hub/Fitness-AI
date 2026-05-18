@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Rescue snapshots — не часть проекта, не линтуем.
+    ".claude/**",
   ]),
 ]);
 

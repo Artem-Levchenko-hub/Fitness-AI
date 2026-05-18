@@ -57,6 +57,19 @@ export const aiJobStatus = pgEnum("ai_job_status", [
   "failed",
 ]);
 
+export const aiJobKind = pgEnum("ai_job_kind", [
+  "post_workout",
+  "daily_digest",
+  "on_demand",
+]);
+
+export const pushKind = pgEnum("push_kind", [
+  "sleep_reminder",
+  "nutrition_reminder",
+  "trainer_ready",
+  "digest_ready",
+]);
+
 export const subscriptionTier = pgEnum("subscription_tier", ["free", "pro"]);
 
 export const subscriptionStatus = pgEnum("subscription_status", [

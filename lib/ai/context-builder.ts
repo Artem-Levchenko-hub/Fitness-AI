@@ -8,6 +8,8 @@ import {
   totalVolume,
 } from "@/lib/domain";
 
+type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
+
 type WorkoutSummary = {
   workoutId: string;
   name: string;
@@ -462,4 +464,147 @@ function formatDate(d: Date): string {
     month: "short",
     year: "numeric",
   });
+}
+
+/** Контекст для AI-тренера (Gemini structured JSON):
+ *  Coach-контекст (если есть workoutId) + sleep за 7 дней + nutrition за 7 дней.
+ *  Возвращает { prompt: string } чтобы trainer route мог его сразу скормить. */
+export async function buildTrainerContext(
+  userId: string,
+  workoutId: string | null,
+  opts: { kind: AiJobKindLiteral },
+): Promise<{ prompt: string }> {
+  const sections: string[] = [];
+
+  if (workoutId) {
+    sections.push(await buildCoachContext(userId, workoutId));
+  } else {
+    sections.push("# Сегодня тренировки не было");
+    sections.push(await loadRecentWorkoutsCompactBlock(userId, 5));
+  }
+
+  const sleep = await loadRecentSleep(userId, 7);
+  sections.push(formatSleepBlock(sleep));
+
+  const nutrition = await loadRecentNutrition(userId, 7);
+  sections.push(formatNutritionBlock(nutrition));
+
+  sections.push(`# Режим\nKind: \`${opts.kind}\``);
+
+  return { prompt: sections.join("\n\n") };
+}
+
+async function loadRecentSleep(userId: string, days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return db
+    .select({
+      date: schema.sleepLogs.date,
+      hours: schema.sleepLogs.hours,
+      quality: schema.sleepLogs.quality,
+      notes: schema.sleepLogs.notes,
+    })
+    .from(schema.sleepLogs)
+    .where(
+      and(
+        eq(schema.sleepLogs.userId, userId),
+        gte(schema.sleepLogs.date, since.toISOString().slice(0, 10)),
+      ),
+    )
+    .orderBy(desc(schema.sleepLogs.date))
+    .limit(days);
+}
+
+async function loadRecentNutrition(userId: string, days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return db
+    .select({
+      date: schema.nutritionEntries.date,
+      kcal: schema.nutritionEntries.kcal,
+      proteinG: schema.nutritionEntries.proteinG,
+      fatG: schema.nutritionEntries.fatG,
+      carbsG: schema.nutritionEntries.carbsG,
+      notes: schema.nutritionEntries.notes,
+    })
+    .from(schema.nutritionEntries)
+    .where(
+      and(
+        eq(schema.nutritionEntries.userId, userId),
+        gte(schema.nutritionEntries.date, since.toISOString().slice(0, 10)),
+      ),
+    )
+    .orderBy(desc(schema.nutritionEntries.date))
+    .limit(days);
+}
+
+function formatSleepBlock(
+  rows: Array<{
+    date: string;
+    hours: number;
+    quality: number | null;
+    notes: string | null;
+  }>,
+): string {
+  if (rows.length === 0) {
+    return "# Сон\n_(нет записей за последние 7 дней)_";
+  }
+  const avg = rows.reduce((s, r) => s + r.hours, 0) / rows.length;
+  const lines = rows.map(
+    (r) =>
+      `- ${r.date}: ${r.hours} ч${r.quality != null ? ` · качество ${r.quality}/5` : ""}${r.notes ? ` · ${r.notes}` : ""}`,
+  );
+  return `# Сон (среднее ${avg.toFixed(1)} ч за ${rows.length} дн)\n\n${lines.join("\n")}`;
+}
+
+function formatNutritionBlock(
+  rows: Array<{
+    date: string;
+    kcal: number | null;
+    proteinG: number | null;
+    fatG: number | null;
+    carbsG: number | null;
+    notes: string | null;
+  }>,
+): string {
+  if (rows.length === 0) {
+    return "# Питание\n_(нет записей за последние 7 дней)_";
+  }
+  const lines = rows.map((r) => {
+    const macro = [
+      r.kcal != null ? `${r.kcal} ккал` : null,
+      r.proteinG != null ? `Б ${r.proteinG}` : null,
+      r.fatG != null ? `Ж ${r.fatG}` : null,
+      r.carbsG != null ? `У ${r.carbsG}` : null,
+    ]
+      .filter(Boolean)
+      .join(" / ");
+    return `- ${r.date}: ${macro || "(без макро)"}${r.notes ? ` · ${r.notes}` : ""}`;
+  });
+  return `# КБЖУ (${rows.length} записей за 7 дней)\n\n${lines.join("\n")}`;
+}
+
+async function loadRecentWorkoutsCompactBlock(
+  userId: string,
+  limit: number,
+): Promise<string> {
+  const rows = await db
+    .select({
+      id: schema.workouts.id,
+      name: schema.workouts.name,
+      startedAt: schema.workouts.startedAt,
+    })
+    .from(schema.workouts)
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+      ),
+    )
+    .orderBy(desc(schema.workouts.startedAt))
+    .limit(limit);
+  if (rows.length === 0) {
+    return "_(тренировок за всё время нет)_";
+  }
+  return `## Последние ${rows.length} тренировок\n\n${rows
+    .map((r) => `- ${formatDate(r.startedAt)}: ${r.name}`)
+    .join("\n")}`;
 }

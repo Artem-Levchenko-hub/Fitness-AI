@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
@@ -121,3 +121,61 @@ async function staleWhileRevalidate(request, cacheName) {
 
   return cached || fetchPromise;
 }
+
+// --- Web Push: receive + click ----------------------------------------------
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      payload = { title: "Уведомление", body: event.data.text() };
+    }
+  }
+
+  const title = payload.title || "Fitness AI";
+  const options = {
+    body: payload.body || "",
+    icon: "/icons/icon.svg",
+    badge: "/icons/icon.svg",
+    tag: payload.tag || "fitness-ai",
+    data: { url: payload.url || "/" },
+    renotify: false,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl =
+    (event.notification.data && event.notification.data.url) || "/";
+
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      // Если открыта вкладка — фокусируемся и навигируем туда.
+      for (const client of all) {
+        if ("focus" in client) {
+          await client.focus();
+          if ("navigate" in client) {
+            try {
+              await client.navigate(targetUrl);
+            } catch {
+              /* navigate может бросить на cross-origin — игнорим */
+            }
+          }
+          return;
+        }
+      }
+      // Иначе — открываем новую.
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(targetUrl);
+      }
+    })(),
+  );
+});

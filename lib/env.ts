@@ -42,6 +42,16 @@ export const env = createEnv({
     GEMINI_API_KEY: z.string().min(1).optional(),
     GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
 
+    /** Прокси для исходящих HTTPS-запросов из Node (например, к Gemini из РФ).
+     *  Формат: http://user:pass@host:port или http://host:port. */
+    HTTPS_PROXY: z.string().url().optional(),
+
+    /** VAPID-ключи для Web Push. Генерируются `npx web-push generate-vapid-keys`. */
+    VAPID_PUBLIC_KEY: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    /** mailto:contact@example.com — для push-сервисов как fallback identifier. */
+    VAPID_SUBJECT: z.string().optional(),
+
     REDIS_URL: z.string().url().optional(),
 
     STRIPE_SECRET_KEY: z.string().optional(),
@@ -71,10 +81,13 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+    /** Публичный mirror VAPID public key — нужен в браузере для subscribe(). */
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
   },
   experimental__runtimeEnv: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
