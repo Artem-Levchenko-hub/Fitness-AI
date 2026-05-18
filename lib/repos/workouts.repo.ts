@@ -292,19 +292,21 @@ export async function finishWorkout(
     );
 }
 
+export type RecentWorkout = {
+  id: string;
+  name: string;
+  status: WorkoutStatusLiteral;
+  startedAt: Date;
+  finishedAt: Date | null;
+  setCount: number;
+  tonnageKg: number;
+  hasAnalysis: boolean;
+};
+
 export async function listRecentWorkouts(
   userId: string,
   limit = 30,
-): Promise<
-  Array<{
-    id: string;
-    name: string;
-    status: WorkoutStatusLiteral;
-    startedAt: Date;
-    finishedAt: Date | null;
-    setCount: number;
-  }>
-> {
+): Promise<RecentWorkout[]> {
   const rows = await db
     .select({
       id: schema.workouts.id,
@@ -321,10 +323,12 @@ export async function listRecentWorkouts(
   if (rows.length === 0) return [];
 
   const ids = rows.map((r) => r.id);
-  const setCounts = await db
+
+  const setRows = await db
     .select({
       workoutId: schema.workoutExercises.workoutId,
-      count: schema.workoutSets.id,
+      weightKg: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
     })
     .from(schema.workoutSets)
     .innerJoin(
@@ -333,12 +337,56 @@ export async function listRecentWorkouts(
     )
     .where(inArray(schema.workoutExercises.workoutId, ids));
 
-  const map = new Map<string, number>();
-  for (const r of setCounts) {
-    map.set(r.workoutId, (map.get(r.workoutId) ?? 0) + 1);
+  const setCount = new Map<string, number>();
+  const tonnage = new Map<string, number>();
+  for (const r of setRows) {
+    setCount.set(r.workoutId, (setCount.get(r.workoutId) ?? 0) + 1);
+    tonnage.set(
+      r.workoutId,
+      (tonnage.get(r.workoutId) ?? 0) + r.weightKg * r.reps,
+    );
   }
 
-  return rows.map((r) => ({ ...r, setCount: map.get(r.id) ?? 0 }));
+  const analysisRows = await db
+    .select({ workoutId: schema.aiAnalyses.workoutId })
+    .from(schema.aiAnalyses)
+    .where(inArray(schema.aiAnalyses.workoutId, ids));
+  const hasAnalysis = new Set(analysisRows.map((r) => r.workoutId));
+
+  return rows.map((r) => ({
+    ...r,
+    setCount: setCount.get(r.id) ?? 0,
+    tonnageKg: tonnage.get(r.id) ?? 0,
+    hasAnalysis: hasAnalysis.has(r.id),
+  }));
+}
+
+export async function getAiAnalysisForWorkout(
+  userId: string,
+  workoutId: string,
+): Promise<{
+  id: string;
+  content: string;
+  modelVersion: string;
+  createdAt: Date;
+} | null> {
+  const [row] = await db
+    .select({
+      id: schema.aiAnalyses.id,
+      content: schema.aiAnalyses.content,
+      modelVersion: schema.aiAnalyses.modelVersion,
+      createdAt: schema.aiAnalyses.createdAt,
+    })
+    .from(schema.aiAnalyses)
+    .where(
+      and(
+        eq(schema.aiAnalyses.workoutId, workoutId),
+        eq(schema.aiAnalyses.userId, userId),
+      ),
+    )
+    .orderBy(desc(schema.aiAnalyses.createdAt))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function getActiveWorkoutId(userId: string): Promise<string | null> {

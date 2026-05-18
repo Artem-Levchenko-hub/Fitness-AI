@@ -6,10 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { isAiConfigured } from "@/lib/ai/deepseek";
 import { requireUser } from "@/lib/auth/require-user";
-import {
-  bestEstimatedOneRepMax,
-  totalVolume,
-} from "@/lib/domain";
+import { totalVolume } from "@/lib/domain";
 import { getActiveWorkoutForUser } from "@/lib/repos/workouts.repo";
 
 import { CoachChat } from "./coach-chat";

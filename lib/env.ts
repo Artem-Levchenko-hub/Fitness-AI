@@ -16,6 +16,9 @@ export const env = createEnv({
     /** RFC 5322 формат: "Display Name <email@host>" или просто "email@host". */
     EMAIL_FROM: z.string().min(3),
 
+    /** Какой провайдер использовать. Если не задан — auto: Gemini, затем OpenAI-compat. */
+    AI_PROVIDER: z.enum(["gemini", "openai"]).optional(),
+
     /** OpenAI-compat AI gateway (VseGPT / OpenRouter / любой другой). */
     AI_API_KEY: z.string().min(1).optional(),
     AI_BASE_URL: z
@@ -53,6 +56,13 @@ export const env = createEnv({
 
     /** Цена коуч-сессии в копейках. Default 1000 (10 ₽). */
     AI_COACH_PRICE_KOPECKS: z.coerce.number().int().positive().optional(),
+
+    /** Гейтить ли coach по балансу. По умолчанию выкл — пока используем
+     *  free-tier Gemini, биллинг включим когда подключим платный провайдер. */
+    BILLING_ENABLED: z
+      .union([z.literal("true"), z.literal("false")])
+      .optional()
+      .transform((v) => v === "true"),
 
     CRON_SECRET: z.string().min(16).optional(),
 
