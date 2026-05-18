@@ -11,7 +11,12 @@
  * Читает CRON_SECRET и NEXT_PUBLIC_APP_URL из окружения процесса.
  */
 
-const BASE = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001";
+// CRON_BASE_URL = явный override; иначе всегда localhost (cron-runner работает
+// на том же боксе что и web — публичный URL не нужен и часто недоступен
+// из-за DNS-конфигурации внутри хостинга).
+const BASE =
+  process.env.CRON_BASE_URL ||
+  `http://localhost:${process.env.CRON_TARGET_PORT || "3001"}`;
 const SECRET = process.env.CRON_SECRET;
 
 if (!SECRET) {
