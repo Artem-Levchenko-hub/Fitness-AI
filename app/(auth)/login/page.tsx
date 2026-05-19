@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { SessionAutoRestore } from "@/components/auth/SessionAutoRestore";
+
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
@@ -16,6 +18,7 @@ export default async function LoginPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
+      <SessionAutoRestore />
       <div className="space-y-2 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">
           Fitness SaaS

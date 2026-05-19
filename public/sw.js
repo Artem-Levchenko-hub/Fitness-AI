@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
@@ -58,9 +58,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation (HTML pages) — network first, offline fallback
+  // Navigation (HTML pages) — network only с offline fallback. НЕ
+  // кэшируем ответ: иначе закэшированный 307-редирект на /login
+  // переживёт последующий валидный логин и будет отдаваться раньше,
+  // чем сеть пришлёт свежий ответ (известный баг iOS PWA).
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstWithOfflineFallback(request));
+    event.respondWith(networkOnlyWithOfflineFallback(request));
     return;
   }
 
@@ -84,18 +87,10 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-async function networkFirstWithOfflineFallback(request) {
+async function networkOnlyWithOfflineFallback(request) {
   try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, response.clone());
-    }
-    return response;
+    return await fetch(request);
   } catch {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-
     const offlinePage = await caches.match("/offline.html");
     if (offlinePage) return offlinePage;
 
