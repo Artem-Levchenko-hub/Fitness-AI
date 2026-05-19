@@ -33,15 +33,13 @@ function authorize(req: Request): boolean {
 }
 
 /** Подхватывает pending jobs, обрабатывает их батчем. Запускается:
- *  - cron-ом раз в минуту (внешний systemd timer);
- *  - fire-and-forget из /api/ai/trainer после создания job. */
+ *  - cron-runner-ом раз в минуту;
+ *  - fire-and-forget из server actions после создания job. */
 export async function POST(req: Request) {
   if (!authorize(req)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Атомарно берём батч pending-job'ов и помечаем running, чтобы конкурентные
-  // воркеры не дублировали работу.
   const claimed = await db.transaction(async (tx) => {
     const pending = await tx
       .select()
@@ -87,12 +85,11 @@ export async function POST(req: Request) {
         })
         .where(eq(schema.aiJobs.id, job.id));
       results.push({ id: job.id, ok: true });
-      void notifyTrainerReady(job.userId, job.workoutId);
+      void notifyTrainerReady(job);
     } catch (err) {
       const message = (err as Error).message ?? String(err);
       const attempts = job.attempts + 1;
       const isOpen = err instanceof CircuitOpenError;
-      // Backoff: breaker open → 60s, иначе 10s/30s/60s по числу попыток.
       const backoffMs = isOpen
         ? 60_000
         : attempts >= 3
@@ -126,6 +123,7 @@ async function processJob(
 ): Promise<{ analysisId: string; result: TrainerResponse }> {
   const context = await buildTrainerContext(job.userId, job.workoutId, {
     kind: job.kind,
+    circuitWorkoutId: job.circuitWorkoutId ?? null,
   });
 
   const systemPrompt =
@@ -144,7 +142,6 @@ async function processJob(
     { threshold: 3, cooldownMs: 60_000 },
   );
 
-  // Markdown-краткая выжимка для UI без JS-парсинга (fallback view).
   const md = renderMarkdown(result.json);
 
   const [analysis] = await db
@@ -152,6 +149,7 @@ async function processJob(
     .values({
       userId: job.userId,
       workoutId: job.workoutId,
+      circuitWorkoutId: job.circuitWorkoutId ?? null,
       content: md,
       resultJson: result.json as object,
       modelVersion: result.modelVersion ?? TRAINER_MODEL,
@@ -190,16 +188,31 @@ function renderMarkdown(r: TrainerResponse): string {
   return lines.join("\n");
 }
 
-async function notifyTrainerReady(userId: string, workoutId: string | null) {
+async function notifyTrainerReady(
+  job: typeof schema.aiJobs.$inferSelect,
+) {
   try {
-    const subs = await getActiveForUser(userId);
+    const subs = await getActiveForUser(job.userId);
     if (subs.length === 0) return;
-    await sendPushToUser(userId, subs, {
+
+    let url = "/dashboard";
+    let tag = "trainer-generic";
+    if (job.kind === "circuit_post_workout" && job.circuitWorkoutId) {
+      url = `/circuits/${job.circuitWorkoutId}`;
+      tag = `trainer-circuit-${job.circuitWorkoutId}`;
+    } else if (job.workoutId) {
+      url = `/workouts/${job.workoutId}/trainer`;
+      tag = `trainer-${job.workoutId}`;
+    } else if (job.kind === "daily_digest") {
+      tag = "trainer-digest";
+    }
+
+    await sendPushToUser(job.userId, subs, {
       kind: "trainer_ready",
       title: "🏋️ Тренер разобрал тренировку",
       body: "Открой приложение, чтобы увидеть оценку и рекомендации.",
-      url: workoutId ? `/workouts/${workoutId}/trainer` : "/dashboard",
-      tag: `trainer-${workoutId ?? "digest"}`,
+      url,
+      tag,
     });
   } catch {
     /* push — необязательная фича, не валим job */

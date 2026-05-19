@@ -28,6 +28,8 @@ type WorkoutSummary = {
 
 const HISTORY_DAYS = 60;
 const MAX_HISTORY_WORKOUTS = 12;
+const CIRCUIT_HISTORY_DAYS = 60;
+const MAX_CIRCUIT_HISTORY = 10;
 
 /** Собирает markdown-контекст для DeepSeek: сегодняшняя тренировка + N
  *  прошлых + relevant exercise_notes + workout_notes + cycle_note + 1RM
@@ -45,10 +47,8 @@ export async function buildCoachContext(
 
   const since = new Date(Date.now() - HISTORY_DAYS * 24 * 60 * 60 * 1000);
 
-  // История прошлых тренировок
   const pastWorkouts = await loadPastWorkouts(userId, workoutId, since);
 
-  // Relevant exercise notes (для упражнений сегодняшней тренировки)
   const exerciseNotes = exerciseIds.length
     ? await db
         .select({
@@ -71,7 +71,6 @@ export async function buildCoachContext(
         .orderBy(desc(schema.exerciseNotes.updatedAt))
     : [];
 
-  // Последние workout_notes
   const recentWorkoutNotes = await db
     .select({
       workoutId: schema.workoutNotes.workoutId,
@@ -83,7 +82,6 @@ export async function buildCoachContext(
     .orderBy(desc(schema.workoutNotes.updatedAt))
     .limit(4);
 
-  // Текущий cycle note (если уже есть на этой неделе)
   const recentCycleNotes = await db
     .select()
     .from(schema.cycleNotes)
@@ -91,10 +89,7 @@ export async function buildCoachContext(
     .orderBy(desc(schema.cycleNotes.updatedAt))
     .limit(2);
 
-  // 1RM trend по упражнениям сегодняшней тренировки
   const oneRmTrends = compute1RmTrends(todayWorkout, pastWorkouts);
-
-  // Volume by muscle за 4 недели — упрощённо: суммируем волюм по primary muscle
   const volumeByMuscle = await loadVolumeByMuscle(userId, since);
 
   const sections: string[] = [];
@@ -467,16 +462,21 @@ function formatDate(d: Date): string {
 }
 
 /** Контекст для AI-тренера (Gemini structured JSON):
- *  Coach-контекст (если есть workoutId) + sleep за 7 дней + nutrition за 7 дней.
+ *  Coach-контекст (если есть workoutId) ИЛИ детальный circuit-контекст (если
+ *  circuitWorkoutId) + sleep за 7 дней + nutrition за 7 дней + история круговых.
  *  Возвращает { prompt: string } чтобы trainer route мог его сразу скормить. */
 export async function buildTrainerContext(
   userId: string,
   workoutId: string | null,
-  opts: { kind: AiJobKindLiteral },
+  opts: { kind: AiJobKindLiteral; circuitWorkoutId?: string | null },
 ): Promise<{ prompt: string }> {
   const sections: string[] = [];
 
-  if (workoutId) {
+  if (opts.kind === "circuit_post_workout" && opts.circuitWorkoutId) {
+    sections.push(
+      await buildCircuitFocusedContext(userId, opts.circuitWorkoutId),
+    );
+  } else if (workoutId) {
     sections.push(await buildCoachContext(userId, workoutId));
   } else {
     sections.push("# Сегодня тренировки не было");
@@ -491,6 +491,13 @@ export async function buildTrainerContext(
 
   const cardio = await loadRecentCardio(userId, 5);
   sections.push(formatCardioBlock(cardio));
+
+  const circuits = await loadCircuitContext(
+    userId,
+    CIRCUIT_HISTORY_DAYS,
+    opts.circuitWorkoutId ?? null,
+  );
+  sections.push(formatCircuitHistoryBlock(circuits));
 
   sections.push(`# Режим\nKind: \`${opts.kind}\``);
 
@@ -712,4 +719,245 @@ async function loadRecentWorkoutsCompactBlock(
   return `## Последние ${rows.length} тренировок\n\n${rows
     .map((r) => `- ${formatDate(r.startedAt)}: ${r.name}`)
     .join("\n")}`;
+}
+
+// ─── Круговые тренировки ──────────────────────────────────────────────────
+
+type CircuitContextRow = {
+  id: string;
+  name: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  status: string;
+  totalRounds: number;
+  exerciseCount: number;
+  completedLogCount: number;
+  skippedLogCount: number;
+  totalDurationSec: number;
+  exerciseSummaries: string[];
+};
+
+/** Грузит детальный контекст для одной конкретной круговой
+ *  (используется когда AI-job kind=circuit_post_workout). */
+async function buildCircuitFocusedContext(
+  userId: string,
+  circuitId: string,
+): Promise<string> {
+  const [w] = await db
+    .select()
+    .from(schema.circuitWorkouts)
+    .where(
+      and(
+        eq(schema.circuitWorkouts.id, circuitId),
+        eq(schema.circuitWorkouts.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!w) return "# Сегодняшняя круговая\n_(не найдена)_";
+
+  const exercises = await db
+    .select({
+      id: schema.circuitExercises.id,
+      orderIdx: schema.circuitExercises.orderIdx,
+      kind: schema.circuitExercises.kind,
+      targetReps: schema.circuitExercises.targetReps,
+      targetDurationSec: schema.circuitExercises.targetDurationSec,
+      targetWeightKg: schema.circuitExercises.targetWeightKg,
+      notes: schema.circuitExercises.notes,
+      exerciseNameRu: schema.exercises.nameRu,
+    })
+    .from(schema.circuitExercises)
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.circuitExercises.exerciseId),
+    )
+    .where(eq(schema.circuitExercises.circuitWorkoutId, circuitId))
+    .orderBy(asc(schema.circuitExercises.orderIdx));
+
+  const logs = await db
+    .select()
+    .from(schema.circuitRoundLogs)
+    .where(eq(schema.circuitRoundLogs.circuitWorkoutId, circuitId))
+    .orderBy(asc(schema.circuitRoundLogs.roundNumber));
+
+  const durationMin = w.finishedAt
+    ? Math.round(
+        (w.finishedAt.getTime() - w.startedAt.getTime()) / 60_000,
+      )
+    : null;
+
+  const completedSlots = logs.filter((l) => !l.skipped).length;
+  const skippedSlots = logs.filter((l) => l.skipped).length;
+  const totalSlots = w.totalRounds * exercises.length;
+
+  const exerciseLines: string[] = [];
+  for (const ex of exercises) {
+    const xs = logs
+      .filter((l) => l.circuitExerciseId === ex.id)
+      .sort((a, b) => a.roundNumber - b.roundNumber);
+    const target =
+      ex.kind === "reps"
+        ? `план ${ex.targetReps ?? "?"} повт.`
+        : `план ${ex.targetDurationSec ?? "?"} сек`;
+    const weight =
+      ex.targetWeightKg != null ? ` × ${ex.targetWeightKg} кг` : "";
+    const slots = xs
+      .map((l) => {
+        if (l.skipped) return `${l.roundNumber}) пропуск`;
+        if (ex.kind === "reps") {
+          const w2 =
+            l.actualWeightKg != null ? ` × ${l.actualWeightKg}кг` : "";
+          const rpe = l.rpe != null ? ` @${l.rpe}` : "";
+          return `${l.roundNumber}) ${l.actualReps ?? "—"} повт.${w2}${rpe}`;
+        }
+        const w2 =
+          l.actualWeightKg != null ? ` × ${l.actualWeightKg}кг` : "";
+        const rpe = l.rpe != null ? ` @${l.rpe}` : "";
+        return `${l.roundNumber}) ${l.actualDurationSec ?? "—"}с${w2}${rpe}`;
+      })
+      .join(", ");
+    exerciseLines.push(
+      `- **${ex.exerciseNameRu}** (${target}${weight}): ${slots || "—"}`,
+    );
+  }
+
+  return [
+    `# Сегодняшняя круговая\n`,
+    `**${w.name}** · ${formatDate(w.startedAt)}`,
+    `Кругов план: ${w.totalRounds} · упражнений: ${exercises.length} · слотов всего: ${totalSlots}`,
+    `Выполнено: ${completedSlots} · пропущено: ${skippedSlots}`,
+    `Отдых: ${w.restBetweenExercisesSec}с между упр., ${w.restBetweenRoundsSec}с между кругами`,
+    durationMin != null ? `Длительность: ${durationMin} мин` : "",
+    w.status !== "completed" ? `_статус: ${w.status}_` : "",
+    "",
+    "## Упражнения и слоты:",
+    ...exerciseLines,
+    w.notes ? `\nЗаметка: ${w.notes}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Грузит историю круговых за N дней (исключая текущую, если задана). */
+async function loadCircuitContext(
+  userId: string,
+  days: number,
+  excludeId: string | null,
+): Promise<CircuitContextRow[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  let conditions = and(
+    eq(schema.circuitWorkouts.userId, userId),
+    gte(schema.circuitWorkouts.startedAt, since),
+  );
+  if (excludeId) {
+    conditions = and(
+      conditions,
+      sql`${schema.circuitWorkouts.id} <> ${excludeId}`,
+    );
+  }
+
+  const rows = await db
+    .select()
+    .from(schema.circuitWorkouts)
+    .where(conditions)
+    .orderBy(desc(schema.circuitWorkouts.startedAt))
+    .limit(MAX_CIRCUIT_HISTORY);
+
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((r) => r.id);
+
+  const exRows = await db
+    .select({
+      id: schema.circuitExercises.id,
+      circuitWorkoutId: schema.circuitExercises.circuitWorkoutId,
+      kind: schema.circuitExercises.kind,
+      targetReps: schema.circuitExercises.targetReps,
+      targetDurationSec: schema.circuitExercises.targetDurationSec,
+      exerciseNameRu: schema.exercises.nameRu,
+    })
+    .from(schema.circuitExercises)
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.circuitExercises.exerciseId),
+    )
+    .where(inArray(schema.circuitExercises.circuitWorkoutId, ids));
+
+  const logRows = await db
+    .select()
+    .from(schema.circuitRoundLogs)
+    .where(inArray(schema.circuitRoundLogs.circuitWorkoutId, ids));
+
+  const exByCircuit = new Map<string, typeof exRows>();
+  for (const ex of exRows) {
+    const arr = exByCircuit.get(ex.circuitWorkoutId) ?? [];
+    arr.push(ex);
+    exByCircuit.set(ex.circuitWorkoutId, arr);
+  }
+
+  const logsByCircuit = new Map<string, typeof logRows>();
+  for (const l of logRows) {
+    const arr = logsByCircuit.get(l.circuitWorkoutId) ?? [];
+    arr.push(l);
+    logsByCircuit.set(l.circuitWorkoutId, arr);
+  }
+
+  return rows.map((w) => {
+    const exs = exByCircuit.get(w.id) ?? [];
+    const lgs = logsByCircuit.get(w.id) ?? [];
+    const completed = lgs.filter((l) => !l.skipped).length;
+    const skipped = lgs.filter((l) => l.skipped).length;
+    const totalSec = lgs.reduce(
+      (s, l) => s + (l.actualDurationSec ?? 0),
+      0,
+    );
+    return {
+      id: w.id,
+      name: w.name,
+      startedAt: w.startedAt,
+      finishedAt: w.finishedAt,
+      status: w.status,
+      totalRounds: w.totalRounds,
+      exerciseCount: exs.length,
+      completedLogCount: completed,
+      skippedLogCount: skipped,
+      totalDurationSec: totalSec,
+      exerciseSummaries: exs.map(
+        (e) =>
+          `${e.exerciseNameRu} (${e.kind === "reps" ? `${e.targetReps ?? "?"} повт.` : `${e.targetDurationSec ?? "?"}с`})`,
+      ),
+    };
+  });
+}
+
+function formatCircuitHistoryBlock(rows: CircuitContextRow[]): string {
+  if (rows.length === 0) {
+    return "# Круговые тренировки\n_(нет круговых за последние 60 дней)_";
+  }
+  const lines = rows.map((r) => {
+    const expected = r.totalRounds * r.exerciseCount;
+    const durationMin =
+      r.finishedAt != null
+        ? Math.round(
+            (r.finishedAt.getTime() - r.startedAt.getTime()) / 60_000,
+          )
+        : null;
+    const meta = [
+      `${r.totalRounds} × ${r.exerciseCount} упр.`,
+      `выполнено ${r.completedLogCount}/${expected}`,
+      r.skippedLogCount > 0 ? `пропусков ${r.skippedLogCount}` : null,
+      durationMin != null ? `${durationMin} мин` : null,
+      r.status !== "completed" ? `_${r.status}_` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const exs =
+      r.exerciseSummaries.length > 0
+        ? `\n  упр.: ${r.exerciseSummaries.join("; ")}`
+        : "";
+    return `- ${formatDate(r.startedAt)} · **${r.name}** · ${meta}${exs}`;
+  });
+  return `# Круговые тренировки за последние 60 дней (${rows.length})\n\n${lines.join("\n")}`;
 }

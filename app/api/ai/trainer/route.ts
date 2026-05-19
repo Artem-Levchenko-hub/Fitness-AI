@@ -9,8 +9,6 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 function triggerWorker(): void {
-  // Не валим основной поток — fire-and-forget. Воркер сам подхватит при
-  // следующем cron-тике, если этот вызов упал.
   if (!env.CRON_SECRET) return;
   try {
     void fetch(`${env.NEXT_PUBLIC_APP_URL}/api/cron/process-ai-jobs`, {
@@ -24,7 +22,15 @@ function triggerWorker(): void {
 
 const bodySchema = z.object({
   workoutId: z.string().uuid().optional(),
-  kind: z.enum(["post_workout", "daily_digest", "on_demand"]).default("on_demand"),
+  circuitWorkoutId: z.string().uuid().optional(),
+  kind: z
+    .enum([
+      "post_workout",
+      "daily_digest",
+      "on_demand",
+      "circuit_post_workout",
+    ])
+    .default("on_demand"),
 });
 
 /** Создаёт aiJob и возвращает jobId. Реальный вызов Gemini делает worker
@@ -39,10 +45,21 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  // Для post_workout / on_demand нужен workoutId, для daily_digest — нет.
-  if (parsed.kind !== "daily_digest" && !parsed.workoutId) {
+  if (
+    parsed.kind === "post_workout" ||
+    parsed.kind === "on_demand"
+  ) {
+    if (!parsed.workoutId) {
+      return Response.json(
+        { error: "workoutId required for post_workout / on_demand" },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (parsed.kind === "circuit_post_workout" && !parsed.circuitWorkoutId) {
     return Response.json(
-      { error: "workoutId required for post_workout / on_demand" },
+      { error: "circuitWorkoutId required for circuit_post_workout" },
       { status: 400 },
     );
   }
@@ -52,6 +69,7 @@ export async function POST(request: Request) {
     .values({
       userId: user.id,
       workoutId: parsed.workoutId ?? null,
+      circuitWorkoutId: parsed.circuitWorkoutId ?? null,
       kind: parsed.kind,
       status: "pending",
     })

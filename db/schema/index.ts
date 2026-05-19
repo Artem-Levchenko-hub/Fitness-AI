@@ -4,6 +4,7 @@ export * from "./exercises";
 export * from "./templates";
 export * from "./workouts";
 export * from "./notes";
+export * from "./circuit";
 export * from "./ai";
 export * from "./billing";
 export * from "./credits";

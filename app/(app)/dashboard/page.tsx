@@ -11,6 +11,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { CircuitTile } from "@/components/dashboard/CircuitTile";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
@@ -70,6 +71,10 @@ export default async function DashboardPage() {
 
       <section className="mt-6">
         <CardioTile activeId={activeCardioId} lastName={lastCardio?.name ?? null} lastDate={lastCardio?.startedAt ?? null} />
+      </section>
+
+      <section className="mt-3">
+        <CircuitTile userId={user.id} />
       </section>
 
       <section className="mt-6 space-y-2">

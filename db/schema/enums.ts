@@ -61,6 +61,7 @@ export const aiJobKind = pgEnum("ai_job_kind", [
   "post_workout",
   "daily_digest",
   "on_demand",
+  "circuit_post_workout",
 ]);
 
 export const pushKind = pgEnum("push_kind", [
@@ -78,6 +79,11 @@ export const cardioPreset = pgEnum("cardio_preset", [
 ]);
 
 export const cardioBlockKind = pgEnum("cardio_block_kind", ["work", "rest"]);
+
+export const circuitExerciseKind = pgEnum("circuit_exercise_kind", [
+  "reps",
+  "duration",
+]);
 
 export const subscriptionTier = pgEnum("subscription_tier", ["free", "pro"]);
 
