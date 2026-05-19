@@ -21,7 +21,7 @@ export default async function ExercisesPage() {
         <h1 className="font-serif text-3xl font-normal tracking-tight md:text-4xl">
           Упражнения
         </h1>
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="lg" variant="outline">
           <Link href="/exercises/new">
             <Plus className="size-4" />
             Своё

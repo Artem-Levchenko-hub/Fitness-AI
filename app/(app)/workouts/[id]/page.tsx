@@ -287,16 +287,16 @@ function CoachCta({ workoutId }: { workoutId: string }) {
           </p>
         </div>
       </div>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <Button asChild size="lg" className="flex-1">
+      <div className="mt-4 flex flex-col gap-3">
+        <Button asChild size="xl" className="w-full">
           <Link href={`/workouts/${workoutId}/trainer`}>
-            <Sparkles className="size-4" />
+            <Sparkles className="size-5" />
             AI-тренер
           </Link>
         </Button>
-        <Button asChild size="lg" variant="outline" className="flex-1">
+        <Button asChild size="xl" variant="outline" className="w-full">
           <Link href={`/workouts/${workoutId}/coach`}>
-            <MessageSquare className="size-4" />
+            <MessageSquare className="size-5" />
             Чат с коучем
           </Link>
         </Button>

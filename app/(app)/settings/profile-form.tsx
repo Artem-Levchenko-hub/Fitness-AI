@@ -143,7 +143,7 @@ export function ProfileForm(props: Props) {
 
       <Button
         type="submit"
-        size="lg"
+        size="xl"
         className="w-full"
         disabled={pending}
         aria-busy={pending}

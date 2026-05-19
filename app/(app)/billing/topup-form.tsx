@@ -116,7 +116,7 @@ export function TopupForm() {
 
       <Button
         type="button"
-        size="lg"
+        size="xl"
         className="w-full"
         disabled={!validAmount || pending}
         onClick={handleCheckout}

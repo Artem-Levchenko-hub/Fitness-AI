@@ -121,7 +121,7 @@ export function NutritionForm({
         <p className="text-success text-sm">{state.message}</p>
       ) : null}
 
-      <Button type="submit" disabled={pending} size="lg" className="w-full">
+      <Button type="submit" disabled={pending} size="xl" className="w-full">
         {pending ? "Сохраняю…" : "Сохранить"}
       </Button>
     </form>
