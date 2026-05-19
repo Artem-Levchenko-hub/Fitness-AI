@@ -145,16 +145,16 @@ function StartCard() {
         Откройте шаблон и запустите сессию одним касанием. Или создайте новый.
       </p>
 
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-        <Button asChild size="lg" className="flex-1">
+      <div className="mt-5 flex flex-col gap-3">
+        <Button asChild size="xl" className="w-full">
           <Link href="/templates">
-            <Dumbbell className="size-4" />
+            <Dumbbell className="size-5" />
             Мои шаблоны
           </Link>
         </Button>
-        <Button asChild size="lg" variant="outline" className="flex-1">
+        <Button asChild size="xl" variant="outline" className="w-full">
           <Link href="/templates/new">
-            <Plus className="size-4" />
+            <Plus className="size-5" />
             Новый шаблон
           </Link>
         </Button>

@@ -36,10 +36,10 @@ export function ProfileForm(props: Props) {
   );
 
   return (
-    <form action={formAction} className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="birthDate" className="text-xs">
+    <form action={formAction} className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="birthDate">
             Дата рождения
           </Label>
           <Input
@@ -50,8 +50,8 @@ export function ProfileForm(props: Props) {
             className="h-11"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="heightCm" className="text-xs">
+        <div className="space-y-2">
+          <Label htmlFor="heightCm">
             Рост (см)
           </Label>
           <Input
@@ -68,9 +68,9 @@ export function ProfileForm(props: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs">Пол</Label>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Пол</Label>
           <Select name="sex" defaultValue={props.initialSex ?? ""}>
             <SelectTrigger className="h-11">
               <SelectValue placeholder="Не указан" />
@@ -82,8 +82,8 @@ export function ProfileForm(props: Props) {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Единицы веса</Label>
+        <div className="space-y-2">
+          <Label>Единицы веса</Label>
           <Select
             name="weightUnitPref"
             defaultValue={props.initialWeightUnit}
@@ -99,9 +99,9 @@ export function ProfileForm(props: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs">Опыт</Label>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Опыт</Label>
           <Select name="experience" defaultValue={props.initialExperience}>
             <SelectTrigger className="h-11">
               <SelectValue />
@@ -113,8 +113,8 @@ export function ProfileForm(props: Props) {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="timezone" className="text-xs">
+        <div className="space-y-2">
+          <Label htmlFor="timezone">
             Часовой пояс
           </Label>
           <Input
