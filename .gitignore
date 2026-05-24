@@ -52,3 +52,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# RAG knowledge base — PDF исходники держим локально и на VPS, не в git
+/books

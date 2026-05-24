@@ -8,3 +8,4 @@ export * from "./ai";
 export * from "./billing";
 export * from "./credits";
 export * from "./body";
+export * from "./knowledge";

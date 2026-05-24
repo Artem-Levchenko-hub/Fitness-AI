@@ -3,8 +3,12 @@ import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
 import { buildCoachContext } from "@/lib/ai/context-builder";
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import { gemini, GEMINI_CHAT_MODEL, isGeminiConfigured } from "@/lib/ai/gemini";
 import { COACH_SYSTEM_PROMPT } from "@/lib/ai/prompts";
+import {
+  formatRetrievedChunks,
+  retrieveRelevant,
+} from "@/lib/ai/rag/retrieve";
 import { aiCoachPriceKopecks } from "@/lib/billing/pricing";
 import { debit } from "@/lib/repos/credits.repo";
 
@@ -24,9 +28,9 @@ const bodySchema = z.object({
 export async function POST(request: Request) {
   const user = await requireUser();
 
-  if (!isAiConfigured()) {
+  if (!isGeminiConfigured()) {
     return new Response(
-      "AI-коуч пока выключен — администратор не настроил AI_API_KEY.",
+      "AI-коуч пока выключен — администратор не настроил GEMINI_API_KEY.",
       { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } },
     );
   }
@@ -40,7 +44,6 @@ export async function POST(request: Request) {
 
   // Списание credits только при ПЕРВОМ user-сообщении сессии. Дальнейшие
   // сообщения этой беседы — бесплатно (один разговор = один debit).
-  // Считаем по количеству user-messages: если их 1 — это начало.
   const userMessages = parsed.messages.filter((m) => m.role === "user");
   if (userMessages.length === 1) {
     const price = aiCoachPriceKopecks();
@@ -63,16 +66,35 @@ export async function POST(request: Request) {
     }
   }
 
-  const context = await buildCoachContext(user.id, parsed.workoutId);
+  const athleteContext = await buildCoachContext(user.id, parsed.workoutId);
+
+  // RAG: retrieve по последнему user-сообщению. На первом сообщении —
+  // ищем по описанию сегодняшней тренировки (канон подбирается под неё).
+  const lastUserMsg =
+    [...parsed.messages].reverse().find((m) => m.role === "user")?.content ??
+    "";
+  const ragQuery =
+    userMessages.length === 1
+      ? `${lastUserMsg}\n\n${athleteContext.slice(0, 1500)}`
+      : lastUserMsg;
+
+  let canonContext: string;
+  try {
+    const chunks = await retrieveRelevant(ragQuery, { topK: 6 });
+    canonContext = formatRetrievedChunks(chunks);
+  } catch (e) {
+    console.error("[coach] RAG retrieve failed:", e);
+    canonContext =
+      "_(не удалось обратиться к базе знаний — отвечай только на основе истории атлета и явно скажи об этом)_";
+  }
 
   const result = streamText({
-    model: aiClient(COACH_MODEL),
-    system: `${COACH_SYSTEM_PROMPT}\n\n---\n\n## Контекст атлета\n\n${context}`,
+    model: gemini(GEMINI_CHAT_MODEL),
+    system: `${COACH_SYSTEM_PROMPT}\n\n---\n\n## Контекст из канона (загруженная литература)\n\n${canonContext}\n\n---\n\n## Контекст атлета\n\n${athleteContext}`,
     messages: parsed.messages,
     abortSignal: AbortSignal.timeout(45_000),
-    temperature: 0.6,
+    temperature: 0.3,
   });
 
-  // Plain text stream — client манипулирует сам, без DataStream protocol.
   return result.toTextStreamResponse();
 }
