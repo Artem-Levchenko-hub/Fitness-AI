@@ -170,7 +170,7 @@ function ExerciseList({ items }: { items: ExerciseListItem[] }) {
 
 export function ExercisesEmptyToolbar() {
   return (
-    <Button asChild size="sm" variant="outline">
+    <Button asChild size="lg" variant="outline">
       <Link href="/exercises/new">+ Своё упражнение</Link>
     </Button>
   );

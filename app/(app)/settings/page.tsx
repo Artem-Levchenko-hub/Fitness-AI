@@ -7,7 +7,7 @@ import { PushPrompt } from "@/components/push/PushPrompt";
 import { env } from "@/lib/env";
 import { requireUser } from "@/lib/auth/require-user";
 import { getUserProfile } from "@/lib/repos/body.repo";
-import { signOutAction } from "@/server/actions/auth";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 
 import { ProfileForm } from "./profile-form";
 
@@ -142,15 +142,7 @@ export default async function SettingsPage() {
         </div>
       </section>
 
-      <form action={signOutAction}>
-        <Button
-          type="submit"
-          variant="outline"
-          className="text-muted-foreground w-full"
-        >
-          Выйти
-        </Button>
-      </form>
+      <SignOutButton />
     </main>
   );
 }

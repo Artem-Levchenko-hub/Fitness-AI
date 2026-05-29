@@ -11,6 +11,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { CircuitTile } from "@/components/dashboard/CircuitTile";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
@@ -70,6 +71,10 @@ export default async function DashboardPage() {
 
       <section className="mt-6">
         <CardioTile activeId={activeCardioId} lastName={lastCardio?.name ?? null} lastDate={lastCardio?.startedAt ?? null} />
+      </section>
+
+      <section className="mt-3">
+        <CircuitTile userId={user.id} />
       </section>
 
       <section className="mt-6 space-y-2">
@@ -145,16 +150,16 @@ function StartCard() {
         Откройте шаблон и запустите сессию одним касанием. Или создайте новый.
       </p>
 
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-        <Button asChild size="lg" className="flex-1">
+      <div className="mt-5 flex flex-col gap-3">
+        <Button asChild size="xl" className="w-full">
           <Link href="/templates">
-            <Dumbbell className="size-4" />
+            <Dumbbell className="size-5" />
             Мои шаблоны
           </Link>
         </Button>
-        <Button asChild size="lg" variant="outline" className="flex-1">
+        <Button asChild size="xl" variant="outline" className="w-full">
           <Link href="/templates/new">
-            <Plus className="size-4" />
+            <Plus className="size-5" />
             Новый шаблон
           </Link>
         </Button>

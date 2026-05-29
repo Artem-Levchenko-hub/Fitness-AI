@@ -97,10 +97,10 @@ function EmptyState() {
           Создайте шаблон и запустите первую сессию — она появится здесь.
         </p>
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-        <Button asChild size="lg">
+      <div className="mt-2">
+        <Button asChild size="xl" className="w-full">
           <Link href="/templates">
-            <Dumbbell className="size-4" />
+            <Dumbbell className="size-5" />
             К шаблонам
           </Link>
         </Button>

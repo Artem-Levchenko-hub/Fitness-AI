@@ -18,7 +18,7 @@ export default async function TemplatesPage() {
         <h1 className="font-serif text-3xl font-normal tracking-tight md:text-4xl">
           Шаблоны
         </h1>
-        <Button asChild size="sm">
+        <Button asChild size="lg">
           <Link href="/templates/new">
             <Plus className="size-4" />
             Новый
@@ -67,7 +67,7 @@ function EmptyState() {
           целевыми подходами, повторениями и весом.
         </p>
       </div>
-      <Button asChild size="lg">
+      <Button asChild size="xl" className="w-full">
         <Link href="/templates/new">Создать первый шаблон</Link>
       </Button>
     </div>

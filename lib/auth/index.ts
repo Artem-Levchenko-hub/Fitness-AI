@@ -1,12 +1,18 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
+import { cookies } from "next/headers";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 
 import { authConfig } from "./config";
 import { sendOtpEmail } from "./email";
+import {
+  createRefreshToken,
+  REFRESH_COOKIE_NAME,
+  REFRESH_MAX_AGE_SECONDS,
+} from "./refresh";
 
 /** Криптостойкий 6-значный OTP. Генерируется на каждый login-attempt и
  *  хранится в verification_tokens (Auth.js встроенная таблица). */
@@ -34,4 +40,27 @@ export const { auth, signIn, signOut, handlers, unstable_update } = NextAuth({
       sendVerificationRequest: sendOtpEmail,
     }),
   ],
+  events: {
+    /** После успешного логина выпускаем долгоживущий refresh-cookie.
+     *  Если основной session-cookie теряется (iOS PWA suspend) —
+     *  proxy.ts сменяет refresh на новый session через /api/auth/restore. */
+    async signIn({ user }) {
+      if (!user?.id) return;
+      const refresh = await createRefreshToken(user.id);
+      const cookieStore = await cookies();
+      cookieStore.set({
+        name: REFRESH_COOKIE_NAME,
+        value: refresh,
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: REFRESH_MAX_AGE_SECONDS,
+      });
+    },
+    async signOut() {
+      const cookieStore = await cookies();
+      cookieStore.delete(REFRESH_COOKIE_NAME);
+    },
+  },
 });

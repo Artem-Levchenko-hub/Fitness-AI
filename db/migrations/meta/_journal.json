@@ -40,8 +40,15 @@
     {
       "idx": 5,
       "version": "7",
+      "when": 1779660000000,
+      "tag": "0005_circuit_workouts",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
       "when": 1780053521030,
-      "tag": "0005_cheerful_layla_miller",
+      "tag": "0006_knowledge_rag",
       "breakpoints": true
     }
   ]

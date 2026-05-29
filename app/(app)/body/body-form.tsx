@@ -103,7 +103,7 @@ export function BodyMeasurementForm() {
 
       <Button
         type="submit"
-        size="lg"
+        size="xl"
         className="w-full"
         disabled={pending}
         aria-busy={pending}

@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
 import { authConfig } from "@/lib/auth/config";
+import { REFRESH_COOKIE_NAME } from "@/lib/auth/refresh";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
@@ -25,6 +26,17 @@ export default auth((req) => {
   );
 
   if (isProtected && !isAuthed) {
+    // На iOS PWA после suspend session-cookie может пропасть, но
+    // долгоживущий refresh-cookie часто переживает. Если он есть —
+    // отправляем на /api/auth/restore: оно подменит refresh на свежий
+    // session и редиректнет назад. Пользователь видит лишь короткий flash.
+    const hasRefresh = req.cookies.has(REFRESH_COOKIE_NAME);
+    if (hasRefresh) {
+      const restoreUrl = new URL("/api/auth/restore", req.url);
+      restoreUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(restoreUrl);
+    }
+
     const url = new URL("/login", req.url);
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
