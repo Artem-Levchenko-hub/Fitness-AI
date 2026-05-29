@@ -57,7 +57,9 @@ function openaiClient() {
 export function aiClient(modelId: string): LanguageModel {
   const provider = resolveProvider();
   if (provider === "gemini") return geminiClient()(modelId);
-  if (provider === "openai") return openaiClient()(modelId);
+  // .chat() форсит /v1/chat/completions. Дефолт провайдера в этой версии
+  // @ai-sdk/openai → /v1/responses, который VseGPT не поддерживает.
+  if (provider === "openai") return openaiClient().chat(modelId);
   throw new Error(
     "AI provider not configured. Set GEMINI_API_KEY or AI_API_KEY.",
   );
