@@ -58,3 +58,6 @@ next-env.d.ts
 
 # RAG knowledge base — PDF исходники держим локально и на VPS, не в git
 /books
+
+# pnpm 11 build-approval file — local only, breaks pnpm 9 on prod
+pnpm-workspace.yaml
