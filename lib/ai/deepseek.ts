@@ -73,3 +73,20 @@ export const COACH_MODEL: string = (() => {
 export function isAiConfigured(): boolean {
   return resolveProvider() !== null;
 }
+
+/** Размерность embedding-вектора. Обязана совпадать с knowledge schema
+ *  (db/schema/knowledge.ts → vector(1536)). text-embedding-3-small = 1536. */
+export const EMBED_DIM = 1536;
+
+/** Embedding-модель для RAG. Только openai-совместимый провайдер (VseGPT) —
+ *  Gemini-эмбеддинги (768 dim) не совпадают со схемой (1536). */
+export function aiEmbeddingModel() {
+  const provider = resolveProvider();
+  if (provider === "openai") {
+    return openaiClient().textEmbeddingModel(env.AI_EMBED_MODEL);
+  }
+  throw new Error(
+    "RAG embeddings требуют openai-совместимый провайдер (AI_API_KEY). " +
+      "Gemini-эмбеддинги (768 dim) не совпадают с knowledge schema (1536).",
+  );
+}

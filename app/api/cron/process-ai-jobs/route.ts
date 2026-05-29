@@ -7,7 +7,7 @@ import {
   generateTrainerResponse,
   TRAINER_MODEL,
   type TrainerResponse,
-} from "@/lib/ai/gemini-structured";
+} from "@/lib/ai/trainer-structured";
 import {
   DIGEST_SYSTEM_PROMPT,
   TRAINER_SYSTEM_PROMPT,
@@ -134,7 +134,7 @@ async function processJob(
       : TRAINER_SYSTEM_PROMPT;
 
   const result = await withCircuitBreaker(
-    "gemini-trainer",
+    "trainer-llm",
     () =>
       generateTrainerResponse({
         systemInstruction: systemPrompt,

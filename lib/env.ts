@@ -26,6 +26,12 @@ export const env = createEnv({
       .url()
       .default("https://openrouter.ai/api/v1"),
     AI_MODEL: z.string().min(1).default("deepseek/deepseek-chat"),
+    /** Embedding-модель для RAG (OpenAI-compat gateway). VseGPT:
+     *  emb-openai/text-embedding-3-small = 1536 dim (совпадает с knowledge schema). */
+    AI_EMBED_MODEL: z
+      .string()
+      .min(1)
+      .default("emb-openai/text-embedding-3-small"),
     /** Опционально для OpenRouter — сайт-идентификатор для рейтинга. */
     AI_SITE_URL: z.string().url().optional(),
     AI_SITE_NAME: z.string().optional(),

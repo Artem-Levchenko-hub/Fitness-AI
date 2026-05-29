@@ -5,6 +5,10 @@ import { requireUser } from "@/lib/auth/require-user";
 import { buildCoachContext } from "@/lib/ai/context-builder";
 import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
 import { COACH_SYSTEM_PROMPT } from "@/lib/ai/prompts";
+import {
+  formatRetrievedChunks,
+  retrieveRelevant,
+} from "@/lib/ai/rag/retrieve";
 import { aiCoachPriceKopecks } from "@/lib/billing/pricing";
 import { isBillingEnabled } from "@/lib/billing/flags";
 import { debit } from "@/lib/repos/credits.repo";
@@ -39,42 +43,60 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  const userMessages = parsed.messages.filter((m) => m.role === "user");
+
   // Списание credits только при ПЕРВОМ user-сообщении сессии и только если
-  // billing включён. Сейчас работаем на free-tier Gemini → BILLING_ENABLED=false.
-  if (isBillingEnabled()) {
-    const userMessages = parsed.messages.filter((m) => m.role === "user");
-    if (userMessages.length === 1) {
-      const price = aiCoachPriceKopecks();
-      const debitResult = await debit(
-        user.id,
-        price,
-        `AI-коуч: разбор тренировки`,
-        { id: parsed.workoutId, type: "ai_coach_session" },
+  // billing включён.
+  if (isBillingEnabled() && userMessages.length === 1) {
+    const price = aiCoachPriceKopecks();
+    const debitResult = await debit(
+      user.id,
+      price,
+      `AI-коуч: разбор тренировки`,
+      { id: parsed.workoutId, type: "ai_coach_session" },
+    );
+    if (!debitResult.ok) {
+      return Response.json(
+        {
+          error: "insufficient_funds",
+          message: `Недостаточно баланса. Пополните на странице /billing — анализ стоит ${price / 100} ₽.`,
+          balance: debitResult.balance,
+          priceKopecks: price,
+        },
+        { status: 402 },
       );
-      if (!debitResult.ok) {
-        return Response.json(
-          {
-            error: "insufficient_funds",
-            message: `Недостаточно баланса. Пополните на странице /billing — анализ стоит ${price / 100} ₽.`,
-            balance: debitResult.balance,
-            priceKopecks: price,
-          },
-          { status: 402 },
-        );
-      }
     }
   }
 
-  const context = await buildCoachContext(user.id, parsed.workoutId);
+  const athleteContext = await buildCoachContext(user.id, parsed.workoutId);
+
+  // RAG: retrieve по последнему user-сообщению. На первом сообщении —
+  // ищем по описанию сегодняшней тренировки (канон подбирается под неё).
+  const lastUserMsg =
+    [...parsed.messages].reverse().find((m) => m.role === "user")?.content ??
+    "";
+  const ragQuery =
+    userMessages.length === 1
+      ? `${lastUserMsg}\n\n${athleteContext.slice(0, 1500)}`
+      : lastUserMsg;
+
+  let canonContext: string;
+  try {
+    const chunks = await retrieveRelevant(ragQuery, { topK: 6 });
+    canonContext = formatRetrievedChunks(chunks);
+  } catch (e) {
+    console.error("[coach] RAG retrieve failed:", e);
+    canonContext =
+      "_(не удалось обратиться к базе знаний — отвечай только на основе истории атлета и явно скажи об этом)_";
+  }
 
   const result = streamText({
     model: aiClient(COACH_MODEL),
-    system: `${COACH_SYSTEM_PROMPT}\n\n---\n\n## Контекст атлета\n\n${context}`,
+    system: `${COACH_SYSTEM_PROMPT}\n\n---\n\n## Контекст из канона (загруженная литература)\n\n${canonContext}\n\n---\n\n## Контекст атлета\n\n${athleteContext}`,
     messages: parsed.messages,
     abortSignal: AbortSignal.timeout(45_000),
-    temperature: 0.6,
+    temperature: 0.3,
   });
 
-  // Plain text stream — client манипулирует сам, без DataStream protocol.
   return result.toTextStreamResponse();
 }

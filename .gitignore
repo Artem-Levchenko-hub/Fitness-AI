@@ -55,3 +55,6 @@ next-env.d.ts
 
 # Rescue snapshots (Phase-10 prod-WIP recovery)
 .claude/rescue/
+
+# RAG knowledge base — PDF исходники держим локально и на VPS, не в git
+/books
