@@ -65,7 +65,7 @@ const trainerSchema = z.object({
 
 /** Спецификация формы JSON — раньше её роль играл Gemini responseSchema.
  *  deepseek responseSchema не имеет, поэтому форму описываем в промпте. */
-const JSON_SHAPE_INSTRUCTION = `Верни ТОЛЬКО валидный JSON-объект, без markdown-обёртки и без \`\`\`, строго по схеме:
+export const JSON_SHAPE_INSTRUCTION = `Верни ТОЛЬКО валидный JSON-объект, без markdown-обёртки и без \`\`\`, строго по схеме:
 {
   "overallScore": <целое 0..100>,
   "trainingQuality": { "score": <целое 0..100>, "comment": <строка, 1-2 предложения на русском> },
@@ -95,7 +95,7 @@ export type GenerateResult = {
 
 /** Достаёт JSON-объект из ответа: срезает ```-ограждение и reasoning-текст
  *  thinking-модели до первой `{` и после последней `}`. */
-function extractJson(text: string): string {
+export function extractJson(text: string): string {
   let s = text.trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence?.[1]) s = fence[1].trim();
@@ -103,6 +103,56 @@ function extractJson(text: string): string {
   const last = s.lastIndexOf("}");
   if (first >= 0 && last > first) return s.slice(first, last + 1);
   return s;
+}
+
+/** Парсит сырой ответ LLM в валидированный TrainerResponse: extractJson →
+ *  JSON.parse → Zod. Кидает с диагностикой при провале. Общий код для
+ *  generateText-пути (cron) и streamText-пути (live-стрим в onFinish). */
+export function parseTrainerJson(raw: string): TrainerResponse {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(extractJson(raw));
+  } catch (e) {
+    throw new Error(
+      `LLM вернул невалидный JSON: ${(e as Error).message}. Fragment: ${raw.slice(0, 200)}`,
+    );
+  }
+
+  const validated = trainerSchema.safeParse(parsed);
+  if (!validated.success) {
+    throw new Error(
+      `LLM JSON не прошёл валидацию схемы: ${validated.error.message}`,
+    );
+  }
+  return validated.data;
+}
+
+/** Рендерит структурный разбор в markdown для поля content в ai_analyses.
+ *  Общий для cron-воркера и live-стрима. */
+export function renderTrainerMarkdown(r: TrainerResponse): string {
+  const lines: string[] = [
+    `# Разбор тренировки (${r.overallScore}/100)`,
+    "",
+    `**${r.motivation}**`,
+    "",
+    `## Качество тренировки · ${r.trainingQuality.score}/100`,
+    r.trainingQuality.comment,
+    "",
+    `## Восстановление (сон) · ${r.recoveryContext.score ?? "—"}`,
+    r.recoveryContext.comment,
+    "",
+    `## Питание (КБЖУ) · ${r.nutritionContext.score ?? "—"}`,
+    r.nutritionContext.comment,
+    "",
+    `## Что сделать в следующей сессии`,
+    `_Фокус: ${r.nextSessionFocus}_`,
+    "",
+    ...r.recommendations.map((rec) => `- ${rec}`),
+  ];
+  if (r.missingDataAdvice) {
+    lines.push("", "## Чтобы разбор был точнее", r.missingDataAdvice);
+  }
+  return lines.join("\n");
 }
 
 /** Низкоуровневый вызов — кидает ошибку при провале. Циклите через
@@ -123,24 +173,10 @@ export async function generateTrainerResponse(
     throw new Error("LLM вернул пустой ответ");
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(extractJson(raw));
-  } catch (e) {
-    throw new Error(
-      `LLM вернул невалидный JSON: ${(e as Error).message}. Fragment: ${raw.slice(0, 200)}`,
-    );
-  }
-
-  const validated = trainerSchema.safeParse(parsed);
-  if (!validated.success) {
-    throw new Error(
-      `LLM JSON не прошёл валидацию схемы: ${validated.error.message}`,
-    );
-  }
+  const json = parseTrainerJson(raw);
 
   return {
-    json: validated.data,
+    json,
     raw,
     modelVersion: TRAINER_MODEL,
     promptTokens: result.usage?.inputTokens ?? null,

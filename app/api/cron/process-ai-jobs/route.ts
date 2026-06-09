@@ -5,6 +5,7 @@ import * as schema from "@/db/schema";
 import { buildTrainerContext } from "@/lib/ai/context-builder";
 import {
   generateTrainerResponse,
+  renderTrainerMarkdown,
   TRAINER_MODEL,
   type TrainerResponse,
 } from "@/lib/ai/trainer-structured";
@@ -160,7 +161,7 @@ ${context.prompt}`;
     { threshold: 3, cooldownMs: 60_000 },
   );
 
-  const md = renderMarkdown(result.json);
+  const md = renderTrainerMarkdown(result.json);
 
   const [analysis] = await db
     .insert(schema.aiAnalyses)
@@ -178,32 +179,6 @@ ${context.prompt}`;
 
   if (!analysis) throw new Error("Не удалось сохранить ai_analyses");
   return { analysisId: analysis.id, result: result.json };
-}
-
-function renderMarkdown(r: TrainerResponse): string {
-  const lines: string[] = [
-    `# Разбор тренировки (${r.overallScore}/100)`,
-    "",
-    `**${r.motivation}**`,
-    "",
-    `## Качество тренировки · ${r.trainingQuality.score}/100`,
-    r.trainingQuality.comment,
-    "",
-    `## Восстановление (сон) · ${r.recoveryContext.score ?? "—"}`,
-    r.recoveryContext.comment,
-    "",
-    `## Питание (КБЖУ) · ${r.nutritionContext.score ?? "—"}`,
-    r.nutritionContext.comment,
-    "",
-    `## Что сделать в следующей сессии`,
-    `_Фокус: ${r.nextSessionFocus}_`,
-    "",
-    ...r.recommendations.map((rec) => `- ${rec}`),
-  ];
-  if (r.missingDataAdvice) {
-    lines.push("", "## Чтобы разбор был точнее", r.missingDataAdvice);
-  }
-  return lines.join("\n");
 }
 
 async function notifyTrainerReady(
