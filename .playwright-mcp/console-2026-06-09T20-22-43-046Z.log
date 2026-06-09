@@ -1,1 +1,0 @@
-[    1267ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ https://app.lead-generator.ru/login:0

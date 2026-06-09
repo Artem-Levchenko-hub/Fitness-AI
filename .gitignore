@@ -68,3 +68,6 @@ scripts/dev-login.ts
 
 # verification session minter (uses prod secret) — local only
 scripts/issue-session.mjs
+
+# Playwright MCP run artifacts
+.playwright-mcp/
