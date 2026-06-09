@@ -4,6 +4,15 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
+import type { CardioPresetKind } from "@/lib/domain/cardio/presets";
+import {
+  listRecentCardio,
+  type CardioSummary,
+} from "@/lib/repos/cardio.repo";
+import {
+  listCircuits,
+  type CircuitSummary,
+} from "@/lib/repos/circuits.repo";
 import {
   getActiveWorkoutId,
   listRecentWorkouts,
@@ -14,13 +23,15 @@ export const metadata: Metadata = { title: "Тренировки" };
 
 export default async function WorkoutsPage() {
   const user = await requireUser();
-  const [recent, activeId] = await Promise.all([
+  const [strength, circuits, cardio, activeId] = await Promise.all([
     listRecentWorkouts(user.id, 60),
+    listCircuits(user.id, 60),
+    listRecentCardio(user.id, 60),
     getActiveWorkoutId(user.id),
   ]);
 
-  const completed = recent.filter((w) => w.status === "completed");
-  const groups = groupByWeek(completed);
+  const items = buildHistory(strength, circuits, cardio);
+  const groups = groupByWeek(items);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -35,7 +46,7 @@ export default async function WorkoutsPage() {
 
       {activeId ? <ActiveCard workoutId={activeId} /> : null}
 
-      {completed.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState />
       ) : (
         <div className="space-y-8">
@@ -45,9 +56,9 @@ export default async function WorkoutsPage() {
                 {g.label}
               </h2>
               <ul className="space-y-2">
-                {g.items.map((w) => (
-                  <li key={w.id}>
-                    <WorkoutCard workout={w} />
+                {g.items.map((it) => (
+                  <li key={`${it.kind}-${it.id}`}>
+                    <HistoryCard item={it} />
                   </li>
                 ))}
               </ul>
@@ -94,14 +105,14 @@ function EmptyState() {
           Тренировок ещё нет
         </p>
         <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-          Создайте шаблон и запустите первую сессию — она появится здесь.
+          Выберите формат и запустите первую сессию — она появится здесь.
         </p>
       </div>
       <div className="mt-2">
         <Button asChild size="xl" className="w-full">
-          <Link href="/templates">
+          <Link href="/create">
             <Dumbbell className="size-5" />
-            К шаблонам
+            Создать тренировку
           </Link>
         </Button>
       </div>
@@ -109,42 +120,135 @@ function EmptyState() {
   );
 }
 
-function WorkoutCard({ workout }: { workout: RecentWorkout }) {
-  const duration =
-    workout.finishedAt && workout.startedAt
-      ? Math.max(
-          1,
-          Math.round(
-            (workout.finishedAt.getTime() - workout.startedAt.getTime()) /
-              60_000,
-          ),
-        )
-      : null;
+/** Единая история: силовые + круговые + кардио в одном списке с неяркими
+ *  подписями формата (F5). Каждый формат ведёт в свой detail-роут и
+ *  показывает свои метрики; общая оболочка (дата · формат · название). */
+type HistoryItem =
+  | {
+      kind: "strength";
+      id: string;
+      name: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      setCount: number;
+      tonnageKg: number;
+      hasAnalysis: boolean;
+    }
+  | {
+      kind: "circuit";
+      id: string;
+      name: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      totalRounds: number;
+      exerciseCount: number;
+    }
+  | {
+      kind: "cardio";
+      id: string;
+      name: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      preset: CardioPresetKind;
+      totalActualSec: number;
+      totalPlannedSec: number;
+      hrAvg: number | null;
+    };
+
+const CARDIO_FORMAT_LABEL: Record<CardioPresetKind, string> = {
+  tabata: "Tabata",
+  norwegian_4x4: "4×4",
+  emom: "EMOM",
+  custom: "Кардио",
+};
+
+const FORMAT_HREF: Record<HistoryItem["kind"], string> = {
+  strength: "/workouts",
+  circuit: "/circuits",
+  cardio: "/cardio",
+};
+
+function buildHistory(
+  strength: RecentWorkout[],
+  circuits: CircuitSummary[],
+  cardio: CardioSummary[],
+): HistoryItem[] {
+  const items: HistoryItem[] = [
+    ...strength
+      .filter((w) => w.status === "completed")
+      .map((w): HistoryItem => ({ kind: "strength", ...w })),
+    ...circuits
+      .filter((c) => c.status === "completed")
+      .map(
+        (c): HistoryItem => ({
+          kind: "circuit",
+          id: c.id,
+          name: c.name,
+          startedAt: c.startedAt,
+          finishedAt: c.finishedAt,
+          totalRounds: c.totalRounds,
+          exerciseCount: c.exerciseCount,
+        }),
+      ),
+    ...cardio
+      .filter((c) => c.status === "completed")
+      .map(
+        (c): HistoryItem => ({
+          kind: "cardio",
+          id: c.id,
+          name: c.name,
+          startedAt: c.startedAt,
+          finishedAt: c.finishedAt,
+          preset: c.preset,
+          totalActualSec: c.totalActualSec,
+          totalPlannedSec: c.totalPlannedSec,
+          hrAvg: c.hrAvg,
+        }),
+      ),
+  ];
+
+  return items.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+}
+
+function durationMinutes(startedAt: Date, finishedAt: Date | null): number | null {
+  if (!finishedAt) return null;
+  return Math.max(
+    1,
+    Math.round((finishedAt.getTime() - startedAt.getTime()) / 60_000),
+  );
+}
+
+function FormatPill({ label }: { label: string }) {
+  return (
+    <span className="bg-muted/60 text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+      {label}
+    </span>
+  );
+}
+
+function HistoryCard({ item }: { item: HistoryItem }) {
+  const href = `${FORMAT_HREF[item.kind]}/${item.id}`;
 
   return (
     <Link
-      href={`/workouts/${workout.id}`}
+      href={href}
       className="bg-card hover:bg-accent/40 border-border block rounded-2xl border p-4 transition-colors"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-            {formatShortDate(workout.startedAt)}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+              {formatShortDate(item.startedAt)}
+            </p>
+            <FormatPill label={formatLabel(item)} />
+          </div>
           <h3 className="mt-0.5 truncate text-base font-semibold tracking-tight">
-            {workout.name}
+            {item.name}
           </h3>
-          <dl className="text-muted-foreground tabular mt-3 grid grid-cols-3 gap-3 text-xs">
-            <KPI label="подходов" value={String(workout.setCount)} />
-            <KPI
-              label="kg·reps"
-              value={Math.round(workout.tonnageKg).toLocaleString("ru-RU")}
-            />
-            <KPI label="мин" value={duration?.toString() ?? "—"} />
-          </dl>
+          <HistoryMetrics item={item} />
         </div>
         <div className="flex flex-col items-end gap-2">
-          {workout.hasAnalysis ? (
+          {item.kind === "strength" && item.hasAnalysis ? (
             <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
               <Sparkles className="size-3" />
               AI
@@ -158,6 +262,60 @@ function WorkoutCard({ workout }: { workout: RecentWorkout }) {
       </div>
     </Link>
   );
+}
+
+function formatLabel(item: HistoryItem): string {
+  switch (item.kind) {
+    case "strength":
+      return "Силовая";
+    case "circuit":
+      return "Круговая";
+    case "cardio":
+      return CARDIO_FORMAT_LABEL[item.preset];
+  }
+}
+
+function HistoryMetrics({ item }: { item: HistoryItem }) {
+  switch (item.kind) {
+    case "strength": {
+      const min = durationMinutes(item.startedAt, item.finishedAt);
+      return (
+        <dl className="text-muted-foreground tabular mt-3 grid grid-cols-3 gap-3 text-xs">
+          <KPI label="подходов" value={String(item.setCount)} />
+          <KPI
+            label="kg·reps"
+            value={Math.round(item.tonnageKg).toLocaleString("ru-RU")}
+          />
+          <KPI label="мин" value={min?.toString() ?? "—"} />
+        </dl>
+      );
+    }
+    case "circuit":
+      return (
+        <dl className="text-muted-foreground tabular mt-3 grid grid-cols-3 gap-3 text-xs">
+          <KPI label="кругов" value={String(item.totalRounds)} />
+          <KPI label="упр." value={String(item.exerciseCount)} />
+          <KPI
+            label="мин"
+            value={
+              durationMinutes(item.startedAt, item.finishedAt)?.toString() ??
+              "—"
+            }
+          />
+        </dl>
+      );
+    case "cardio": {
+      const sec = item.totalActualSec || item.totalPlannedSec;
+      const min = sec > 0 ? Math.max(1, Math.round(sec / 60)) : null;
+      return (
+        <dl className="text-muted-foreground tabular mt-3 grid grid-cols-3 gap-3 text-xs">
+          <KPI label="мин" value={min?.toString() ?? "—"} />
+          <KPI label="bpm" value={item.hrAvg?.toString() ?? "—"} />
+          <KPI label="формат" value={CARDIO_FORMAT_LABEL[item.preset]} />
+        </dl>
+      );
+    }
+  }
 }
 
 function KPI({ label, value }: { label: string; value: string }) {
@@ -174,17 +332,17 @@ function KPI({ label, value }: { label: string; value: string }) {
 type WeekGroup = {
   key: string;
   label: string;
-  items: RecentWorkout[];
+  items: HistoryItem[];
 };
 
-function groupByWeek(items: RecentWorkout[]): WeekGroup[] {
+function groupByWeek(items: HistoryItem[]): WeekGroup[] {
   if (items.length === 0) return [];
 
   const now = new Date();
   const thisWeekStart = startOfWeek(now);
   const lastWeekStart = addDays(thisWeekStart, -7);
 
-  const buckets = new Map<string, RecentWorkout[]>();
+  const buckets = new Map<string, HistoryItem[]>();
   const labels = new Map<string, string>();
 
   for (const w of items) {
