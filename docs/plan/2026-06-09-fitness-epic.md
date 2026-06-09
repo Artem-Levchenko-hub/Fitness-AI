@@ -120,6 +120,7 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 **Развилка (решить + реализовать):**
 - **A. live-markdown** (низкий риск): новый `POST /api/ai/trainer/stream` — `buildTrainerContext`+RAG + `streamText({model: aiClient(COACH_MODEL), system: <markdown-prompt>, prompt})` (как `app/api/ai/coach/route.ts`) → `toTextStreamResponse()`; `onFinish` → сохранить `ai_analyses`. Клиент стримит токены live. **Минус:** теряются цветные дельты F4-инкр.1 (markdown вместо structured card).
 - **B. live-structured** (`streamObject`): сложно — thinking-модель эмитит reasoning перед JSON, partial-object стрим рвётся. Нужен эксперимент (вырезать thinking, или non-thinking модель для трейнера).
-- **Рекомендация:** A для мгновенного «live», но показывать поток как «тренер пишет…» + после `onFinish` свопнуть на `TrainerResultCard` (structured из сохранённого resultJson через быстрый дочёт). Гибрид сохраняет и live, и цветные дельты.
-- [ ] решить A/B/гибрид (нужен глаз владельца на результат)
-- [ ] endpoint + клиент-консьюмер (заменить poller) + verify на проде
+- **✅ ВЫБОР ВЛАДЕЛЬЦА: B** — цветные карточки СОХРАНЯЕМ, генерация inline+стрим (одна генерация, без poll/перезахода).
+- **B-план:** новый `POST /api/ai/trainer/stream` (requireUser → `buildTrainerContext`+RAG → `streamText(aiClient(COACH_MODEL), system=TRAINER_SYSTEM_PROMPT+JSON_SHAPE, prompt)`; `onFinish`: `extractJson`+Zod → save `ai_analyses` md+resultJson). Экспортнуть `JSON_SHAPE_INSTRUCTION`/`extractJson` из `lib/ai/trainer-structured.ts`. Клиент `/workouts/[id]/trainer`: на on_demand вместо `TrainerJobPoller` — стрим-консьюмер: live «тренер анализирует…» (анимация/прогресс по стриму), по завершении → `TrainerResultCard` (цветные дельты F4). Poll-путь оставить fallback (push/повторный заход).
+- [ ] endpoint `/api/ai/trainer/stream` (+ экспорт парсера)
+- [ ] клиент-консьюмер заменяет poller на on_demand + verify на проде
