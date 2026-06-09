@@ -84,12 +84,10 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 - [x] context-builder уже читает recentWorkoutNotes → AI увидит
 - [x] задеплоено на прод · полный клик-тест заметки → в раунде F4
 
-### F4 — AI-разбор v3 [Context7 + sequential ОБЯЗАТЕЛЬНО]
-- [ ] context-builder: 10 трен целиком + вес тела/рост + bodyweight-load + feeling
-- [ ] bodyweight-флаг у exercise (schema/seed)
-- [ ] структурный вывод сравнения + prompt (проще язык, канон + прошлые цифры)
-- [ ] UI цветовых дельт (рост зелёный / стагнация серый / регресс серо-красный)
-- [ ] verify на реальной истории
+### F4 — AI-разбор v3 [инкрементами]
+- [x] инкр.1: `exerciseComparisons` в structured (trainer-structured + JSON_SHAPE + prompt) + UI цветовых дельт (TrainerResultCard `ComparisonRow`: рост зелёный↑ / стагнация серый= / регресс мягко-красный↓, «60×5 → 60×6» с подсветкой). Backward-compat (optional/default([])). typecheck+test зелёные
+- [ ] инкр.2 (с **pg_dump**): context-builder += вес тела (body_measurements) + рост (users.heightCm) + последние 10 трен ЦЕЛИКОМ (сейчас compact) + bodyweight-load; `exercises.is_bodyweight` миграция + seed (подтягивания/брусья/отжимания)
+- [ ] verify на реальной истории (дельты появятся при следующем разборе завершённой тренировки)
 
 ### F5 — Форматы [L]
 - [ ] schema: format enum + schedule

@@ -2,11 +2,21 @@ import { Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils/index";
 
+export type ExerciseComparison = {
+  name: string;
+  prevTopSet: string | null;
+  curTopSet: string;
+  deltaReps: number | null;
+  deltaWeightKg: number | null;
+  status: "improved" | "regressed" | "stagnant" | "new";
+};
+
 export type TrainerResultData = {
   overallScore: number;
   trainingQuality: { score: number; comment: string };
   recoveryContext: { score: number | null; comment: string };
   nutritionContext: { score: number | null; comment: string };
+  exerciseComparisons?: ExerciseComparison[];
   recommendations: string[];
   nextSessionFocus: string;
   missingDataAdvice: string | null;
@@ -77,6 +87,19 @@ export function TrainerResultCard({
         />
       </dl>
 
+      {data.exerciseComparisons && data.exerciseComparisons.length > 0 ? (
+        <section>
+          <h3 className="text-sm font-semibold tracking-tight">
+            Прогресс по упражнениям
+          </h3>
+          <ul className="mt-3 space-y-1.5">
+            {data.exerciseComparisons.map((c, i) => (
+              <ComparisonRow key={i} c={c} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section>
         <h3 className="text-sm font-semibold tracking-tight">
           Что сделать в следующей сессии
@@ -105,6 +128,42 @@ export function TrainerResultCard({
         </section>
       ) : null}
     </div>
+  );
+}
+
+const TREND_TONE: Record<
+  ExerciseComparison["status"],
+  { text: string; bg: string; icon: string }
+> = {
+  improved: { text: "text-success", bg: "bg-success/10", icon: "↑" },
+  regressed: { text: "text-destructive/80", bg: "bg-destructive/5", icon: "↓" },
+  stagnant: { text: "text-muted-foreground", bg: "bg-muted/60", icon: "=" },
+  new: { text: "text-foreground", bg: "bg-primary/5", icon: "•" },
+};
+
+/** Строка сравнения упражнения: рост зелёным, регресс мягко-красным,
+ *  стагнация серым. «60×5 → 60×6» с подсветкой текущего сета. */
+function ComparisonRow({ c }: { c: ExerciseComparison }) {
+  const tone = TREND_TONE[c.status];
+  return (
+    <li
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-lg px-3 py-2",
+        tone.bg,
+      )}
+    >
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        {c.name}
+      </span>
+      <span className="tabular flex shrink-0 items-center gap-1.5 text-sm">
+        {c.prevTopSet ? (
+          <span className="text-muted-foreground">{c.prevTopSet} →</span>
+        ) : null}
+        <span className={cn("font-semibold", tone.text)}>
+          {c.curTopSet} {tone.icon}
+        </span>
+      </span>
+    </li>
   );
 }
 

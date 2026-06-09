@@ -8,11 +8,23 @@ import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
  *  единый openai-совместимый провайдер + JSON-инструкция + Zod-валидация. */
 export const TRAINER_MODEL: string = COACH_MODEL;
 
+export type ExerciseComparison = {
+  name: string;
+  /** Топ рабочий сет прошлый раз, "60×5"; null если упражнения раньше не было. */
+  prevTopSet: string | null;
+  /** Топ рабочий сет сегодня, "60×6". */
+  curTopSet: string;
+  deltaReps: number | null;
+  deltaWeightKg: number | null;
+  status: "improved" | "regressed" | "stagnant" | "new";
+};
+
 export type TrainerResponse = {
   overallScore: number;
   trainingQuality: { score: number; comment: string };
   recoveryContext: { score: number | null; comment: string };
   nutritionContext: { score: number | null; comment: string };
+  exerciseComparisons: ExerciseComparison[];
   recommendations: string[];
   nextSessionFocus: string;
   missingDataAdvice: string | null;
@@ -33,6 +45,18 @@ const trainerSchema = z.object({
     score: z.number().int().min(0).max(100).nullable(),
     comment: z.string(),
   }),
+  exerciseComparisons: z
+    .array(
+      z.object({
+        name: z.string(),
+        prevTopSet: z.string().nullable(),
+        curTopSet: z.string(),
+        deltaReps: z.number().nullable(),
+        deltaWeightKg: z.number().nullable(),
+        status: z.enum(["improved", "regressed", "stagnant", "new"]),
+      }),
+    )
+    .default([]),
   recommendations: z.array(z.string()),
   nextSessionFocus: z.string(),
   missingDataAdvice: z.string().nullable(),
@@ -47,6 +71,7 @@ const JSON_SHAPE_INSTRUCTION = `Верни ТОЛЬКО валидный JSON-о
   "trainingQuality": { "score": <целое 0..100>, "comment": <строка, 1-2 предложения на русском> },
   "recoveryContext": { "score": <целое 0..100 ИЛИ null если нет данных о сне>, "comment": <строка> },
   "nutritionContext": { "score": <целое 0..100 ИЛИ null если нет данных о КБЖУ>, "comment": <строка> },
+  "exerciseComparisons": [ { "name": <упражнение>, "prevTopSet": <"60×5" ИЛИ null если раньше не было>, "curTopSet": <"60×6">, "deltaReps": <число ИЛИ null>, "deltaWeightKg": <число ИЛИ null>, "status": <"improved"|"regressed"|"stagnant"|"new"> } ] (3-6 ключевых упр. сегодняшней силовой; [] если не силовая),
   "recommendations": [<строка>, ...] (3-5 элементов),
   "nextSessionFocus": <строка>,
   "missingDataAdvice": <строка ИЛИ null>,
