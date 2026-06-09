@@ -1,6 +1,7 @@
 import { Sparkles } from "lucide-react";
 
 import type { TrendStatus } from "@/lib/domain/progression/trend";
+import { TREND_TONE } from "@/lib/ui/trend-tone";
 import { cn } from "@/lib/utils/index";
 
 export type ExerciseComparison = {
@@ -131,16 +132,6 @@ export function TrainerResultCard({
     </div>
   );
 }
-
-const TREND_TONE: Record<
-  ExerciseComparison["status"],
-  { text: string; bg: string; icon: string }
-> = {
-  improved: { text: "text-success", bg: "bg-success/10", icon: "↑" },
-  regressed: { text: "text-destructive/80", bg: "bg-destructive/5", icon: "↓" },
-  stagnant: { text: "text-muted-foreground", bg: "bg-muted/60", icon: "=" },
-  new: { text: "text-foreground", bg: "bg-primary/5", icon: "•" },
-};
 
 /** Строка сравнения упражнения: рост зелёным, регресс мягко-красным,
  *  стагнация серым. «60×5 → 60×6» с подсветкой текущего сета. */
