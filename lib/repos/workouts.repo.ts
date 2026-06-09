@@ -421,6 +421,37 @@ export async function getAiAnalysisForWorkout(
   return row ?? null;
 }
 
+/** Последний разбор тренировки со structured resultJson (для TrainerResultCard).
+ *  Отличается от getAiAnalysisForWorkout: тянет resultJson (цветные дельты F4).
+ *  Используется stream-консьюмером F8: после стрима перечитать сохранённый разбор. */
+export async function getLatestTrainerResult(
+  userId: string,
+  workoutId: string,
+): Promise<{
+  id: string;
+  resultJson: unknown;
+  modelVersion: string;
+  createdAt: Date;
+} | null> {
+  const [row] = await db
+    .select({
+      id: schema.aiAnalyses.id,
+      resultJson: schema.aiAnalyses.resultJson,
+      modelVersion: schema.aiAnalyses.modelVersion,
+      createdAt: schema.aiAnalyses.createdAt,
+    })
+    .from(schema.aiAnalyses)
+    .where(
+      and(
+        eq(schema.aiAnalyses.workoutId, workoutId),
+        eq(schema.aiAnalyses.userId, userId),
+      ),
+    )
+    .orderBy(desc(schema.aiAnalyses.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function getActiveWorkoutId(userId: string): Promise<string | null> {
   const [row] = await db
     .select({ id: schema.workouts.id })

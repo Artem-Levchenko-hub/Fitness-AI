@@ -5,13 +5,20 @@ import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { TrainerJobPoller } from "@/components/trainer/TrainerJobPoller";
+import {
+  TrainerResultCard,
+  type TrainerResultData,
+} from "@/components/trainer/TrainerResultCard";
+import { TrainerStreamConsumer } from "@/components/trainer/TrainerStreamConsumer";
 import { db } from "@/db/client";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { totalVolume } from "@/lib/domain";
-import { getActiveWorkoutForUser } from "@/lib/repos/workouts.repo";
-import { requestTrainerOnDemand } from "@/server/actions/trainer";
+import {
+  getActiveWorkoutForUser,
+  getLatestTrainerResult,
+} from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "AI-тренер" };
 
@@ -27,8 +34,12 @@ export default async function TrainerPage({ params }: Props) {
     redirect(`/workouts/${id}`);
   }
 
-  // Ищем последний aiJob для этой тренировки (его создаёт finishWorkout).
-  // Игнорируем failed — даём TrainerLoader создать новый retry-job.
+  // 1) Уже есть сохранённый structured-разбор (cron ИЛИ стрим) — показываем
+  //    сразу, без стрима/поллинга. Покрывает повторный заход после стрима.
+  const savedAnalysis = await getLatestTrainerResult(user.id, id);
+
+  // 2) Иначе — последний aiJob для этой тренировки (его создаёт finishWorkout
+  //    через cron-путь). Игнорируем failed — стрим-консьюмер создаст разбор сам.
   const [latestJob] = await db
     .select()
     .from(schema.aiJobs)
@@ -104,10 +115,17 @@ export default async function TrainerPage({ params }: Props) {
         </ul>
       </section>
 
-      <TrainerLoader
-        workoutId={id}
-        existingJobId={latestJob?.id ?? null}
-      />
+      {savedAnalysis?.resultJson ? (
+        <TrainerResultCard
+          data={savedAnalysis.resultJson as TrainerResultData}
+        />
+      ) : latestJob ? (
+        // cron уже обрабатывает (или succeeded-legacy) — поллим как fallback.
+        <TrainerJobPoller jobId={latestJob.id} />
+      ) : (
+        // Свежий on_demand — генерируем live прямо в запросе (F8-B run-2).
+        <TrainerStreamConsumer workoutId={id} />
+      )}
 
       <p className="text-muted-foreground/70 mt-6 px-1 text-xs">
         Тренер учитывает данные о сне и КБЖУ за последние 7 дней. Если не
@@ -117,17 +135,3 @@ export default async function TrainerPage({ params }: Props) {
   );
 }
 
-async function TrainerLoader({
-  workoutId,
-  existingJobId,
-}: {
-  workoutId: string;
-  existingJobId: string | null;
-}) {
-  let jobId = existingJobId;
-  if (!jobId) {
-    const r = await requestTrainerOnDemand(workoutId);
-    jobId = r.jobId;
-  }
-  return <TrainerJobPoller jobId={jobId} />;
-}
