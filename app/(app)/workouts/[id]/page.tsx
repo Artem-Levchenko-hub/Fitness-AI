@@ -8,6 +8,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
@@ -17,6 +18,7 @@ import {
   type ActiveWorkout,
   type ActiveWorkoutExercise,
 } from "@/lib/repos/workouts.repo";
+import { deleteWorkoutAction } from "@/server/actions/workouts";
 
 import { ActiveWorkoutView } from "./active-workout";
 
@@ -54,6 +56,17 @@ export default async function WorkoutPage({ params }: Props) {
       </header>
 
       <ActiveWorkoutView workout={workout} />
+
+      <div className="border-border mt-8 border-t pt-5">
+        <ConfirmDeleteButton
+          action={deleteWorkoutAction}
+          hidden={{ workoutId: workout.id }}
+          title="Удалить тренировку?"
+          description="Активная тренировка и все записанные подходы удалятся безвозвратно."
+          triggerLabel="Удалить тренировку"
+          fullWidth
+        />
+      </div>
     </main>
   );
 }
@@ -160,6 +173,17 @@ function CompletedView({
           ))}
         </ul>
       </section>
+
+      <div className="border-border mt-8 border-t pt-5">
+        <ConfirmDeleteButton
+          action={deleteWorkoutAction}
+          hidden={{ workoutId: workout.id }}
+          title="Удалить тренировку?"
+          description="Тренировка, все подходы и AI-анализ удалятся безвозвратно."
+          triggerLabel="Удалить тренировку"
+          fullWidth
+        />
+      </div>
     </main>
   );
 }

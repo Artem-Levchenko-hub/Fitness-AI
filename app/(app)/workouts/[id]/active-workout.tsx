@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
 import { deleteSetAction, finishWorkoutAction } from "@/server/actions/workouts";
 import { cn } from "@/lib/utils";
@@ -41,8 +42,25 @@ export function ActiveWorkoutView({ workout }: Props) {
         ))}
       </ul>
 
-      <form action={finishWorkoutAction} className="pt-2">
+      <form action={finishWorkoutAction} className="space-y-3 pt-2">
         <input type="hidden" name="workoutId" value={workout.id} />
+        <div className="space-y-1.5">
+          <label
+            htmlFor="feeling"
+            className="text-muted-foreground block text-xs font-medium"
+          >
+            Как прошла тренировка?{" "}
+            <span className="opacity-70">(необязательно)</span>
+          </label>
+          <Textarea
+            id="feeling"
+            name="feeling"
+            rows={3}
+            maxLength={1000}
+            placeholder="Самочувствие, энергия, что болело, как спал — тренер учтёт это в разборе"
+            className="resize-none"
+          />
+        </div>
         <Button type="submit" size="xl" variant="default" className="w-full">
           <CheckCircle2 className="size-5" />
           Завершить тренировку

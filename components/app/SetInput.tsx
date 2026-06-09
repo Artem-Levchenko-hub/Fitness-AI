@@ -4,7 +4,7 @@ import { Loader2, Plus } from "lucide-react";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberField } from "@/components/ui/number-field";
 import { recordSetAction, type RecordSetState } from "@/server/actions/workouts";
 import { cn } from "@/lib/utils";
 
@@ -86,16 +86,13 @@ export function SetInput({
             >
               −
             </Button>
-            <Input
+            <NumberField
               ref={weightRef}
               id={`weight-${workoutExerciseId}`}
               name="weightKg"
-              type="number"
-              inputMode="decimal"
-              step={0.5}
-              min={0}
+              decimal
               value={weight}
-              onChange={(e) => setWeight(e.target.value)}
+              onChange={setWeight}
               required
               className="tabular h-11 text-center text-xl font-semibold"
             />
@@ -130,15 +127,11 @@ export function SetInput({
             >
               −
             </Button>
-            <Input
+            <NumberField
               id={`reps-${workoutExerciseId}`}
               name="reps"
-              type="number"
-              inputMode="numeric"
-              step={1}
-              min={1}
               value={reps}
-              onChange={(e) => setReps(e.target.value)}
+              onChange={setReps}
               required
               className="tabular h-11 text-center text-xl font-semibold"
             />
@@ -163,16 +156,12 @@ export function SetInput({
         >
           RPE (опционально, 1–10)
         </label>
-        <Input
+        <NumberField
           id={`rpe-${workoutExerciseId}`}
           name="rpe"
-          type="number"
-          inputMode="decimal"
-          step={0.5}
-          min={1}
-          max={10}
+          decimal
           value={rpe}
-          onChange={(e) => setRpe(e.target.value)}
+          onChange={setRpe}
           className="tabular h-9 text-center"
           placeholder="напр. 8"
         />

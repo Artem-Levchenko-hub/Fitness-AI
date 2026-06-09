@@ -11,8 +11,10 @@ import { requireUser } from "@/lib/auth/require-user";
 import { env } from "@/lib/env";
 import {
   deleteSet,
+  deleteWorkout,
   finishWorkout,
   recordSet,
+  saveManualWorkoutNote,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
 
@@ -109,7 +111,15 @@ export async function finishWorkoutAction(formData: FormData) {
   const workoutId = String(formData.get("workoutId"));
   if (!workoutId) throw new Error("Missing workoutId");
 
+  const feeling = String(formData.get("feeling") ?? "").trim();
+
   await finishWorkout(user.id, workoutId);
+
+  // Самочувствие атлета → workout_note (source=manual). AI-тренер читает
+  // заметки целиком при разборе.
+  if (feeling) {
+    await saveManualWorkoutNote(user.id, workoutId, feeling.slice(0, 1000));
+  }
 
   // Ставим post_workout аналитический job. Если уже стоит (на случай
   // двойного finish — пользователь дважды тапнул) — не дублируем.
@@ -152,4 +162,14 @@ export async function finishWorkoutAction(formData: FormData) {
   // Trainer (structured JSON оценка) — основной flow. Coach (диалог) теперь
   // вторичен, доступен через кнопку на trainer/completed-view.
   redirect(`/workouts/${workoutId}/trainer`);
+}
+
+export async function deleteWorkoutAction(formData: FormData) {
+  const user = await requireUser();
+  const workoutId = String(formData.get("workoutId"));
+  if (!workoutId) throw new Error("Missing workoutId");
+  await deleteWorkout(user.id, workoutId);
+  revalidatePath("/workouts");
+  revalidatePath("/dashboard");
+  redirect("/workouts");
 }

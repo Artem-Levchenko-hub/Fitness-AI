@@ -1,8 +1,9 @@
-import { ChevronLeft, Pencil, Play, Trash2 } from "lucide-react";
+import { ChevronLeft, Pencil, Play } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { getTemplateWithItems } from "@/lib/repos/templates.repo";
@@ -84,17 +85,13 @@ export default async function TemplateDetailPage({ params }: Props) {
             Редактировать
           </Link>
         </Button>
-        <form action={deleteTemplateAction} className="flex-1">
-          <input type="hidden" name="templateId" value={tpl.id} />
-          <Button
-            type="submit"
-            variant="outline"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive w-full"
-          >
-            <Trash2 className="size-4" />
-            Удалить
-          </Button>
-        </form>
+        <ConfirmDeleteButton
+          action={deleteTemplateAction}
+          hidden={{ templateId: tpl.id }}
+          title="Удалить шаблон?"
+          description="Шаблон и его упражнения удалятся безвозвратно. Выполненные по нему тренировки останутся в истории."
+          className="flex-1"
+        />
       </div>
     </main>
   );

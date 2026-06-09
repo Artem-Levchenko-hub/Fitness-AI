@@ -28,10 +28,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import { Textarea } from "@/components/ui/textarea";
 import type { TemplateActionState } from "@/server/actions/templates";
 import type { TemplateFormValues } from "@/server/schemas/templates";
 import { cn } from "@/lib/utils";
+import { clampNumber } from "@/lib/utils/numeric";
 
 export type BuilderItem = {
   /** Локальный uid (не БД) — для key + dnd-kit. */
@@ -332,7 +334,7 @@ function SortableItem({
         <NumField
           label="Вес (кг)"
           value={item.targetWeightKg}
-          step={2.5}
+          decimal
           allowEmpty
           onChange={(v) => onChange({ targetWeightKg: v })}
         />
@@ -341,7 +343,6 @@ function SortableItem({
           value={item.targetRestSeconds}
           min={15}
           max={900}
-          step={15}
           onChange={(v) => onChange({ targetRestSeconds: v ?? 60 })}
         />
       </div>
@@ -355,7 +356,7 @@ function NumField({
   onChange,
   min,
   max,
-  step = 1,
+  decimal,
   allowEmpty,
 }: {
   label: string;
@@ -363,30 +364,31 @@ function NumField({
   onChange: (n: number | null) => void;
   min?: number;
   max?: number;
-  step?: number;
+  decimal?: boolean;
   allowEmpty?: boolean;
 }) {
+  const [text, setText] = useState(value == null ? "" : String(value));
+  const fallback = () => (allowEmpty ? null : (min ?? 0));
+
   return (
     <label className="block">
       <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         {label}
       </span>
-      <Input
-        type="number"
-        inputMode="decimal"
-        min={min}
-        max={max}
-        step={step}
-        value={value ?? ""}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === "") {
-            onChange(allowEmpty ? null : 0);
+      <NumberField
+        decimal={decimal}
+        value={text}
+        onChange={(str) => {
+          setText(str);
+          if (str === "" || str === ".") {
+            onChange(fallback());
             return;
           }
-          const n = Number(raw);
-          if (!Number.isFinite(n)) return;
-          onChange(n);
+          onChange(clampNumber(str, min, max) ?? fallback());
+        }}
+        onBlur={() => {
+          const n = clampNumber(text, min, max);
+          setText(n == null ? (allowEmpty ? "" : String(min ?? 0)) : String(n));
         }}
         className="tabular mt-1 h-9 text-center"
       />
@@ -407,34 +409,43 @@ function RangeField({
   onMinChange: (n: number) => void;
   onMaxChange: (n: number) => void;
 }) {
+  const [minText, setMinText] = useState(String(min));
+  const [maxText, setMaxText] = useState(String(max));
+
   return (
     <label className="block">
       <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         {label}
       </span>
       <div className="mt-1 flex items-center gap-1">
-        <Input
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={100}
-          value={min}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) onMinChange(n);
+        <NumberField
+          aria-label={`${label} — минимум`}
+          value={minText}
+          onChange={(str) => {
+            setMinText(str);
+            const n = clampNumber(str, 1, 100);
+            if (n != null) onMinChange(n);
+          }}
+          onBlur={() => {
+            const n = clampNumber(minText, 1, 100) ?? 1;
+            setMinText(String(n));
+            onMinChange(n);
           }}
           className="tabular h-9 text-center"
         />
         <span className="text-muted-foreground text-xs">–</span>
-        <Input
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={100}
-          value={max}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) onMaxChange(n);
+        <NumberField
+          aria-label={`${label} — максимум`}
+          value={maxText}
+          onChange={(str) => {
+            setMaxText(str);
+            const n = clampNumber(str, 1, 100);
+            if (n != null) onMaxChange(n);
+          }}
+          onBlur={() => {
+            const n = clampNumber(maxText, 1, 100) ?? 1;
+            setMaxText(String(n));
+            onMaxChange(n);
           }}
           className="tabular h-9 text-center"
         />

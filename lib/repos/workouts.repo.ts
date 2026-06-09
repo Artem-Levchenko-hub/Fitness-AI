@@ -292,6 +292,38 @@ export async function finishWorkout(
     );
 }
 
+/** Удаляет тренировку целиком. Дочерние строки (упражнения, подходы,
+ *  AI-анализы, AI-задачи, заметки) уходят по ON DELETE CASCADE. Фильтр по
+ *  userId (R-7) — чужую тренировку удалить нельзя (0 строк). */
+export async function deleteWorkout(
+  userId: string,
+  workoutId: string,
+): Promise<void> {
+  await db
+    .delete(schema.workouts)
+    .where(
+      and(
+        eq(schema.workouts.id, workoutId),
+        eq(schema.workouts.userId, userId),
+      ),
+    );
+}
+
+/** Сохраняет ручную заметку к тренировке — самочувствие атлета, записанное
+ *  перед завершением. AI-тренер читает workout_notes целиком при разборе. */
+export async function saveManualWorkoutNote(
+  userId: string,
+  workoutId: string,
+  content: string,
+): Promise<void> {
+  await db.insert(schema.workoutNotes).values({
+    userId,
+    workoutId,
+    content,
+    source: "manual",
+  });
+}
+
 export type RecentWorkout = {
   id: string;
   name: string;

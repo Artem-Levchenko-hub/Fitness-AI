@@ -53,11 +53,15 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Rescue snapshots (Phase-10 prod-WIP recovery)
-.claude/rescue/
+# Claude Code local tooling (worktrees w/ node_modules, rescue snapshots, session state) — never commit
+.claude/
+.omc/
 
 # RAG knowledge base — PDF исходники держим локально и на VPS, не в git
 /books
 
 # pnpm 11 build-approval file — local only, breaks pnpm 9 on prod
 pnpm-workspace.yaml
+
+# DEV-ONLY login helper (backdoor) — local only, never commit
+scripts/dev-login.ts
