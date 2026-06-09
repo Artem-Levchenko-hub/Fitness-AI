@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberField } from "@/components/ui/number-field";
 import { cn } from "@/lib/utils";
 import type {
   CircuitRoundLog,
@@ -629,11 +629,9 @@ function CurrentExerciseCard({
               <span className="text-[10px] font-medium tracking-wide uppercase opacity-70">
                 Сделано (повт., опц.)
               </span>
-              <Input
-                type="number"
-                inputMode="numeric"
+              <NumberField
                 value={overrideReps}
-                onChange={(e) => setOverrideReps(e.target.value)}
+                onChange={setOverrideReps}
                 placeholder={String(exercise.targetReps ?? "")}
                 className="tabular bg-primary-foreground/15 text-primary-foreground border-primary-foreground/30 placeholder:text-primary-foreground/50 mt-1 h-9 text-center"
               />
@@ -643,12 +641,10 @@ function CurrentExerciseCard({
             <span className="text-[10px] font-medium tracking-wide uppercase opacity-70">
               Вес (кг, опц.)
             </span>
-            <Input
-              type="number"
-              inputMode="decimal"
-              step={2.5}
+            <NumberField
+              decimal
               value={overrideWeight}
-              onChange={(e) => setOverrideWeight(e.target.value)}
+              onChange={setOverrideWeight}
               placeholder={
                 exercise.targetWeightKg != null
                   ? String(exercise.targetWeightKg)

@@ -74,7 +74,8 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 ### F2 — Числовой ввод [core done]
 - [x] NumberField + sanitizeNumeric/clampNumber + 12 unit-тестов
 - [x] замена в SetInput (вес/повторы/RPE) + template-builder (NumField/RangeField)
-- [ ] sweep остальных форм (sleep/nutrition/body/profile/topup/cardio) — опц. полировка
+- [x] sweep ВСЕХ форм: circuit-builder («Кругов»!), cardio (custom/emom/active), sleep, nutrition, body, topup, profile, active-circuit — **0 type=number осталось** (grep=0)
+- [x] NumberField теперь и uncontrolled (FormData-формы) + общий LabeledNumberField (DRY)
 - [x] verify на проде runtime (06→6, 60→60) ✓ · PWA на телефоне — за владельцем
 
 ### F3 — Самочувствие [done, prod-verify pending]

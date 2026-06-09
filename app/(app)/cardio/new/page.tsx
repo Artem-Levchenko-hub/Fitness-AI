@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { NumberField } from "@/components/ui/number-field";
 import { requireUser } from "@/lib/auth/require-user";
 import { PRESET_META } from "@/lib/domain";
 import { startCardioAction } from "@/server/actions/cardio";
@@ -105,14 +106,11 @@ function EmomCard() {
               >
                 Раундов
               </label>
-              <input
+              <NumberField
                 id="emomRounds"
-                type="number"
                 name="emomRounds"
-                min={1}
-                max={60}
-                defaultValue={10}
-                className="border-input bg-background tabular w-16 rounded-md border px-2 py-1 text-sm"
+                defaultValue="10"
+                className="tabular h-9 w-16 text-sm"
               />
               <Button type="submit" size="sm" className="ml-auto">
                 Начать

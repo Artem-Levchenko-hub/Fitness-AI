@@ -6,6 +6,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   addBodyMeasurementAction,
@@ -58,15 +59,10 @@ export function BodyMeasurementForm() {
               {f.label}{" "}
               <span className="text-muted-foreground">({f.unit})</span>
             </Label>
-            <Input
+            <NumberField
               id={f.name}
               name={f.name}
-              type="number"
-              onFocus={(e) => e.target.select()}
-              inputMode="decimal"
-              step={f.step}
-              min={f.min}
-              max={f.max}
+              decimal
               placeholder="—"
               className="tabular h-10"
             />

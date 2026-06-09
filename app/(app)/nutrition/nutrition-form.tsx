@@ -3,8 +3,8 @@
 import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type NutritionActionState,
@@ -39,15 +39,10 @@ export function NutritionForm({
 
       <div>
         <Label htmlFor="kcal">Калории (ккал)</Label>
-        <Input
+        <NumberField
           id="kcal"
           name="kcal"
-          type="number"
-          inputMode="numeric"
-          step="1"
-          min="0"
-          max="10000"
-          defaultValue={defaultKcal ?? ""}
+          defaultValue={defaultKcal != null ? String(defaultKcal) : ""}
           placeholder="2300"
           className="mt-1"
         />
@@ -56,45 +51,33 @@ export function NutritionForm({
       <div className="grid grid-cols-3 gap-3">
         <div>
           <Label htmlFor="proteinG">Белки (г)</Label>
-          <Input
+          <NumberField
             id="proteinG"
             name="proteinG"
-            type="number"
-            inputMode="decimal"
-            step="1"
-            min="0"
-            max="1000"
-            defaultValue={defaultProtein ?? ""}
+            decimal
+            defaultValue={defaultProtein != null ? String(defaultProtein) : ""}
             placeholder="180"
             className="mt-1"
           />
         </div>
         <div>
           <Label htmlFor="fatG">Жиры (г)</Label>
-          <Input
+          <NumberField
             id="fatG"
             name="fatG"
-            type="number"
-            inputMode="decimal"
-            step="1"
-            min="0"
-            max="1000"
-            defaultValue={defaultFat ?? ""}
+            decimal
+            defaultValue={defaultFat != null ? String(defaultFat) : ""}
             placeholder="70"
             className="mt-1"
           />
         </div>
         <div>
           <Label htmlFor="carbsG">Углеводы (г)</Label>
-          <Input
+          <NumberField
             id="carbsG"
             name="carbsG"
-            type="number"
-            inputMode="decimal"
-            step="1"
-            min="0"
-            max="2000"
-            defaultValue={defaultCarbs ?? ""}
+            decimal
+            defaultValue={defaultCarbs != null ? String(defaultCarbs) : ""}
             placeholder="250"
             className="mt-1"
           />

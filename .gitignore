@@ -65,3 +65,6 @@ pnpm-workspace.yaml
 
 # DEV-ONLY login helper (backdoor) — local only, never commit
 scripts/dev-login.ts
+
+# verification session minter (uses prod secret) — local only
+scripts/issue-session.mjs

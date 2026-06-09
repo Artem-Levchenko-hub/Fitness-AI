@@ -3,8 +3,8 @@
 import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type SleepActionState,
@@ -32,15 +32,11 @@ export function SleepForm({
 
       <div>
         <Label htmlFor="hours">Часы сна</Label>
-        <Input
+        <NumberField
           id="hours"
           name="hours"
-          type="number"
-          inputMode="decimal"
-          step="0.5"
-          min="0"
-          max="24"
-          defaultValue={defaultHours ?? ""}
+          decimal
+          defaultValue={defaultHours != null ? String(defaultHours) : ""}
           placeholder="7.5"
           required
           className="mt-1"

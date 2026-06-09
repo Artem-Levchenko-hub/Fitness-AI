@@ -6,6 +6,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import {
   Select,
   SelectContent,
@@ -54,14 +55,10 @@ export function ProfileForm(props: Props) {
           <Label htmlFor="heightCm">
             Рост (см)
           </Label>
-          <Input
+          <NumberField
             id="heightCm"
             name="heightCm"
-            type="number"
-            inputMode="numeric"
-            min={100}
-            max={250}
-            defaultValue={props.initialHeightCm ?? ""}
+            defaultValue={props.initialHeightCm != null ? String(props.initialHeightCm) : ""}
             className="tabular h-11"
             placeholder="напр. 178"
           />

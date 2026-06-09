@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { NumberField } from "@/components/ui/number-field";
 import { cn } from "@/lib/utils";
 import type { CardioBlock, CardioWorkout } from "@/db/schema";
 import {
@@ -408,29 +409,21 @@ function HrRpePanel({
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
           <span className="text-muted-foreground text-[11px]">HR (уд/мин)</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={30}
-            max={240}
+          <NumberField
             value={hr}
-            onChange={(e) => setHr(e.target.value)}
+            onChange={setHr}
             placeholder="—"
-            className="border-input bg-background tabular mt-1 w-full rounded-md border px-3 py-2 text-base font-medium"
+            className="tabular mt-1 h-11 w-full text-base font-medium"
           />
         </label>
         <label className="block">
           <span className="text-muted-foreground text-[11px]">RPE 1-10</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            min={1}
-            max={10}
-            step={0.5}
+          <NumberField
+            decimal
             value={rpe}
-            onChange={(e) => setRpe(e.target.value)}
+            onChange={setRpe}
             placeholder="—"
-            className="border-input bg-background tabular mt-1 w-full rounded-md border px-3 py-2 text-base font-medium"
+            className="tabular mt-1 h-11 w-full text-base font-medium"
           />
         </label>
       </div>

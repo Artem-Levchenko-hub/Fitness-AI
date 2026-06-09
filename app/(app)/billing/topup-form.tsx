@@ -4,8 +4,8 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import {
   MAX_TOPUP_RUB,
   MIN_TOPUP_RUB,
@@ -86,16 +86,11 @@ export function TopupForm() {
 
       <div className="space-y-2">
         <Label htmlFor="custom-amount">Или своя сумма (₽)</Label>
-        <Input
+        <NumberField
           id="custom-amount"
-          type="number"
-          inputMode="numeric"
-          min={MIN_TOPUP_RUB}
-          max={MAX_TOPUP_RUB}
-          step={50}
           placeholder={`от ${MIN_TOPUP_RUB} ₽`}
           value={custom}
-          onChange={(e) => setCustom(e.target.value.replace(/\D/g, ""))}
+          onChange={setCustom}
           className="tabular h-11"
         />
         {useCustom && custom.length > 0 && !validAmount ? (

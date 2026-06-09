@@ -1,0 +1,55 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - main [ref=e4]:
+      - link "Шаблоны" [ref=e5] [cursor=pointer]:
+        - /url: /templates
+        - img
+        - text: Шаблоны
+      - generic [ref=e6]:
+        - heading "Новый шаблон" [level=1] [ref=e7]
+        - paragraph [ref=e8]: Соберите план тренировки. Перетаскивайте упражнения, чтобы поменять порядок.
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]: Название шаблона
+          - textbox "Название шаблона" [ref=e12]:
+            - /placeholder: "Например: Спина + бицепс A"
+        - generic [ref=e13]:
+          - generic [ref=e14]: Описание (опционально)
+          - textbox "Описание (опционально)" [ref=e15]:
+            - /placeholder: Что характерно для этой тренировки
+        - generic [ref=e16]:
+          - heading "Упражнения (0)" [level=2] [ref=e18]
+          - generic [ref=e19]: Пока ни одного упражнения. Добавьте первое — и можно сохранять.
+          - button "Добавить упражнение" [ref=e20]:
+            - img
+            - text: Добавить упражнение
+        - button "Создать шаблон" [disabled]
+    - navigation "Главная навигация" [ref=e21]:
+      - list [ref=e22]:
+        - listitem [ref=e23]:
+          - link "Главная" [ref=e24] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e25]
+            - generic [ref=e28]: Главная
+        - listitem [ref=e29]:
+          - link "Тренировки" [ref=e30] [cursor=pointer]:
+            - /url: /workouts
+            - img [ref=e31]
+            - generic [ref=e33]: Тренировки
+        - listitem [ref=e34]:
+          - link "Упражнения" [ref=e35] [cursor=pointer]:
+            - /url: /exercises
+            - img [ref=e36]
+            - generic [ref=e42]: Упражнения
+        - listitem [ref=e43]:
+          - link "Баланс" [ref=e44] [cursor=pointer]:
+            - /url: /billing
+            - img [ref=e45]
+            - generic [ref=e48]: Баланс
+        - listitem [ref=e49]:
+          - link "Профиль" [ref=e50] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e51]
+            - generic [ref=e54]: Профиль
+  - region "Notifications alt+T"
+  - alert [ref=e55]

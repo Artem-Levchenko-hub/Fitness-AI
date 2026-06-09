@@ -4,6 +4,8 @@ import { Settings2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { NumberField } from "@/components/ui/number-field";
+import { clampNumber } from "@/lib/utils/numeric";
 import { startCardioAction } from "@/server/actions/cardio";
 
 /** "Свой формат" — параметрический preset.
@@ -74,16 +76,42 @@ function Field({
       <span className="text-muted-foreground text-[10px] uppercase tracking-wide">
         {label}
       </span>
-      <input
-        type="number"
-        name={name}
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value) || min)}
-        className="border-input bg-background tabular mt-1 w-full rounded-md border px-3 py-2 text-base font-medium"
-      />
+      <NumberFieldBridge value={value} min={min} max={max} name={name} onChange={onChange} />
     </label>
+  );
+}
+
+/** number-контракт поверх NumberField + локальное строковое состояние. */
+function NumberFieldBridge({
+  value,
+  min,
+  max,
+  name,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  name: string;
+  onChange: (n: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  return (
+    <NumberField
+      name={name}
+      value={text}
+      onChange={(str) => {
+        setText(str);
+        const n = clampNumber(str, min, max);
+        onChange(n ?? min);
+      }}
+      onBlur={() => {
+        const n = clampNumber(text, min, max) ?? min;
+        setText(String(n));
+        onChange(n);
+      }}
+      className="tabular mt-1 h-11 w-full text-base font-medium"
+    />
   );
 }
 

@@ -9,6 +9,7 @@ import {
 } from "@/components/app/ExercisePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LabeledNumberField } from "@/components/ui/number-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -364,15 +365,9 @@ function KindToggle({
   );
 }
 
-function NumField({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  step = 1,
-  allowEmpty,
-}: {
+/** Тонкая обёртка над общим LabeledNumberField — сохраняет прежний интерфейс
+ *  вызовов (включая необязательный step, который теперь не нужен). */
+function NumField(props: {
   label: string;
   value: number | null;
   onChange: (n: number | null) => void;
@@ -382,29 +377,14 @@ function NumField({
   allowEmpty?: boolean;
 }) {
   return (
-    <label className="block">
-      <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-        {label}
-      </span>
-      <Input
-        type="number"
-        inputMode="decimal"
-        min={min}
-        max={max}
-        step={step}
-        value={value ?? ""}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === "") {
-            onChange(allowEmpty ? null : 0);
-            return;
-          }
-          const n = Number(raw);
-          if (!Number.isFinite(n)) return;
-          onChange(n);
-        }}
-        className="tabular mt-1 h-9 text-center"
-      />
-    </label>
+    <LabeledNumberField
+      label={props.label}
+      value={props.value}
+      onChange={props.onChange}
+      min={props.min}
+      max={props.max}
+      allowEmpty={props.allowEmpty}
+      decimal
+    />
   );
 }
