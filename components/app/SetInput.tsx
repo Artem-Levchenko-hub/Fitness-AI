@@ -96,6 +96,7 @@ export function SetInput({
               min={0}
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
+              onFocus={(e) => e.target.select()}
               required
               className="tabular h-11 text-center text-xl font-semibold"
             />
@@ -139,6 +140,7 @@ export function SetInput({
               min={1}
               value={reps}
               onChange={(e) => setReps(e.target.value)}
+              onFocus={(e) => e.target.select()}
               required
               className="tabular h-11 text-center text-xl font-semibold"
             />
@@ -173,6 +175,7 @@ export function SetInput({
           max={10}
           value={rpe}
           onChange={(e) => setRpe(e.target.value)}
+              onFocus={(e) => e.target.select()}
           className="tabular h-9 text-center"
           placeholder="напр. 8"
         />

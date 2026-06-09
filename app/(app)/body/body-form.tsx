@@ -62,6 +62,7 @@ export function BodyMeasurementForm() {
               id={f.name}
               name={f.name}
               type="number"
+              onFocus={(e) => e.target.select()}
               inputMode="decimal"
               step={f.step}
               min={f.min}

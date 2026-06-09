@@ -131,12 +131,30 @@ async function processJob(
       ? DIGEST_SYSTEM_PROMPT
       : TRAINER_SYSTEM_PROMPT;
 
+  // RAG: retrieve канона по контексту тренировки.
+  let canonContext = "";
+  try {
+    const { retrieveRelevant, formatRetrievedChunks } = await import("@/lib/ai/rag/retrieve");
+    const chunks = await retrieveRelevant(context.prompt.slice(0, 1200), { topK: 4 });
+    canonContext = formatRetrievedChunks(chunks);
+  } catch (e) {
+    console.error("[trainer-worker] RAG retrieve failed:", e);
+    canonContext = "_(база знаний недоступна — отвечай только на основе цифр атлета и явно скажи об этом)_";
+  }
+  const userPromptWithCanon = `## Контекст из канона (загруженная литература)
+
+${canonContext}
+
+---
+
+${context.prompt}`;
+
   const result = await withCircuitBreaker(
     "trainer-llm",
     () =>
       generateTrainerResponse({
         systemInstruction: systemPrompt,
-        userPrompt: context.prompt,
+        userPrompt: userPromptWithCanon,
         signal: AbortSignal.timeout(45_000),
       }),
     { threshold: 3, cooldownMs: 60_000 },
