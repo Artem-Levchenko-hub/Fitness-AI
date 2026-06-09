@@ -114,7 +114,12 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 - [ ] объём по неделям (бар), вес тела (линия)
 - [ ] verify
 
-### F8 — Стриминг разбора [M]
-- [ ] trainer live-стрим на /workouts/[id]/trainer (без перезахода)
-- [ ] сохранение результата в конце стрима
-- [ ] verify
+### F8 — Стриминг разбора [M] — NEXT, дизайн готов
+**Текущий флоу (poll):** `app/(app)/workouts/[id]/trainer/page.tsx` → `requestTrainerOnDemand` (`server/actions/trainer.ts`) → aiJob pending → worker `app/api/cron/process-ai-jobs/route.ts::processJob` (`generateTrainerResponse` = `generateText` + `extractJson` + Zod, т.к. deepseek-thinking не даёт чистый structured) → сохраняет `ai_analyses` (content=md из `renderMarkdown`, resultJson) → `components/trainer/TrainerJobPoller.tsx` поллит `/api/ai/jobs/[id]` 2с. Боль: ожидание/перезаход.
+
+**Развилка (решить + реализовать):**
+- **A. live-markdown** (низкий риск): новый `POST /api/ai/trainer/stream` — `buildTrainerContext`+RAG + `streamText({model: aiClient(COACH_MODEL), system: <markdown-prompt>, prompt})` (как `app/api/ai/coach/route.ts`) → `toTextStreamResponse()`; `onFinish` → сохранить `ai_analyses`. Клиент стримит токены live. **Минус:** теряются цветные дельты F4-инкр.1 (markdown вместо structured card).
+- **B. live-structured** (`streamObject`): сложно — thinking-модель эмитит reasoning перед JSON, partial-object стрим рвётся. Нужен эксперимент (вырезать thinking, или non-thinking модель для трейнера).
+- **Рекомендация:** A для мгновенного «live», но показывать поток как «тренер пишет…» + после `onFinish` свопнуть на `TrainerResultCard` (structured из сохранённого resultJson через быстрый дочёт). Гибрид сохраняет и live, и цветные дельты.
+- [ ] решить A/B/гибрид (нужен глаз владельца на результат)
+- [ ] endpoint + клиент-консьюмер (заменить poller) + verify на проде
