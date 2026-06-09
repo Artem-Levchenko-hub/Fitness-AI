@@ -3,6 +3,9 @@
 **Branch:** `epic/fitness-upgrades` (от `origin/master` @ b8c2eaf). Режим: автономно, один поток.
 **Это живой файл** — чеклист внизу. Любая новая сессия: прочитать этот файл → продолжить с первого незакрытого пункта.
 
+## ⏯ RESUME (2026-06-10, после F5 run-1 — единый пикер форматов)
+- **F5 run-1: единая точка входа `/create` LIVE** (master `6b501a2`): новая аддитивная серверная страница — пикер формата с короткими explainer'ами, роутит в СУЩЕСТВУЮЩИЕ билдеры. 3 карточки: **Силовая**→`/templates/new`, **Круговая**→`/circuits/new`, **Кардио · HIIT** (Tabata · EMOM · Norwegian 4×4 · custom)→`/cardio/new`. EMOM/Tabata уже живут как cardio-пресеты (`PRESET_META`, `startCardioAction` POST-форма) → новых билдеров НЕ нужно. Дашборд `StartCard` вторичный CTA перенаправлен `/templates/new`→`/create` («Создать тренировку»). Существующие билдер-роуты НЕ тронуты, напрямую достижимы. Tokens-only (R-36), тапы ≥56px (R-41, факт. 106–125px), паттерн карточек как `cardio/new`. **Без схемы/миграции — чисто аддитивно.** Gate green (typecheck/lint/24 теста/build, `/create` в route-list). **Прод-verify (logged-in):** `/create` → h1 «Выбери формат» + 3 карточки с правильными href; `/templates/new` резолвится; дашборд содержит `a[href="/create"]`=«Создать тренировку». Тест-юзер удалён (--cleanup). **NEXT: F5 run-2 — EMOM/Tabata как самостоятельные форматы шаблонов ЛИБО подписи формата у названий в списках ЛИБО расписание/напоминания (schema: schedule + push, cron уже есть). Рекомендую: подписи формата (мелкий аддитивный слой) ИЛИ schedule-схема (требует миграцию + pg_dump).** ИЛИ F6 (друзья).
+
 ## ⏯ RESUME (2026-06-10, после F7 run-3 — F7 ЗАКРЫТ)
 - **F7 run-3: тренд-цвет + бейдж на баре «Объём по неделям» LIVE** (master `7dddf8a`): `VolumeBarChart` красит бары по тренду периода (первая→последняя точка через общий `trendStatus`, higherIsBetter — больше объёма=прогресс) + бейдж Рост/Регресс/Стагнация/Новое + дельта тоннажа (формат k/M). **Относительный epsilon 5% от старта** (объём — крупная величина в тысячах, фикс-epsilon как у e1RM бессмыслен → доля). Цвет бара — `tone.stroke` CSS-var токен (как stroke линии в run-2). Полностью DRY: `trendStatus`+`TREND_TONE`+`TREND_LABEL`, та же семантика что e1RM-график (run-2) и карточка разбора (F4). **Один файл `components/charts/VolumeChart.tsx`**, аддитивно, без миграции, `stats/page.tsx` НЕ тронут (тренд считается внутри компонента из `data`). Gate green (typecheck/lint/24 теста/build). **Прод-verify:** seeded 2 completed workouts (Жим лёжа, объём 300→480, +60% в 2 разные ISO-недели) → `/stats?g=week` показал 2 зелёных бара `fill=var(--success)`, бейдж «↑Рост» (text-color === `--success`), дельту «+180». Тест-данные удалены (--cleanup, FK cascade), seed-скрипт удалён с VPS. **Вес тела (линия) уже был** на `/stats` (`BodyTrendChart` — вес + % жира) — этот пункт чеклиста закрыт вместе с объёмом. **F7 ПОЛНОСТЬЮ ЗАКРЫТ.** NEXT: **F5** (унифицированный пикер форматов обычная/круговая/EMOM/Tabata/кардио + explainers + расписание/напоминания) — следующий приоритет. ИЛИ F6 (друзья). F4-инкр.2b (is_bodyweight миграция) остаётся deferred/опционал.
 
@@ -110,8 +113,8 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 
 ### F5 — Форматы [L]
 - [ ] schema: format enum + schedule
-- [ ] unified пикер + explainers (EMOM/Tabata/…)
-- [ ] EMOM/Tabata билдеры
+- [x] **run-1: unified пикер `/create` + explainers** (master `6b501a2`) — аддитивная серверная страница, 3 карточки (Силовая→/templates/new, Круговая→/circuits/new, Кардио/HIIT incl. Tabata/EMOM/Norwegian→/cardio/new) с короткими пояснениями; роутит в существующие билдеры; дашборд CTA→/create. Tokens, тапы ≥56px. Без схемы. Прод-verified (h1 + 3 href + dashboard link).
+- [x] EMOM/Tabata билдеры — **уже существуют** как cardio-пресеты (`PRESET_META`, `/cardio/new` `startCardioAction`); пикер их сёрфит. Отдельные template-билдеры — опц. (run-2).
 - [ ] расписание по дням/интервалу + push-напоминания
 - [ ] список с подписями формата + verify
 
