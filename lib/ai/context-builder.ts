@@ -2,11 +2,7 @@ import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import {
-  bestEstimatedOneRepMax,
-  estimatedOneRepMax,
-  totalVolume,
-} from "@/lib/domain";
+import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
 
@@ -27,7 +23,7 @@ type WorkoutSummary = {
 };
 
 const HISTORY_DAYS = 60;
-const MAX_HISTORY_WORKOUTS = 8;
+const MAX_HISTORY_WORKOUTS = 10;
 const CIRCUIT_HISTORY_DAYS = 60;
 const MAX_CIRCUIT_HISTORY = 10;
 
@@ -110,8 +106,8 @@ export async function buildCoachContext(
 
   if (pastWorkouts.length > 0) {
     sections.push(
-      `# Последние ${pastWorkouts.length} тренировок\n\n${pastWorkouts
-        .map(formatWorkoutCompact)
+      `# Последние ${pastWorkouts.length} тренировок (полностью, set-by-set)\n\n${pastWorkouts
+        .map(formatWorkout)
         .join("\n\n")}`,
     );
   }
@@ -408,36 +404,56 @@ function formatWorkout(w: WorkoutSummary): string {
   return lines.join("\n");
 }
 
-function formatWorkoutCompact(w: WorkoutSummary): string {
-  const lines = [`### ${w.name} · ${formatDate(w.startedAt)}`];
-  for (const e of w.exercises) {
-    const top = topWorkingSet(e.sets);
-    if (!top) {
-      lines.push(`- ${e.nameRu}: —`);
-      continue;
-    }
-    const e1 = estimatedOneRepMax(top.weightKg, top.reps);
+/** Блок «Профиль атлета» для AI: вес тела + рост + возраст + явная подсказка
+ *  считать относительную нагрузку для bodyweight-упражнений. */
+async function loadAthleteProfileBlock(userId: string): Promise<string> {
+  const [user] = await db
+    .select({
+      heightCm: schema.users.heightCm,
+      birthDate: schema.users.birthDate,
+      sex: schema.users.sex,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+
+  const [body] = await db
+    .select({
+      weightKg: schema.bodyMeasurements.weightKg,
+      bodyFatPct: schema.bodyMeasurements.bodyFatPct,
+      measuredAt: schema.bodyMeasurements.measuredAt,
+    })
+    .from(schema.bodyMeasurements)
+    .where(eq(schema.bodyMeasurements.userId, userId))
+    .orderBy(desc(schema.bodyMeasurements.measuredAt))
+    .limit(1);
+
+  const lines: string[] = ["# Профиль атлета"];
+  if (body?.weightKg != null) {
     lines.push(
-      `- ${e.nameRu}: ${e.sets.length} подх., top ${top.weightKg}×${top.reps} (e1RM ${e1.toFixed(1)})`,
+      `- Вес тела: ${body.weightKg} кг (замер ${formatDate(body.measuredAt)})`,
     );
+  } else {
+    lines.push("- Вес тела: нет данных (попроси записать в разделе «Тело»)");
   }
+  if (user?.heightCm != null) lines.push(`- Рост: ${user.heightCm} см`);
+  if (body?.bodyFatPct != null) lines.push(`- % жира: ${body.bodyFatPct}`);
+  if (user?.birthDate) {
+    const age = computeAge(user.birthDate);
+    if (age != null) lines.push(`- Возраст: ~${age}`);
+  }
+  if (user?.sex) lines.push(`- Пол: ${user.sex}`);
+  lines.push(
+    "",
+    "Учитывай вес тела для относительной нагрузки: bodyweight-упражнения (подтягивания, брусья, отжимания) = вес тела + добавка. Снижение добавки на 5–10 кг у тяжёлого атлета — малый % тотала, не штрафуй как сильный регресс.",
+  );
   return lines.join("\n");
 }
 
-function topWorkingSet(
-  sets: WorkoutSummary["exercises"][number]["sets"],
-): { weightKg: number; reps: number } | null {
-  let best: { weightKg: number; reps: number } | null = null;
-  let bestE1Rm = 0;
-  for (const s of sets) {
-    if (s.setType !== "working") continue;
-    const e = estimatedOneRepMax(s.weightKg, s.reps);
-    if (e > bestE1Rm) {
-      bestE1Rm = e;
-      best = { weightKg: s.weightKg, reps: s.reps };
-    }
-  }
-  return best;
+function computeAge(birthDate: string): number | null {
+  const y = Number(birthDate.slice(0, 4));
+  if (!Number.isFinite(y) || y < 1900) return null;
+  return new Date().getFullYear() - y;
 }
 
 function formatOneRmTrend(t: {
@@ -471,6 +487,8 @@ export async function buildTrainerContext(
   opts: { kind: AiJobKindLiteral; circuitWorkoutId?: string | null },
 ): Promise<{ prompt: string }> {
   const sections: string[] = [];
+
+  sections.push(await loadAthleteProfileBlock(userId));
 
   if (opts.kind === "circuit_post_workout" && opts.circuitWorkoutId) {
     sections.push(

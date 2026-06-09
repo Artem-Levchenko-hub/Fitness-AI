@@ -91,7 +91,8 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 
 ### F4 — AI-разбор v3 [инкрементами]
 - [x] инкр.1: `exerciseComparisons` в structured (trainer-structured + JSON_SHAPE + prompt) + UI цветовых дельт (TrainerResultCard `ComparisonRow`: рост зелёный↑ / стагнация серый= / регресс мягко-красный↓, «60×5 → 60×6» с подсветкой). Backward-compat (optional/default([])). typecheck+test зелёные
-- [ ] инкр.2 (с **pg_dump**): context-builder += вес тела (body_measurements) + рост (users.heightCm) + последние 10 трен ЦЕЛИКОМ (сейчас compact) + bodyweight-load; `exercises.is_bodyweight` миграция + seed (подтягивания/брусья/отжимания)
+- [x] инкр.2a (БЕЗ миграции): context-builder += «Профиль атлета» (вес тела/рост/возраст + bodyweight-подсказка) в buildTrainerContext; история 8→10; прошлые трен set-by-set целиком (formatWorkout вместо compact)
+- [ ] инкр.2b (МИГРАЦИЯ — `pg_dump` ПЕРЕД!): `exercises.is_bodyweight` boolean + `pnpm db:generate` + применить на prod по ssh; seed-флаг (подтягивания/брусья/отжимания); context-builder — численная эффект.нагрузка = вес тела + добавка
 - [ ] verify на реальной истории (дельты появятся при следующем разборе завершённой тренировки)
 
 ### F5 — Форматы [L]
