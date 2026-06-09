@@ -50,6 +50,13 @@
       "when": 1780053521030,
       "tag": "0006_knowledge_rag",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781050000000,
+      "tag": "0007_workout_schedules",
+      "breakpoints": true
     }
   ]
 }
