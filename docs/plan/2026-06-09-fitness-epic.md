@@ -8,7 +8,12 @@
 - **F2 проверен на проде в рантайме:** `06→6`, `60→60`, инпуты = NumberField (`type=text`+`inputMode`). PWA на реальном телефоне — за владельцем.
 - **F1/F3 задеплоены + зелёные** (typecheck/lint/build/lefthook). Полный клик-тест — в раунде F4 (там всё равно нужен workout-flow).
 - **Доступ:** GitHub-токен зашит в `origin` URL → `git push origin <branch>:master` работает. Деплой: `ssh kanavto-vps` → `cd /opt/fitness-saas` → `git fetch` → `git reset --hard origin/master` → `pnpm build` → `pm2 reload ecosystem.config.cjs`. **Docker ЛОКАЛЬНО не стартует (WSL)** → verify только на проде: `scripts/issue-session.mjs` (gitignored, на VPS) даёт REFRESH_TOKEN → playwright POST `/api/auth/restore` → залогинен; `--cleanup` удаляет тест-юзера.
-- **Дальше:** F4 (AI-разбор v3) — **Context7 + sequential-thinking обязательно**. Затем F8 (стриминг), F7 (графики), F5 (форматы), F6 (друзья).
+- **Готово+deploy:** F1, F2 (полный sweep, 0 type=number, verified), F3, **F4-инкр.1** (exerciseComparisons + цветные дельты). master = деплой.
+- **NEXT ACTION (после компакта продолжить отсюда):** **F4-инкр.2.**
+  1. Безопасная часть (БЕЗ миграции, можно сразу): `lib/ai/context-builder.ts` — `buildTrainerContext` добавить блок «Профиль атлета»: вес тела (последний `body_measurements.weight_kg`, схема `db/schema/body.ts`) + рост (`users.heightCm`) + возраст(birthDate); и `formatWorkoutCompact`/историю расширить до 10 трен ЦЕЛИКОМ (сейчас только топ-сет). → коммит+деплой.
+  2. Миграция (**СНАЧАЛА `pg_dump` бэкап prod!**): `db/schema/exercises.ts` += `isBpodyweight boolean default false` → `pnpm db:generate` → применить на prod через ssh; seed-флаг для подтягиваний/брусьев/отжиманий (`db/seed`). Затем в context-builder считать эффект.нагрузку = вес тела + добавка.
+- **Потом:** F8 стриминг (`/workouts/[id]/trainer` live вместо poll), F7 графики (`/stats` + Recharts, trendStatus), F5 форматы (EMOM/Tabata/расписание), F6 друзья. **Context7 + sequential-thinking обязательно (требование владельца).**
+- **Компакт-правило владельца:** перед каждым апдейтом держать <600к; коммит+деплой каждый инкремент (lossless при авто-компакте).
 
 ## Доступ / Деплой (факты)
 
