@@ -158,9 +158,9 @@ function StartCard() {
           </Link>
         </Button>
         <Button asChild size="xl" variant="outline" className="w-full">
-          <Link href="/templates/new">
+          <Link href="/create">
             <Plus className="size-5" />
-            Новый шаблон
+            Создать тренировку
           </Link>
         </Button>
       </div>
