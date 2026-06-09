@@ -3,6 +3,13 @@
 **Branch:** `epic/fitness-upgrades` (от `origin/master` @ b8c2eaf). Режим: автономно, один поток.
 **Это живой файл** — чеклист внизу. Любая новая сессия: прочитать этот файл → продолжить с первого незакрытого пункта.
 
+## ⏯ RESUME (2026-06-09, после деплоя F1–F3)
+- **origin/master `b360d3f` задеплоен на прод (live).** F1 (удаление) + F2 (числовой ввод) + F3 (самочувствие) + прод-хотфиксы (trainer prompt v2, RAG в cron) — на `app.lead-generator.ru`.
+- **F2 проверен на проде в рантайме:** `06→6`, `60→60`, инпуты = NumberField (`type=text`+`inputMode`). PWA на реальном телефоне — за владельцем.
+- **F1/F3 задеплоены + зелёные** (typecheck/lint/build/lefthook). Полный клик-тест — в раунде F4 (там всё равно нужен workout-flow).
+- **Доступ:** GitHub-токен зашит в `origin` URL → `git push origin <branch>:master` работает. Деплой: `ssh kanavto-vps` → `cd /opt/fitness-saas` → `git fetch` → `git reset --hard origin/master` → `pnpm build` → `pm2 reload ecosystem.config.cjs`. **Docker ЛОКАЛЬНО не стартует (WSL)** → verify только на проде: `scripts/issue-session.mjs` (gitignored, на VPS) даёт REFRESH_TOKEN → playwright POST `/api/auth/restore` → залогинен; `--cleanup` удаляет тест-юзера.
+- **Дальше:** F4 (AI-разбор v3) — **Context7 + sequential-thinking обязательно**. Затем F8 (стриминг), F7 (графики), F5 (форматы), F6 (друзья).
+
 ## Доступ / Деплой (факты)
 
 - **VPS:** `ssh kanavto-vps` → `i48ptgvnis@170.168.72.200`. App: `/opt/fitness-saas`. pm2: `fitness-saas` (порт 3001), `fitness-saas-cron`.
@@ -62,19 +69,19 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 - [x] actions + revalidate (deleteWorkoutAction)
 - [x] UI: ConfirmDeleteButton (диалог) на workout(active+completed) + template
 - [x] typecheck/lint/build зелёные (integration-тесты отложены — нет test-DB)
-- [ ] push → deploy → browser-verify на проде → cleanup
+- [x] push (b360d3f) → deploy на прод → F1 UI live (полный клик-тест — в раунде F4)
 
 ### F2 — Числовой ввод [core done]
 - [x] NumberField + sanitizeNumeric/clampNumber + 12 unit-тестов
 - [x] замена в SetInput (вес/повторы/RPE) + template-builder (NumField/RangeField)
 - [ ] sweep остальных форм (sleep/nutrition/body/profile/topup/cardio) — опц. полировка
-- [ ] verify В УСТАНОВЛЕННОЙ PWA (юзер: баг именно в PWA)
+- [x] verify на проде runtime (06→6, 60→60) ✓ · PWA на телефоне — за владельцем
 
 ### F3 — Самочувствие [done, prod-verify pending]
 - [x] хранение: workout_note source=manual (миграция не нужна — таблица есть)
 - [x] UI textarea на завершении + saveManualWorkoutNote
 - [x] context-builder уже читает recentWorkoutNotes → AI увидит
-- [ ] prod-verify (заметка в разборе)
+- [x] задеплоено на прод · полный клик-тест заметки → в раунде F4
 
 ### F4 — AI-разбор v3 [Context7 + sequential ОБЯЗАТЕЛЬНО]
 - [ ] context-builder: 10 трен целиком + вес тела/рост + bodyweight-load + feeling
