@@ -3,8 +3,13 @@
 **Branch:** `epic/fitness-upgrades` (от `origin/master` @ b8c2eaf). Режим: автономно, один поток.
 **Это живой файл** — чеклист внизу. Любая новая сессия: прочитать этот файл → продолжить с первого незакрытого пункта.
 
+## ⏯ RESUME (2026-06-10, после F7 run-1)
+- **F7 run-1: общий `trendStatus()` хелпер LIVE** (master `0100b52`): `lib/domain/progression/trend.ts` — pure `TrendStatus` тип + `trendStatus(prev,cur,{epsilon,higherIsBetter})` → improved|regressed|stagnant|new (null prev→new; epsilon dead-zone для float-шума; higherIsBetter для метрик где направление≠прогресс, напр. вес тела) + `TREND_LABEL` (Рост/Регресс/Стагнация/Новое). 12 unit-тестов. DRY: канонический `TrendStatus` теперь single-source — `trainer-structured.ts` + `TrainerResultCard.tsx` импортят его (убрали дубль union-литерала). Аддитивно, без миграции, БЕЗ рантайм-изменений UI (тип стирается). Деплой green, прод здоров (login 200, /stats 307 auth-gate). **Цвет-токены (TREND_TONE) ОТЛОЖЕНЫ** до run-2 (YAGNI: 2-й потребитель появится при графиках; F4 пока держит свою копию). **NEXT: F7 run-2 — `/stats` e1RM-линии (Recharts) + бейдж Рост/Стагнация/Регресс через `trendStatus`+общий TREND_TONE.**
+- Runtime-verify хелпера отложен на run-2 (хелпер ещё не подключён ни к одному UI — нечего кликать; typecheck+build+24 теста зелёные = доказательство корректности).
+- **Recharts API (Context7, v3):** `ResponsiveContainer width="100%" height={N}` + `LineChart`/`ComposedChart`; `accessibilityLayer` уже true по умолчанию; цвет линии через `stroke` (SVG — нельзя Tailwind-класс напрямую; читать значение CSS-var токена в JS, R-36); split-color по значению через `linearGradient gradientUnits="userSpaceOnUse"`.
+
 ## ⏯ RESUME (2026-06-10, после F8-B run-2)
-- **F8-B стрим разбора ПОЛНОСТЬЮ LIVE** (master `ab8fcd6`): run-1 endpoint + run-2 клиент. On_demand-заход на `/workouts/[id]/trainer` теперь генерит разбор inline+стримом (без cron/poll/перезахода), цветные дельты F4 сохранены. Verified на проде. **NEXT: F7 графики** (или опц. F8 run-3 полиш).
+- **F8-B стрим разбора ПОЛНОСТЬЮ LIVE** (master `ab8fcd6`): run-1 endpoint + run-2 клиент. On_demand-заход на `/workouts/[id]/trainer` теперь генерит разбор inline+стримом (без cron/poll/перезахода), цветные дельты F4 сохранены. Verified на проде.
 
 ## ⏯ RESUME (2026-06-09, после деплоя F1–F3)
 - **origin/master `b360d3f` задеплоен на прод (live).** F1 (удаление) + F2 (числовой ввод) + F3 (самочувствие) + прод-хотфиксы (trainer prompt v2, RAG в cron) — на `app.lead-generator.ru`.
@@ -112,8 +117,8 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 - [ ] verify
 
 ### F7 — Графики прогресса [M]
-- [ ] trendStatus + цвет-токены (DRY с F4)
-- [ ] /stats: e1RM-линии с цветом тренда + бейдж Рост/Стагнация/Регресс
+- [x] **run-1: `trendStatus()` хелпер** (master `0100b52`) — `lib/domain/progression/trend.ts`: `TrendStatus` тип + `trendStatus(prev,cur,{epsilon,higherIsBetter})` + `TREND_LABEL`; 12 unit-тестов; DRY канонический `TrendStatus` (trainer-structured + TrainerResultCard импортят). Цвет-токены `TREND_TONE` отложены до run-2 (YAGNI — 2-й потребитель = графики). Аддитивно, deployed, прод здоров. Runtime-verify на run-2 (хелпер ещё не в UI).
+- [ ] run-2 /stats: e1RM-линии (Recharts) с цветом тренда + бейдж Рост/Стагнация/Регресс через `trendStatus`; вынести общий `TREND_TONE` (DRY с F4 TrainerResultCard)
 - [ ] объём по неделям (бар), вес тела (линия)
 - [ ] verify
 
