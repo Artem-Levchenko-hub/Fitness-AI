@@ -132,6 +132,7 @@ export function CircuitBuilder({
           id="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
+              onFocus={(e) => e.target.select()}
           placeholder="Например: Full body circuit"
           maxLength={80}
           required

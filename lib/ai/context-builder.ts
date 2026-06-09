@@ -27,7 +27,7 @@ type WorkoutSummary = {
 };
 
 const HISTORY_DAYS = 60;
-const MAX_HISTORY_WORKOUTS = 12;
+const MAX_HISTORY_WORKOUTS = 8;
 const CIRCUIT_HISTORY_DAYS = 60;
 const MAX_CIRCUIT_HISTORY = 10;
 
@@ -483,13 +483,13 @@ export async function buildTrainerContext(
     sections.push(await loadRecentWorkoutsCompactBlock(userId, 5));
   }
 
-  const sleep = await loadRecentSleep(userId, 7);
+  const sleep = await loadRecentSleep(userId, 14);
   sections.push(formatSleepBlock(sleep));
 
-  const nutrition = await loadRecentNutrition(userId, 7);
+  const nutrition = await loadRecentNutrition(userId, 14);
   sections.push(formatNutritionBlock(nutrition));
 
-  const cardio = await loadRecentCardio(userId, 5);
+  const cardio = await loadRecentCardio(userId, 14);
   sections.push(formatCardioBlock(cardio));
 
   const circuits = await loadCircuitContext(
@@ -589,7 +589,7 @@ function formatNutritionBlock(
       .join(" / ");
     return `- ${r.date}: ${macro || "(без макро)"}${r.notes ? ` · ${r.notes}` : ""}`;
   });
-  return `# КБЖУ (${rows.length} записей за 7 дней)\n\n${lines.join("\n")}`;
+  return `# КБЖУ (${rows.length} записей за 14 дней)\n\n${lines.join("\n")}`;
 }
 
 async function loadRecentCardio(userId: string, limit: number) {
