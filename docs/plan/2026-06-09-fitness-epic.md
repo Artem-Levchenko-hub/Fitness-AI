@@ -3,6 +3,9 @@
 **Branch:** `epic/fitness-upgrades` (от `origin/master` @ b8c2eaf). Режим: автономно, один поток.
 **Это живой файл** — чеклист внизу. Любая новая сессия: прочитать этот файл → продолжить с первого незакрытого пункта.
 
+## ⏯ RESUME (2026-06-10, после F7 run-2)
+- **F7 run-2: тренд-цвет + бейдж на e1RM-графике LIVE** (master `2d318b1`): `OneRmTrendChart` красит линию e1RM по тренду периода (первая→последняя точка через `trendStatus`, epsilon 0.5кг от float-шума) + бейдж Рост/Регресс/Стагнация/Новое + дельта в кг. Цвет линии/точек — CSS-var токен (Recharts не принимает Tailwind-класс). **Вынесен общий `TREND_TONE` в `lib/ui/trend-tone.ts`** (presentation, отдельно от чистого домена R-7): `{text,bg,icon,stroke}`. DRY — `TrainerResultCard` (F4) теперь импортит его вместо локальной копии (поведение карточки идентично); домен `trend.ts` остаётся pure. Аддитивно, без миграции, `stats/page.tsx` НЕ тронут (тренд считается внутри компонента из `data`). Gate green (typecheck/lint/24 теста/build). **Прод-verify:** seeded 2 completed workouts (Bird dog 60×5→70×5) → `/stats` показал бейдж «Рост», дельту «+11.5 кг», `line stroke=var(--success)` (зелёный), селектор=Bird dog. Тест-данные удалены (--cleanup, FK cascade). **NEXT: F7 run-3 — объём по неделям (бар, уже есть `VolumeBarChart` — добавить тренд-окраску?) + вес тела линия; ИЛИ перейти к F5 (форматы EMOM/Tabata + расписание).** Рекомендую: F7 run-3 опционален (объём-бар уже работает), можно сразу F5.
+
 ## ⏯ RESUME (2026-06-10, после F7 run-1)
 - **F7 run-1: общий `trendStatus()` хелпер LIVE** (master `0100b52`): `lib/domain/progression/trend.ts` — pure `TrendStatus` тип + `trendStatus(prev,cur,{epsilon,higherIsBetter})` → improved|regressed|stagnant|new (null prev→new; epsilon dead-zone для float-шума; higherIsBetter для метрик где направление≠прогресс, напр. вес тела) + `TREND_LABEL` (Рост/Регресс/Стагнация/Новое). 12 unit-тестов. DRY: канонический `TrendStatus` теперь single-source — `trainer-structured.ts` + `TrainerResultCard.tsx` импортят его (убрали дубль union-литерала). Аддитивно, без миграции, БЕЗ рантайм-изменений UI (тип стирается). Деплой green, прод здоров (login 200, /stats 307 auth-gate). **Цвет-токены (TREND_TONE) ОТЛОЖЕНЫ** до run-2 (YAGNI: 2-й потребитель появится при графиках; F4 пока держит свою копию). **NEXT: F7 run-2 — `/stats` e1RM-линии (Recharts) + бейдж Рост/Стагнация/Регресс через `trendStatus`+общий TREND_TONE.**
 - Runtime-verify хелпера отложен на run-2 (хелпер ещё не подключён ни к одному UI — нечего кликать; typecheck+build+24 теста зелёные = доказательство корректности).
@@ -118,7 +121,7 @@ Greenfield. Schema `friendships(userId, friendId, status: pending|accepted)`. Д
 
 ### F7 — Графики прогресса [M]
 - [x] **run-1: `trendStatus()` хелпер** (master `0100b52`) — `lib/domain/progression/trend.ts`: `TrendStatus` тип + `trendStatus(prev,cur,{epsilon,higherIsBetter})` + `TREND_LABEL`; 12 unit-тестов; DRY канонический `TrendStatus` (trainer-structured + TrainerResultCard импортят). Цвет-токены `TREND_TONE` отложены до run-2 (YAGNI — 2-й потребитель = графики). Аддитивно, deployed, прод здоров. Runtime-verify на run-2 (хелпер ещё не в UI).
-- [ ] run-2 /stats: e1RM-линии (Recharts) с цветом тренда + бейдж Рост/Стагнация/Регресс через `trendStatus`; вынести общий `TREND_TONE` (DRY с F4 TrainerResultCard)
+- [x] run-2 /stats: e1RM-линии (Recharts) с цветом тренда + бейдж Рост/Стагнация/Регресс через `trendStatus`; вынесен общий `TREND_TONE` в `lib/ui/trend-tone.ts` (DRY с F4 TrainerResultCard) (master `2d318b1`, prod-verified: бейдж «Рост» + «+11.5 кг» + `stroke=var(--success)`)
 - [ ] объём по неделям (бар), вес тела (линия)
 - [ ] verify
 
