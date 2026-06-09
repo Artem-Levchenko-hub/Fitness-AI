@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import { z } from "zod";
 
 import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import type { TrendStatus } from "@/lib/domain/progression/trend";
 
 /** Модель тренера = основная LLM (deepseek-v4-flash-thinking через VseGPT).
  *  Раньше тренер ходил в Gemini structured output (responseSchema); теперь
@@ -16,7 +17,7 @@ export type ExerciseComparison = {
   curTopSet: string;
   deltaReps: number | null;
   deltaWeightKg: number | null;
-  status: "improved" | "regressed" | "stagnant" | "new";
+  status: TrendStatus;
 };
 
 export type TrainerResponse = {

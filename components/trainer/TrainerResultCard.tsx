@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 
+import type { TrendStatus } from "@/lib/domain/progression/trend";
 import { cn } from "@/lib/utils/index";
 
 export type ExerciseComparison = {
@@ -8,7 +9,7 @@ export type ExerciseComparison = {
   curTopSet: string;
   deltaReps: number | null;
   deltaWeightKg: number | null;
-  status: "improved" | "regressed" | "stagnant" | "new";
+  status: TrendStatus;
 };
 
 export type TrainerResultData = {
