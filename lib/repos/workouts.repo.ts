@@ -411,6 +411,7 @@ export async function getAiAnalysisForWorkout(
 ): Promise<{
   id: string;
   content: string;
+  resultJson: unknown;
   modelVersion: string;
   createdAt: Date;
 } | null> {
@@ -418,6 +419,7 @@ export async function getAiAnalysisForWorkout(
     .select({
       id: schema.aiAnalyses.id,
       content: schema.aiAnalyses.content,
+      resultJson: schema.aiAnalyses.resultJson,
       modelVersion: schema.aiAnalyses.modelVersion,
       createdAt: schema.aiAnalyses.createdAt,
     })

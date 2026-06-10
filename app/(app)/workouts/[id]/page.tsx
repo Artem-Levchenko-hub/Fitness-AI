@@ -9,6 +9,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
+import {
+  TrainerResultCard,
+  type TrainerResultData,
+} from "@/components/trainer/TrainerResultCard";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
@@ -151,7 +155,22 @@ function CompletedView({
         </div>
       </section>
 
-      {analysis ? (
+      {analysis?.resultJson ? (
+        // Structured-разбор (F4) — цветная карточка с per-exercise дельтами,
+        // те же что на /trainer. Раньше история показывала plain markdown (G3).
+        <section>
+          <TrainerResultCard data={analysis.resultJson as TrainerResultData} />
+          <div className="mt-4">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/workouts/${workout.id}/coach`}>
+                <MessageSquare className="size-4" />
+                Открыть разговор
+              </Link>
+            </Button>
+          </div>
+        </section>
+      ) : analysis ? (
+        // Legacy-разбор без resultJson (старые cron-записи) — markdown-фолбэк.
         <AnalysisCard
           content={analysis.content}
           workoutId={workout.id}
