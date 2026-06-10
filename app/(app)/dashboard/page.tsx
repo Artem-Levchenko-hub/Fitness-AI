@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { SleepTile } from "@/components/dashboard/SleepTile";
+import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
 import {
   buildHistory,
@@ -89,6 +90,8 @@ export default async function DashboardPage() {
           ))}
         </div>
       ) : null}
+
+      <TodayScheduleCard userId={user.id} />
 
       <StartCard />
 
