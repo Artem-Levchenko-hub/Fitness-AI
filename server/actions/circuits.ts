@@ -236,8 +236,9 @@ export async function cancelCircuitAction(formData: FormData) {
   await cancelCircuit(user.id, parsed.data.circuitId);
   revalidatePath(`/circuits/${parsed.data.circuitId}`);
   revalidatePath("/circuits");
+  revalidatePath("/workouts");
   revalidatePath("/dashboard");
-  redirect("/circuits");
+  redirect("/workouts");
 }
 
 const deleteSchema = z.object({ circuitId: z.string().uuid() });

@@ -152,6 +152,7 @@ export async function cancelCardioAction(formData: FormData) {
   await cancelCardioWorkout(user.id, parsed.data.cardioId);
   revalidatePath(`/cardio/${parsed.data.cardioId}`);
   revalidatePath("/cardio");
+  revalidatePath("/workouts");
   revalidatePath("/dashboard");
-  redirect("/cardio");
+  redirect("/workouts");
 }

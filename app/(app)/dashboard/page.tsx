@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { buildResumes } from "@/components/dashboard/active-resumes";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { SleepTile } from "@/components/dashboard/SleepTile";
@@ -60,17 +61,7 @@ export default async function DashboardPage() {
 
   // Единый вход: один CTA «Начать тренировку» → /create (пикер формата) вместо
   // трёх формат-тайлов. Активные сессии любого формата — общий ResumeBanner.
-  const resumes = [
-    activeId
-      ? { href: `/workouts/${activeId}`, label: "Активная тренировка" }
-      : null,
-    activeCircuitId
-      ? { href: `/circuits/${activeCircuitId}`, label: "Активная круговая" }
-      : null,
-    activeCardioId
-      ? { href: `/cardio/${activeCardioId}`, label: "Активная кардио-сессия" }
-      : null,
-  ].filter((r): r is { href: string; label: string } => r !== null);
+  const resumes = buildResumes({ activeId, activeCircuitId, activeCardioId });
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -86,7 +77,12 @@ export default async function DashboardPage() {
       {resumes.length > 0 ? (
         <div className="mb-6 space-y-3">
           {resumes.map((r) => (
-            <ResumeBanner key={r.href} href={r.href} label={r.label} />
+            <ResumeBanner
+              key={r.href}
+              href={r.href}
+              label={r.label}
+              cancel={r.cancel}
+            />
           ))}
         </div>
       ) : null}

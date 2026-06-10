@@ -2,6 +2,7 @@ import { Activity, Dumbbell } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { buildResumes } from "@/components/dashboard/active-resumes";
 import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,17 +44,7 @@ export default async function WorkoutsPage() {
   // Единый поток: активная сессия любого формата (силовая/круговая/кардио) —
   // один общий ResumeBanner, как на дашборде. /workouts — единственный экран
   // истории; отдельных вкладок /circuits·/cardio больше нет (редирект сюда).
-  const resumes = [
-    activeId
-      ? { href: `/workouts/${activeId}`, label: "Активная тренировка" }
-      : null,
-    activeCircuitId
-      ? { href: `/circuits/${activeCircuitId}`, label: "Активная круговая" }
-      : null,
-    activeCardioId
-      ? { href: `/cardio/${activeCardioId}`, label: "Активная кардио-сессия" }
-      : null,
-  ].filter((r): r is { href: string; label: string } => r !== null);
+  const resumes = buildResumes({ activeId, activeCircuitId, activeCardioId });
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -69,7 +60,12 @@ export default async function WorkoutsPage() {
       {resumes.length > 0 ? (
         <div className="mb-6 space-y-3">
           {resumes.map((r) => (
-            <ResumeBanner key={r.href} href={r.href} label={r.label} />
+            <ResumeBanner
+              key={r.href}
+              href={r.href}
+              label={r.label}
+              cancel={r.cancel}
+            />
           ))}
         </div>
       ) : null}
