@@ -52,6 +52,19 @@ export async function startCircuit(
   }
 
   return db.transaction(async (tx) => {
+    // Один активный сеанс на формат: закрываем любые брошенные active-круговые
+    // юзера, чтобы resume-баннер не «висел» (G2). Иначе незавершённые сессии
+    // копятся и getActiveCircuitId вечно возвращает старую.
+    await tx
+      .update(schema.circuitWorkouts)
+      .set({ status: "cancelled", finishedAt: new Date() })
+      .where(
+        and(
+          eq(schema.circuitWorkouts.userId, userId),
+          eq(schema.circuitWorkouts.status, "active"),
+        ),
+      );
+
     const id = crypto.randomUUID();
     await tx.insert(schema.circuitWorkouts).values({
       id,

@@ -41,6 +41,18 @@ export async function startCardioFromPreset(
       throw new Error("Preset не дал ни одного блока");
     }
 
+    // Один активный сеанс на формат: закрываем брошенные active-кардио юзера,
+    // чтобы resume-баннер не «висел» (G2) — незавершённые сессии иначе копятся.
+    await tx
+      .update(schema.cardioWorkouts)
+      .set({ status: "cancelled", finishedAt: new Date() })
+      .where(
+        and(
+          eq(schema.cardioWorkouts.userId, userId),
+          eq(schema.cardioWorkouts.status, "active"),
+        ),
+      );
+
     const cardioId = crypto.randomUUID();
     const planJson: Record<string, unknown> = {
       preset: input.preset,

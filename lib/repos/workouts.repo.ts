@@ -58,6 +58,18 @@ export async function startWorkoutFromTemplate(
 
     if (!tpl) throw new Error("Template not found or not yours");
 
+    // Один активный сеанс на формат: закрываем брошенные active-силовые юзера,
+    // чтобы resume-баннер не «висел» (G2) — незавершённые сессии иначе копятся.
+    await tx
+      .update(schema.workouts)
+      .set({ status: "cancelled", finishedAt: new Date() })
+      .where(
+        and(
+          eq(schema.workouts.userId, userId),
+          eq(schema.workouts.status, "active"),
+        ),
+      );
+
     const tplItems = await tx
       .select()
       .from(schema.templateExercises)
