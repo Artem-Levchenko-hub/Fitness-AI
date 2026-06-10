@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
+import {
+  disableAnalysisSharing,
+  enableAnalysisSharing,
+} from "@/lib/repos/workouts.repo";
 
 /** Создаёт aiJob (kind=on_demand) и возвращает jobId для поллинга. */
 export async function requestTrainerOnDemand(workoutId: string | null) {
@@ -36,4 +40,24 @@ export async function requestTrainerOnDemand(workoutId: string | null) {
 
   revalidatePath("/dashboard");
   return { jobId: job.id };
+}
+
+/** Включить публичный шеринг разбора. R-7: repo фильтрует по userId.
+ *  Возвращает capability-токен (для ссылки /a/{token}) либо null, если разбор
+ *  не найден / не принадлежит юзеру. Идемпотентно (повтор → тот же токен). */
+export async function enableAnalysisSharingAction(
+  analysisId: string,
+): Promise<{ token: string | null }> {
+  const user = await requireUser();
+  const token = await enableAnalysisSharing(user.id, analysisId);
+  return { token };
+}
+
+/** Отключить публичный шеринг (сбросить токен). R-7: только свой разбор. */
+export async function disableAnalysisSharingAction(
+  analysisId: string,
+): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  const ok = await disableAnalysisSharing(user.id, analysisId);
+  return { ok };
 }

@@ -10,6 +10,7 @@ import {
   type TrainerResultData,
 } from "@/components/trainer/TrainerResultCard";
 import { TrainerStreamConsumer } from "@/components/trainer/TrainerStreamConsumer";
+import { ShareAnalysisButton } from "@/components/trainer/ShareAnalysisButton";
 import { db } from "@/db/client";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import * as schema from "@/db/schema";
@@ -116,9 +117,15 @@ export default async function TrainerPage({ params }: Props) {
       </section>
 
       {savedAnalysis?.resultJson ? (
-        <TrainerResultCard
-          data={savedAnalysis.resultJson as TrainerResultData}
-        />
+        <>
+          <TrainerResultCard
+            data={savedAnalysis.resultJson as TrainerResultData}
+          />
+          <ShareAnalysisButton
+            analysisId={savedAnalysis.id}
+            initialToken={savedAnalysis.shareToken}
+          />
+        </>
       ) : latestJob ? (
         // cron уже обрабатывает (или succeeded-legacy) — поллим как fallback.
         <TrainerJobPoller jobId={latestJob.id} />

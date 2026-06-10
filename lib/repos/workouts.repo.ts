@@ -432,6 +432,7 @@ export async function getLatestTrainerResult(
   resultJson: unknown;
   modelVersion: string;
   createdAt: Date;
+  shareToken: string | null;
 } | null> {
   const [row] = await db
     .select({
@@ -439,6 +440,7 @@ export async function getLatestTrainerResult(
       resultJson: schema.aiAnalyses.resultJson,
       modelVersion: schema.aiAnalyses.modelVersion,
       createdAt: schema.aiAnalyses.createdAt,
+      shareToken: schema.aiAnalyses.shareToken,
     })
     .from(schema.aiAnalyses)
     .where(

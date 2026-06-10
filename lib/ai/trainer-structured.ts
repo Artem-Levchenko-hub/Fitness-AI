@@ -32,7 +32,7 @@ export type TrainerResponse = {
   motivation: string;
 };
 
-const trainerSchema = z.object({
+export const trainerSchema = z.object({
   overallScore: z.number().int().min(0).max(100),
   trainingQuality: z.object({
     score: z.number().int().min(0).max(100),
