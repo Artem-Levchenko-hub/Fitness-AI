@@ -4,6 +4,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sendPushToUser } from "@/lib/push/vapid";
 import { getActiveForUser } from "@/lib/repos/push.repo";
+import { listEnabledSchedulesForUser } from "@/lib/repos/schedule.repo";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -44,9 +45,18 @@ function localDateIso(now: Date, tz: string): string {
   }
 }
 
+/** ISO-день недели юзера по его timezone: 1=Пн .. 7=Вс.
+ *  Берём локальную дату (та же логика, что localDateIso) и считаем день
+ *  недели через UTC-полдень — без DST-краёв и без зависимости от локали. */
+function localIsoDay(now: Date, tz: string): number {
+  const d = new Date(`${localDateIso(now, tz)}T12:00:00Z`);
+  const dow = d.getUTCDay(); // 0=Вс .. 6=Сб
+  return dow === 0 ? 7 : dow;
+}
+
 /** Раз в час: для каждого юзера проверяем локальное время и шлём
- *  напоминание (сон в 9:00, КБЖУ в 21:00) если запись за сегодня
- *  ещё не сделана. */
+ *  напоминание (сон в 9:00, КБЖУ в 21:00, тренировка по расписанию) если
+ *  запись за сегодня ещё не сделана. */
 export async function POST(req: Request) {
   if (!authorize(req)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -62,6 +72,7 @@ export async function POST(req: Request) {
 
   let sleepSent = 0;
   let nutritionSent = 0;
+  let workoutSent = 0;
 
   await Promise.all(
     users.map(async (u) => {
@@ -122,6 +133,25 @@ export async function POST(req: Request) {
           nutritionSent += 1;
         }
       }
+
+      // Тренировка: по расписанию (день недели + локальный час).
+      // Дедуп по kind+день → одно напоминание о тренировке в сутки, даже
+      // если несколько расписаний совпали (достаточно для v1).
+      const isoDay = localIsoDay(now, tz);
+      const schedules = await listEnabledSchedulesForUser(u.id);
+      const due = schedules.find(
+        (s) => s.hour === hour && s.daysOfWeek.includes(isoDay),
+      );
+      if (due && !(await alreadySentToday(u.id, "workout_reminder", now))) {
+        await sendPushToUser(u.id, subs, {
+          kind: "workout_reminder",
+          title: `🏋️ Пора тренироваться: ${due.label}`,
+          body: "Открой приложение и начни тренировку.",
+          url: "/create",
+          tag: "workout-reminder",
+        });
+        workoutSent += 1;
+      }
     }),
   );
 
@@ -129,6 +159,7 @@ export async function POST(req: Request) {
     ok: true,
     sleepSent,
     nutritionSent,
+    workoutSent,
     totalUsers: users.length,
   });
 }

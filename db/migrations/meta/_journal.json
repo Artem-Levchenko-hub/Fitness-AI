@@ -57,6 +57,13 @@
       "when": 1781050000000,
       "tag": "0007_workout_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781560000000,
+      "tag": "0008_workout_reminder_pushkind",
+      "breakpoints": true
     }
   ]
 }

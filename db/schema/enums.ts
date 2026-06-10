@@ -69,6 +69,7 @@ export const pushKind = pgEnum("push_kind", [
   "nutrition_reminder",
   "trainer_ready",
   "digest_ready",
+  "workout_reminder",
 ]);
 
 export const cardioPreset = pgEnum("cardio_preset", [

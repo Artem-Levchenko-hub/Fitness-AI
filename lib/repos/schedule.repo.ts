@@ -20,6 +20,22 @@ export async function listSchedules(
     .orderBy(asc(schema.workoutSchedules.hour));
 }
 
+/** Включённые расписания юзера (R-7). Для почасового cron'а push-reminders:
+ *  он сам проверяет день недели + час против локального времени юзера. */
+export async function listEnabledSchedulesForUser(
+  userId: string,
+): Promise<schema.WorkoutSchedule[]> {
+  return db
+    .select()
+    .from(schema.workoutSchedules)
+    .where(
+      and(
+        eq(schema.workoutSchedules.userId, userId),
+        eq(schema.workoutSchedules.enabled, true),
+      ),
+    );
+}
+
 export async function createSchedule(
   userId: string,
   input: NewScheduleInput,
