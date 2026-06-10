@@ -64,6 +64,13 @@
       "when": 1781560000000,
       "tag": "0008_workout_reminder_pushkind",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781650000000,
+      "tag": "0009_friendships",
+      "breakpoints": true
     }
   ]
 }

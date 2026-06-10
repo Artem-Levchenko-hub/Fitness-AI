@@ -86,6 +86,11 @@ export const circuitExerciseKind = pgEnum("circuit_exercise_kind", [
   "duration",
 ]);
 
+export const friendshipStatus = pgEnum("friendship_status", [
+  "pending",
+  "accepted",
+]);
+
 export const subscriptionTier = pgEnum("subscription_tier", ["free", "pro"]);
 
 export const subscriptionStatus = pgEnum("subscription_status", [

@@ -15,3 +15,4 @@ export * from "./push";
 export * from "./cardio";
 export * from "./knowledge";
 export * from "./schedule";
+export * from "./friends";
