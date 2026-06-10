@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -44,6 +44,7 @@ export async function dailyVolume(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
         eq(schema.workoutSets.setType, "working"),
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
@@ -98,6 +99,7 @@ export async function weeklyVolume(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
         eq(schema.workoutSets.setType, "working"),
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
@@ -156,6 +158,7 @@ export async function volumeByMuscle(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
         eq(schema.workoutSets.setType, "working"),
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
@@ -204,6 +207,7 @@ export async function repRangeDistribution(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
         eq(schema.workoutSets.setType, "working"),
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
@@ -257,6 +261,7 @@ export async function oneRmTrend(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
         eq(schema.workoutExercises.exerciseId, exerciseId),
         eq(schema.workoutSets.setType, "working"),
         from ? gte(schema.workouts.startedAt, from) : undefined,
@@ -302,6 +307,7 @@ export async function workoutFrequency(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
     )
@@ -351,6 +357,7 @@ export async function topLineKpi(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
     );
@@ -382,7 +389,12 @@ export async function trainedExercises(
       schema.exercises,
       eq(schema.exercises.id, schema.workoutExercises.exerciseId),
     )
-    .where(eq(schema.workouts.userId, userId))
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+      ),
+    )
     .orderBy(asc(schema.exercises.nameRu));
 
   return rows;
