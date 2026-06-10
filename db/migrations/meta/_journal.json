@@ -78,6 +78,13 @@
       "when": 1781072087397,
       "tag": "0010_damp_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781750000000,
+      "tag": "0011_exercises_is_bodyweight",
+      "breakpoints": true
     }
   ]
 }

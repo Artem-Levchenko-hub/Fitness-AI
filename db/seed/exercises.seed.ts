@@ -24,6 +24,8 @@ export type SeedExercise = {
   description?: string;
   primary: MuscleKey[];
   secondary?: MuscleKey[];
+  /** Базовая нагрузка = вес тела; введённый вес = добавка сверху. */
+  isBodyweight?: boolean;
 };
 
 export const EXERCISES: SeedExercise[] = [
@@ -69,6 +71,7 @@ export const EXERCISES: SeedExercise[] = [
     nameEn: "Chest dips",
     primary: ["chest"],
     secondary: ["triceps", "shoulders_front"],
+    isBodyweight: true,
   },
   {
     slug: "dumbbell-flyes",
@@ -88,6 +91,7 @@ export const EXERCISES: SeedExercise[] = [
     nameEn: "Push-up",
     primary: ["chest"],
     secondary: ["shoulders_front", "triceps", "core"],
+    isBodyweight: true,
   },
 
   // ───────── СПИНА ─────────
@@ -125,6 +129,7 @@ export const EXERCISES: SeedExercise[] = [
     nameEn: "Pull-up",
     primary: ["back_lats"],
     secondary: ["biceps", "back_traps", "core"],
+    isBodyweight: true,
   },
   {
     slug: "chin-up",
@@ -132,6 +137,7 @@ export const EXERCISES: SeedExercise[] = [
     nameEn: "Chin-up",
     primary: ["back_lats", "biceps"],
     secondary: ["back_traps"],
+    isBodyweight: true,
   },
   {
     slug: "lat-pulldown",
@@ -298,6 +304,7 @@ export const EXERCISES: SeedExercise[] = [
     nameEn: "Tricep dips",
     primary: ["triceps"],
     secondary: ["chest", "shoulders_front"],
+    isBodyweight: true,
   },
   {
     slug: "tricep-kickback",

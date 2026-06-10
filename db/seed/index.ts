@@ -38,6 +38,7 @@ async function seedExercises() {
         nameEn: ex.nameEn,
         description: ex.description,
         isCustom: false,
+        isBodyweight: ex.isBodyweight ?? false,
         ownerUserId: null,
       })
       .onConflictDoUpdate({
@@ -46,6 +47,7 @@ async function seedExercises() {
           nameRu: ex.nameRu,
           nameEn: ex.nameEn,
           description: ex.description,
+          isBodyweight: ex.isBodyweight ?? false,
         },
       })
       .returning({ id: schema.exercises.id });

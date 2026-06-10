@@ -34,6 +34,11 @@ export const exercises = pgTable(
     nameEn: text("name_en").notNull(),
     description: text("description"),
     isCustom: boolean("is_custom").notNull().default(false),
+    /** true для упражнений, где базовая нагрузка = вес тела, а введённый
+     *  вес = ДОБАВКА сверху (подтягивания/брусья/отжимания с весом).
+     *  Используется AI-контекстом для расчёта эффективной нагрузки
+     *  (вес тела + добавка), а не «голого» введённого веса. См. F4. */
+    isBodyweight: boolean("is_bodyweight").notNull().default(false),
     ownerUserId: text("owner_user_id").references(() => users.id, {
       onDelete: "cascade",
     }),
