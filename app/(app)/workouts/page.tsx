@@ -1,7 +1,8 @@
-import { Activity, ChevronRight, Dumbbell, Play } from "lucide-react";
+import { Activity, Dumbbell } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { Button } from "@/components/ui/button";
 import {
   buildHistory,
@@ -9,8 +10,8 @@ import {
   type HistoryItem,
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
-import { listRecentCardio } from "@/lib/repos/cardio.repo";
-import { listCircuits } from "@/lib/repos/circuits.repo";
+import { getActiveCardioId, listRecentCardio } from "@/lib/repos/cardio.repo";
+import { getActiveCircuitId, listCircuits } from "@/lib/repos/circuits.repo";
 import {
   getActiveWorkoutId,
   listRecentWorkouts,
@@ -20,15 +21,39 @@ export const metadata: Metadata = { title: "Тренировки" };
 
 export default async function WorkoutsPage() {
   const user = await requireUser();
-  const [strength, circuits, cardio, activeId] = await Promise.all([
+  const [
+    strength,
+    circuits,
+    cardio,
+    activeId,
+    activeCircuitId,
+    activeCardioId,
+  ] = await Promise.all([
     listRecentWorkouts(user.id, 60),
     listCircuits(user.id, 60),
     listRecentCardio(user.id, 60),
     getActiveWorkoutId(user.id),
+    getActiveCircuitId(user.id),
+    getActiveCardioId(user.id),
   ]);
 
   const items = buildHistory(strength, circuits, cardio);
   const groups = groupByWeek(items);
+
+  // Единый поток: активная сессия любого формата (силовая/круговая/кардио) —
+  // один общий ResumeBanner, как на дашборде. /workouts — единственный экран
+  // истории; отдельных вкладок /circuits·/cardio больше нет (редирект сюда).
+  const resumes = [
+    activeId
+      ? { href: `/workouts/${activeId}`, label: "Активная тренировка" }
+      : null,
+    activeCircuitId
+      ? { href: `/circuits/${activeCircuitId}`, label: "Активная круговая" }
+      : null,
+    activeCardioId
+      ? { href: `/cardio/${activeCardioId}`, label: "Активная кардио-сессия" }
+      : null,
+  ].filter((r): r is { href: string; label: string } => r !== null);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -41,7 +66,13 @@ export default async function WorkoutsPage() {
         </h1>
       </header>
 
-      {activeId ? <ActiveCard workoutId={activeId} /> : null}
+      {resumes.length > 0 ? (
+        <div className="mb-6 space-y-3">
+          {resumes.map((r) => (
+            <ResumeBanner key={r.href} href={r.href} label={r.label} />
+          ))}
+        </div>
+      ) : null}
 
       {items.length === 0 ? (
         <EmptyState />
@@ -64,30 +95,6 @@ export default async function WorkoutsPage() {
         </div>
       )}
     </main>
-  );
-}
-
-function ActiveCard({ workoutId }: { workoutId: string }) {
-  return (
-    <Link
-      href={`/workouts/${workoutId}`}
-      className="bg-primary text-primary-foreground mb-6 flex items-center justify-between rounded-2xl px-5 py-4 transition-transform hover:-translate-y-px"
-    >
-      <div className="flex items-center gap-3">
-        <div className="bg-primary-foreground/15 flex size-10 items-center justify-center rounded-full">
-          <Play className="size-5 fill-current" />
-        </div>
-        <div>
-          <p className="text-[10px] font-medium tracking-[0.18em] uppercase opacity-70">
-            Активная тренировка
-          </p>
-          <p className="text-base font-semibold tracking-tight">
-            Продолжить
-          </p>
-        </div>
-      </div>
-      <ChevronRight className="size-5 opacity-70" aria-hidden="true" />
-    </Link>
   );
 }
 

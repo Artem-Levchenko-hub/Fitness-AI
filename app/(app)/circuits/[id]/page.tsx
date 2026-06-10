@@ -62,8 +62,8 @@ export default async function CircuitPage({ params }: Props) {
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
-        <Link href="/circuits">
-          <ChevronLeft className="size-4" />К истории круговых
+        <Link href="/workouts">
+          <ChevronLeft className="size-4" />К истории
         </Link>
       </Button>
 
