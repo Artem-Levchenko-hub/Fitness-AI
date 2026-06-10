@@ -1,6 +1,11 @@
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
+import {
+  TrainerResultCard,
+  type TrainerResultData,
+} from "@/components/trainer/TrainerResultCard";
 import type { CircuitRoundLog, CircuitWorkout } from "@/db/schema";
+import { trainerSchema } from "@/lib/ai/trainer-structured";
 import type { CircuitExerciseWithName } from "@/lib/repos/circuits.repo";
 
 /** Сводка по завершённой/прерванной круговой + AI-анализ (если уже готов). */
@@ -160,10 +165,18 @@ function AnalysisCard({
   analysis,
   jobStatus,
 }: {
-  analysis: { content: string } | null;
+  analysis: { content: string; resultJson: unknown } | null;
   jobStatus: "pending" | "running" | "succeeded" | "failed" | null;
 }) {
   if (analysis) {
+    // Structured-разбор (F4) — цветная карточка с оценкой/аспектами, как в
+    // силовой истории (G3). Раньше круговая показывала plain markdown даже при
+    // готовом resultJson (G3-followup). safeParse страхует legacy-записи без
+    // resultJson → markdown-фолбэк.
+    const parsed = trainerSchema.safeParse(analysis.resultJson);
+    if (parsed.success) {
+      return <TrainerResultCard data={parsed.data as TrainerResultData} />;
+    }
     return (
       <section className="bg-card border-border rounded-2xl border p-5">
         <div className="mb-3 flex items-center gap-2">
