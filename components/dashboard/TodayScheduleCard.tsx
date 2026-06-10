@@ -7,31 +7,71 @@ import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
 import { listEnabledSchedulesForUser } from "@/lib/repos/schedule.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
+import { startWorkoutFromTemplateAction } from "@/server/actions/workouts";
 import type { WorkoutSchedule } from "@/db/schema";
 
-/** Привязка расписания → куда вести и как назвать заготовку. NULL во всех 3
- *  FK = «свободное» расписание: ведём на /create-пикер (как раньше), без имени.
- *  Заготовка вне выборки/удалена (FK SET NULL) → фолбэк-метка по формату. */
+/** Куда ведёт строка «сегодня». G7b: силовой шаблон стартует ПРЯМО (один клик =
+ *  новый активный сеанс из шаблона, без захода на detail-страницу). Круговая/
+ *  кардио — это session-instance, их re-run = клон (следующий слайс), пока ведём
+ *  на detail. Свободное расписание (нет привязки) → /create-пикер как раньше. */
+type PresetTarget =
+  | { kind: "template"; templateId: string; presetLabel: string }
+  | { kind: "link"; href: string; presetLabel: string | null };
+
+/** Привязка расписания → цель строки. NULL во всех 3 FK = «свободное»: ведём на
+ *  /create-пикер (как раньше). Заготовка вне выборки/удалена (FK SET NULL) →
+ *  фолбэк-метка по формату. */
 function resolvePreset(
   s: WorkoutSchedule,
   names: Map<string, string>,
-): { href: string; presetLabel: string | null } {
+): PresetTarget {
   if (s.templateId)
     return {
-      href: `/templates/${s.templateId}`,
+      kind: "template",
+      templateId: s.templateId,
       presetLabel: names.get(`template:${s.templateId}`) ?? "Силовая заготовка",
     };
   if (s.circuitWorkoutId)
     return {
+      kind: "link",
       href: `/circuits/${s.circuitWorkoutId}`,
       presetLabel: names.get(`circuit:${s.circuitWorkoutId}`) ?? "Круговая",
     };
   if (s.cardioWorkoutId)
     return {
+      kind: "link",
       href: `/cardio/${s.cardioWorkoutId}`,
       presetLabel: names.get(`cardio:${s.cardioWorkoutId}`) ?? "Кардио",
     };
-  return { href: "/create", presetLabel: null };
+  return { kind: "link", href: "/create", presetLabel: null };
+}
+
+/** Общий вид строки (R-4 DRY — одинаков для <form>-кнопки и <Link>). ≥56px (R-41). */
+const ROW_CLASS =
+  "bg-card border-border hover:border-primary/40 flex min-h-[56px] w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors";
+
+/** Внутренности строки: заголовок расписания + имя заготовки + CTA-стрелка. */
+function RowInner({
+  label,
+  sub,
+  cta,
+}: {
+  label: string;
+  sub: string;
+  cta: string;
+}) {
+  return (
+    <>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold tracking-tight">{label}</p>
+        <p className="text-muted-foreground mt-0.5 truncate text-xs">{sub}</p>
+      </div>
+      <span className="text-primary inline-flex shrink-0 items-center gap-1 text-xs font-medium">
+        {cta}
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      </span>
+    </>
+  );
 }
 
 /** G7a: подсветка «сегодня надо вот эту» на дашборде. Берёт включённые
@@ -59,7 +99,7 @@ export async function TodayScheduleCard({ userId }: { userId: string }) {
     ...cardio.map((c) => [`cardio:${c.id}`, c.name] as const),
   ]);
 
-  const items = todays.map((s) => ({ schedule: s, ...resolvePreset(s, names) }));
+  const items = todays.map((s) => ({ schedule: s, target: resolvePreset(s, names) }));
 
   return (
     <section className="border-primary/30 bg-primary/5 mb-6 rounded-2xl border p-5">
@@ -69,25 +109,29 @@ export async function TodayScheduleCard({ userId }: { userId: string }) {
       </p>
 
       <ul className="mt-3 space-y-2">
-        {items.map(({ schedule, href, presetLabel }) => (
+        {items.map(({ schedule, target }) => (
           <li key={schedule.id}>
-            <Link
-              href={href}
-              className="bg-card border-border hover:border-primary/40 flex min-h-[56px] items-center gap-3 rounded-xl border p-4 transition-colors"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold tracking-tight">
-                  {schedule.label}
-                </p>
-                <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                  {presetLabel ?? "Выбрать формат тренировки"}
-                </p>
-              </div>
-              <span className="text-primary inline-flex shrink-0 items-center gap-1 text-xs font-medium">
-                {presetLabel ? "Начать" : "Выбрать"}
-                <ArrowRight className="size-3.5" aria-hidden="true" />
-              </span>
-            </Link>
+            {target.kind === "template" ? (
+              // G7b: силовой шаблон — прямой старт одним кликом (без detail-страницы).
+              <form action={startWorkoutFromTemplateAction}>
+                <input type="hidden" name="templateId" value={target.templateId} />
+                <button type="submit" className={ROW_CLASS}>
+                  <RowInner
+                    label={schedule.label}
+                    sub={target.presetLabel}
+                    cta="Начать"
+                  />
+                </button>
+              </form>
+            ) : (
+              <Link href={target.href} className={ROW_CLASS}>
+                <RowInner
+                  label={schedule.label}
+                  sub={target.presetLabel ?? "Выбрать формат тренировки"}
+                  cta={target.presetLabel ? "Начать" : "Выбрать"}
+                />
+              </Link>
+            )}
           </li>
         ))}
       </ul>
