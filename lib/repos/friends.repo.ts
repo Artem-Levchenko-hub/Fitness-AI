@@ -1,7 +1,17 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+
+/** Публичная карточка друга/заявителя — минимум для UI (без приватных полей). */
+export type FriendUser = { id: string; name: string | null; email: string };
+
+/** Дружба/заявка вместе с «другим» пользователем (партнёром по связи). */
+export type FriendshipWithUser = {
+  friendshipId: string;
+  createdAt: Date;
+  user: FriendUser;
+};
 
 /** Доступ к дружбам. R-7: каждая функция принимает userId действующего
  *  пользователя и фильтрует так, что юзер видит/меняет только свои связи. */
@@ -116,4 +126,71 @@ export async function listOutgoingRequests(
         eq(schema.friendships.status, "pending"),
       ),
     );
+}
+
+/** Найти пользователя по (уже нормализованному) email — для добавления в друзья
+ *  по адресу. Возвращает только публичные поля. */
+export async function findUserByEmail(
+  email: string,
+): Promise<FriendUser | null> {
+  const [u] = await db
+    .select({
+      id: schema.users.id,
+      name: schema.users.name,
+      email: schema.users.email,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.email, email))
+    .limit(1);
+  return u ?? null;
+}
+
+/** Дополнить строки дружбы карточкой «другого» пользователя одним запросом
+ *  (inArray) вместо N+1. partnerIdOf указывает, какая сторона — партнёр. */
+async function attachPartner(
+  rows: schema.Friendship[],
+  partnerIdOf: (r: schema.Friendship) => string,
+): Promise<FriendshipWithUser[]> {
+  if (rows.length === 0) return [];
+  const partnerIds = Array.from(new Set(rows.map(partnerIdOf)));
+  const partners = await db
+    .select({
+      id: schema.users.id,
+      name: schema.users.name,
+      email: schema.users.email,
+    })
+    .from(schema.users)
+    .where(inArray(schema.users.id, partnerIds));
+  const byId = new Map(partners.map((p) => [p.id, p]));
+  return rows.flatMap((r) => {
+    const user = byId.get(partnerIdOf(r));
+    if (!user) return []; // партнёр исчез (гонка с удалением) — пропускаем
+    return [{ friendshipId: r.id, createdAt: r.createdAt, user }];
+  });
+}
+
+/** Друзья с карточкой партнёра: партнёр — та сторона, что НЕ userId. R-7. */
+export async function listFriendsDetailed(
+  userId: string,
+): Promise<FriendshipWithUser[]> {
+  const rows = await listFriends(userId);
+  return attachPartner(rows, (r) =>
+    r.requesterId === userId ? r.addresseeId : r.requesterId,
+  );
+}
+
+/** Входящие заявки с карточкой отправителя (requester). R-7. */
+export async function listIncomingRequestsDetailed(
+  userId: string,
+): Promise<FriendshipWithUser[]> {
+  const rows = await listIncomingRequests(userId);
+  return attachPartner(rows, (r) => r.requesterId);
+}
+
+/** Исходящие заявки с карточкой адресата (addressee). R-7. */
+export async function listOutgoingRequestsDetailed(
+  userId: string,
+): Promise<FriendshipWithUser[]> {
+  const rows = await listOutgoingRequests(userId);
+  return attachPartner(rows, (r) => r.addresseeId);
 }

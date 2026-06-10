@@ -91,6 +91,16 @@ export default async function SettingsPage() {
             variant="ghost"
             className="text-foreground h-auto w-full justify-start py-3"
           >
+            <Link href="/friends" className="flex items-center justify-between">
+              <span>Друзья (сообщество)</span>
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            className="text-foreground h-auto w-full justify-start py-3"
+          >
             <Link href="/schedule" className="flex items-center justify-between">
               <span>Расписание тренировок (напоминания)</span>
               <ArrowRight className="size-4" />
