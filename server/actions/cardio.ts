@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   cancelCardioWorkout,
+  cloneCardio,
   finishCardioWorkout,
   logCardioBlock,
   startCardioFromPreset,
@@ -51,6 +52,23 @@ export async function startCardioAction(formData: FormData) {
 
   revalidatePath("/cardio");
   revalidatePath("/dashboard");
+  redirect(`/cardio/${id}`);
+}
+
+const reRunSchema = z.object({ cardioId: z.string().uuid() });
+
+/** G7b: повтор кардио одним кликом (из «Сегодня по расписанию» / истории) —
+ *  клонирует план в новый активный сеанс и ведёт сразу на него. */
+export async function reRunCardioAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = reRunSchema.safeParse({
+    cardioId: formData.get("cardioId"),
+  });
+  if (!parsed.success) throw new Error("Invalid cardioId");
+
+  const { id } = await cloneCardio(user.id, parsed.data.cardioId);
+  revalidatePath("/dashboard");
+  revalidatePath("/workouts");
   redirect(`/cardio/${id}`);
 }
 

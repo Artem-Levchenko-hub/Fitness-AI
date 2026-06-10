@@ -7,16 +7,27 @@ import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
 import { listEnabledSchedulesForUser } from "@/lib/repos/schedule.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
+import { reRunCardioAction } from "@/server/actions/cardio";
+import { reRunCircuitAction } from "@/server/actions/circuits";
 import { startWorkoutFromTemplateAction } from "@/server/actions/workouts";
 import type { WorkoutSchedule } from "@/db/schema";
 
-/** Куда ведёт строка «сегодня». G7b: силовой шаблон стартует ПРЯМО (один клик =
- *  новый активный сеанс из шаблона, без захода на detail-страницу). Круговая/
- *  кардио — это session-instance, их re-run = клон (следующий слайс), пока ведём
- *  на detail. Свободное расписание (нет привязки) → /create-пикер как раньше. */
+/** Куда ведёт строка «сегодня». G7b: привязанная заготовка стартует ПРЯМО одним
+ *  кликом — новый активный сеанс без захода на detail-страницу. Силовая = старт
+ *  из шаблона; круговая/кардио (session-instance) = клон плана (re-run). Свободное
+ *  расписание (нет привязки) → /create-пикер как раньше (<Link>). */
+type StartKind = "template" | "circuit" | "cardio";
 type PresetTarget =
-  | { kind: "template"; templateId: string; presetLabel: string }
+  | { kind: StartKind; id: string; presetLabel: string }
   | { kind: "link"; href: string; presetLabel: string | null };
+
+/** Server action + имя hidden-поля для каждого формата прямого старта (R-4 DRY —
+ *  рендер строки одинаков, различается только action+поле). */
+const START: Record<StartKind, { action: (fd: FormData) => Promise<void>; field: string }> = {
+  template: { action: startWorkoutFromTemplateAction, field: "templateId" },
+  circuit: { action: reRunCircuitAction, field: "circuitId" },
+  cardio: { action: reRunCardioAction, field: "cardioId" },
+};
 
 /** Привязка расписания → цель строки. NULL во всех 3 FK = «свободное»: ведём на
  *  /create-пикер (как раньше). Заготовка вне выборки/удалена (FK SET NULL) →
@@ -28,19 +39,19 @@ function resolvePreset(
   if (s.templateId)
     return {
       kind: "template",
-      templateId: s.templateId,
+      id: s.templateId,
       presetLabel: names.get(`template:${s.templateId}`) ?? "Силовая заготовка",
     };
   if (s.circuitWorkoutId)
     return {
-      kind: "link",
-      href: `/circuits/${s.circuitWorkoutId}`,
+      kind: "circuit",
+      id: s.circuitWorkoutId,
       presetLabel: names.get(`circuit:${s.circuitWorkoutId}`) ?? "Круговая",
     };
   if (s.cardioWorkoutId)
     return {
-      kind: "link",
-      href: `/cardio/${s.cardioWorkoutId}`,
+      kind: "cardio",
+      id: s.cardioWorkoutId,
       presetLabel: names.get(`cardio:${s.cardioWorkoutId}`) ?? "Кардио",
     };
   return { kind: "link", href: "/create", presetLabel: null };
@@ -111,10 +122,23 @@ export async function TodayScheduleCard({ userId }: { userId: string }) {
       <ul className="mt-3 space-y-2">
         {items.map(({ schedule, target }) => (
           <li key={schedule.id}>
-            {target.kind === "template" ? (
-              // G7b: силовой шаблон — прямой старт одним кликом (без detail-страницы).
-              <form action={startWorkoutFromTemplateAction}>
-                <input type="hidden" name="templateId" value={target.templateId} />
+            {target.kind === "link" ? (
+              <Link href={target.href} className={ROW_CLASS}>
+                <RowInner
+                  label={schedule.label}
+                  sub={target.presetLabel ?? "Выбрать формат тренировки"}
+                  cta={target.presetLabel ? "Начать" : "Выбрать"}
+                />
+              </Link>
+            ) : (
+              // G7b: привязанная заготовка — прямой старт одним кликом (силовая =
+              // старт из шаблона, круговая/кардио = клон плана в новый сеанс).
+              <form action={START[target.kind].action}>
+                <input
+                  type="hidden"
+                  name={START[target.kind].field}
+                  value={target.id}
+                />
                 <button type="submit" className={ROW_CLASS}>
                   <RowInner
                     label={schedule.label}
@@ -123,14 +147,6 @@ export async function TodayScheduleCard({ userId }: { userId: string }) {
                   />
                 </button>
               </form>
-            ) : (
-              <Link href={target.href} className={ROW_CLASS}>
-                <RowInner
-                  label={schedule.label}
-                  sub={target.presetLabel ?? "Выбрать формат тренировки"}
-                  cta={target.presetLabel ? "Начать" : "Выбрать"}
-                />
-              </Link>
             )}
           </li>
         ))}

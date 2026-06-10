@@ -94,6 +94,33 @@ export async function startCircuit(
   });
 }
 
+/** G7b re-run: клонирует прошлую круговую юзера в НОВЫЙ активный сеанс — копирует
+ *  план (имя, раунды, отдыхи, упражнения с целями), но НЕ логи раундов (свежий
+ *  старт). Делегирует в startCircuit → тот же G2-инвариант (отменяет прошлую
+ *  active-круговую). R-7: getCircuitForUser фильтрует по userId, чужую не клонируем. */
+export async function cloneCircuit(
+  userId: string,
+  sourceId: string,
+): Promise<{ id: string }> {
+  const src = await getCircuitForUser(userId, sourceId);
+  if (!src) throw new Error("Круговая не найдена или не твоя");
+
+  return startCircuit(userId, {
+    name: src.workout.name,
+    totalRounds: src.workout.totalRounds,
+    restBetweenRoundsSec: src.workout.restBetweenRoundsSec,
+    restBetweenExercisesSec: src.workout.restBetweenExercisesSec,
+    exercises: src.exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      kind: e.kind,
+      targetReps: e.targetReps,
+      targetDurationSec: e.targetDurationSec,
+      targetWeightKg: e.targetWeightKg,
+      notes: e.notes,
+    })),
+  });
+}
+
 export async function getCircuitForUser(
   userId: string,
   circuitId: string,

@@ -11,6 +11,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import { env } from "@/lib/env";
 import {
   cancelCircuit,
+  cloneCircuit,
   deleteCircuit,
   finishCircuit,
   logCircuitRound,
@@ -94,6 +95,23 @@ export async function startCircuitAction(formData: FormData) {
 
   revalidatePath("/circuits");
   revalidatePath("/dashboard");
+  redirect(`/circuits/${id}`);
+}
+
+const reRunSchema = z.object({ circuitId: z.string().uuid() });
+
+/** G7b: повтор круговой одним кликом (из «Сегодня по расписанию» / истории) —
+ *  клонирует план в новый активный сеанс и ведёт сразу на него. */
+export async function reRunCircuitAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = reRunSchema.safeParse({
+    circuitId: formData.get("circuitId"),
+  });
+  if (!parsed.success) throw new Error("Invalid circuitId");
+
+  const { id } = await cloneCircuit(user.id, parsed.data.circuitId);
+  revalidatePath("/dashboard");
+  revalidatePath("/workouts");
   redirect(`/circuits/${id}`);
 }
 

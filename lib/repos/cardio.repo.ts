@@ -108,6 +108,54 @@ export async function getCardioForUser(
   return { workout: w, blocks };
 }
 
+/** G7b re-run: клонирует прошлое кардио юзера в НОВЫЙ активный сеанс — копирует
+ *  план (имя, preset, planJson, блоки с плановой длительностью), но НЕ фактические
+ *  результаты (свежий старт). Копируем блоки напрямую, не пере-выводя из preset
+ *  (точнее для custom-параметров). G2-инвариант: отменяем прошлую active-кардио.
+ *  R-7: getCardioForUser фильтрует по userId, чужую не клонируем. */
+export async function cloneCardio(
+  userId: string,
+  sourceId: string,
+): Promise<{ id: string }> {
+  const src = await getCardioForUser(userId, sourceId);
+  if (!src) throw new Error("Кардио не найдено или не твоё");
+  if (src.blocks.length === 0) throw new Error("В кардио нет блоков для повтора");
+
+  return db.transaction(async (tx) => {
+    await tx
+      .update(schema.cardioWorkouts)
+      .set({ status: "cancelled", finishedAt: new Date() })
+      .where(
+        and(
+          eq(schema.cardioWorkouts.userId, userId),
+          eq(schema.cardioWorkouts.status, "active"),
+        ),
+      );
+
+    const cardioId = crypto.randomUUID();
+    await tx.insert(schema.cardioWorkouts).values({
+      id: cardioId,
+      userId,
+      name: src.workout.name,
+      preset: src.workout.preset,
+      planJson: src.workout.planJson,
+      status: "active",
+    });
+
+    await tx.insert(schema.cardioBlocks).values(
+      src.blocks.map((b) => ({
+        cardioWorkoutId: cardioId,
+        blockIndex: b.blockIndex,
+        kind: b.kind,
+        label: b.label,
+        plannedDurationSec: b.plannedDurationSec,
+      })),
+    );
+
+    return { id: cardioId };
+  });
+}
+
 export type LogBlockInput = {
   blockId: string;
   actualDurationSec: number;
