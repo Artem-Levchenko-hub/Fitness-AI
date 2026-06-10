@@ -436,6 +436,111 @@ export async function periodVolumeComparison(
   return { current, previous };
 }
 
+export type ExerciseTrend = {
+  exerciseId: string;
+  name: string;
+  /** Лучший оценочный 1RM (кг) за текущее окно периода. */
+  currentE1rm: number;
+  /** Лучший оценочный 1RM (кг) за предыдущее окно той же длины. */
+  previousE1rm: number;
+};
+
+/** Оценочный 1RM одного подхода — Epley × Brzycki avg, как в `oneRmTrend`.
+ *  Один источник формулы: тренд-график и инсайт «ключевое движение» совпадают. */
+function setE1rm(weightKg: number, reps: number): number {
+  if (reps < 1) return 0;
+  const epley = weightKg * (1 + reps / 30);
+  const brzycki = reps >= 37 ? 0 : (weightKg * 36) / (37 - reps);
+  return reps === 1 ? weightKg : (epley + brzycki) / 2;
+}
+
+/** Лучший e1RM по каждому упражнению за окно [from, to). Только completed +
+ *  working подходы (G1). */
+async function bestE1rmByExercise(
+  userId: string,
+  from: Date | null,
+  to: Date | null,
+): Promise<Map<string, { name: string; e1rm: number }>> {
+  const rows = await db
+    .select({
+      exerciseId: schema.workoutExercises.exerciseId,
+      name: schema.exercises.nameRu,
+      weight: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.workoutExercises.exerciseId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+        from ? gte(schema.workouts.startedAt, from) : undefined,
+        to ? lt(schema.workouts.startedAt, to) : undefined,
+      ),
+    );
+
+  const best = new Map<string, { name: string; e1rm: number }>();
+  for (const r of rows) {
+    const e1 = setE1rm(r.weight, r.reps);
+    const prev = best.get(r.exerciseId);
+    if (!prev || e1 > prev.e1rm) {
+      best.set(r.exerciseId, { name: r.name, e1rm: e1 });
+    }
+  }
+  return best;
+}
+
+/** Упражнение с наибольшим РОСТОМ оценочного 1RM: текущее окно периода против
+ *  предыдущего окна той же длины (G6 — «понятный вывод по конкретному
+ *  движению словами»). Сравниваем только упражнения с данными в ОБОИХ окнах —
+ *  честное сравнение, без ложного «прогресса с нуля» (G5). range='all' → null
+ *  (нет ограниченного прошлого окна для сравнения). */
+export async function topMoverByE1rm(
+  userId: string,
+  range: StatsRange,
+): Promise<ExerciseTrend | null> {
+  const from = rangeToFromDate(range);
+  if (!from) return null;
+
+  const lengthMs = Date.now() - from.getTime();
+  const prevFrom = new Date(from.getTime() - lengthMs);
+
+  const [current, previous] = await Promise.all([
+    bestE1rmByExercise(userId, from, null),
+    bestE1rmByExercise(userId, prevFrom, from),
+  ]);
+
+  let top: ExerciseTrend | null = null;
+  let bestGain = 0;
+  for (const [exerciseId, cur] of current) {
+    const prev = previous.get(exerciseId);
+    if (!prev || prev.e1rm <= 0) continue; // нет базы в прошлом окне
+    const gain = (cur.e1rm - prev.e1rm) / prev.e1rm;
+    if (top === null || gain > bestGain) {
+      bestGain = gain;
+      top = {
+        exerciseId,
+        name: cur.name,
+        currentE1rm: cur.e1rm,
+        previousE1rm: prev.e1rm,
+      };
+    }
+  }
+  return top;
+}
+
 /** Список упражнений, с которыми хоть раз тренировались — для селектора
  *  1RM trend. */
 export async function trainedExercises(

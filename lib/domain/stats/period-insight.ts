@@ -87,6 +87,83 @@ export function summarizeVolumeChange(
   }
 }
 
+/** Изменение оценочного 1RM ниже этого порога (в долях) считаем «держится» —
+ *  e1RM шумит от подхода к подходу, не каждый дрейф = тренд. */
+const E1RM_STAGNANT_PCT = 0.05;
+
+/** Прирост e1RM выше этого за одно окно физиологически маловероятен — скорее
+ *  опечатка в весе (G5). Не скрываем рост, но честно оговариваем. */
+const IMPLAUSIBLE_GAIN_PCT = 50;
+
+export type ExerciseTrendInput = {
+  /** Имя движения (нормализованное, как в каталоге упражнений). */
+  name: string;
+  /** Лучший e1RM (кг) за текущее окно периода. */
+  current: number;
+  /** Лучший e1RM (кг) за предыдущее окно той же длины. */
+  previous: number;
+};
+
+/**
+ * Человекочитаемый вывод о тренде ОДНОГО движения (G6): вместо абстрактного
+ * 1RM-графика — фраза «жим растёт на X%, 80 → 85 кг». Чистый домен (R-7).
+ * `previous <= 0` → "new" (нет базы для сравнения).
+ */
+export function summarizeExerciseTrend(
+  input: ExerciseTrendInput,
+  range: InsightRange,
+): PeriodInsight {
+  const { name, current, previous } = input;
+  const w = WINDOW_LABEL[range];
+
+  if (previous <= 0) {
+    return {
+      status: "new",
+      headline: `${name}: пока копим данные`,
+      detail: "Недостаточно истории для сравнения по этому движению.",
+      pct: null,
+    };
+  }
+
+  const status = trendStatus(previous, current, {
+    higherIsBetter: true,
+    epsilon: previous * E1RM_STAGNANT_PCT,
+  });
+  const pct = Math.round(((current - previous) / previous) * 100);
+  const absPct = Math.abs(pct);
+  const curKg = Math.round(current);
+  const prevKg = Math.round(previous);
+
+  switch (status) {
+    case "improved": {
+      const caution =
+        pct > IMPLAUSIBLE_GAIN_PCT
+          ? " Это очень резкий скачок — проверь, не закралась ли опечатка в вес."
+          : "";
+      return {
+        status,
+        headline: `${name} растёт 💪`,
+        detail: `Оценочный максимум за ${w.cur} вырос на ${absPct}% — ${prevKg} → ${curKg} кг.${caution}`,
+        pct,
+      };
+    }
+    case "regressed":
+      return {
+        status,
+        headline: `${name}: просадка`,
+        detail: `Оценочный максимум за ${w.cur} снизился на ${absPct}% — ${prevKg} → ${curKg} кг. Бывает после тяжёлой недели или недосыпа.`,
+        pct,
+      };
+    default:
+      return {
+        status: "stagnant",
+        headline: `${name}: держится`,
+        detail: `Оценочный максимум примерно как в прошлый ${w.prev} (~${curKg} кг). Чтобы сдвинуть — добавь вес или повтор.`,
+        pct,
+      };
+  }
+}
+
 /** Короткая подпись статуса (бейдж) — переиспользует общий словарь трендов. */
 export function periodInsightBadge(status: TrendStatus): string {
   return TREND_LABEL[status];

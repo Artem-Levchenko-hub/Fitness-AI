@@ -7,7 +7,10 @@ import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
 import { PeriodInsightCard } from "@/components/stats/PeriodInsightCard";
 import { requireUser } from "@/lib/auth/require-user";
-import { summarizeVolumeChange } from "@/lib/domain/stats/period-insight";
+import {
+  summarizeExerciseTrend,
+  summarizeVolumeChange,
+} from "@/lib/domain/stats/period-insight";
 import { listMeasurements } from "@/lib/repos/body.repo";
 import {
   dailyVolume,
@@ -15,6 +18,7 @@ import {
   periodVolumeComparison,
   rangeToFromDate,
   repRangeDistribution,
+  topMoverByE1rm,
   trainedExercises,
   topLineKpi,
   volumeByMuscle,
@@ -55,6 +59,7 @@ export default async function StatsPage({ searchParams }: Props) {
     exercises,
     measurements,
     volumeCompare,
+    topMover,
   ] = await Promise.all([
     topLineKpi(user.id, range),
     granularity === "week"
@@ -66,6 +71,7 @@ export default async function StatsPage({ searchParams }: Props) {
     trainedExercises(user.id),
     listMeasurements(user.id, 60),
     periodVolumeComparison(user.id, range),
+    topMoverByE1rm(user.id, range),
   ]);
 
   const periodInsight = summarizeVolumeChange(
@@ -73,6 +79,19 @@ export default async function StatsPage({ searchParams }: Props) {
     volumeCompare.previous,
     range,
   );
+
+  // Инсайт по ключевому движению (наибольший рост e1RM) — словами над графиком
+  // 1RM. null при range='all' или когда нет упражнения с данными в обоих окнах.
+  const moverInsight = topMover
+    ? summarizeExerciseTrend(
+        {
+          name: topMover.name,
+          current: topMover.currentE1rm,
+          previous: topMover.previousE1rm,
+        },
+        range,
+      )
+    : null;
 
   const currentExId = sp.ex && exercises.some((e) => e.id === sp.ex)
     ? sp.ex
@@ -118,6 +137,10 @@ export default async function StatsPage({ searchParams }: Props) {
       <PeriodPills />
 
       <PeriodInsightCard insight={periodInsight} />
+
+      {moverInsight ? (
+        <PeriodInsightCard insight={moverInsight} eyebrow="Ключевое движение" />
+      ) : null}
 
       <section className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi

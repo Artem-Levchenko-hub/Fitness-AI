@@ -6,13 +6,26 @@ import { TREND_TONE } from "@/lib/ui/trend-tone";
  *  вердикт «растёшь/стоишь/падаешь», цифры идут следом. Цвет/иконка — общие
  *  токены тренда (TREND_TONE), как у графиков и AI-разбора. Статус передан и
  *  текстом, и иконкой — не только цветом (R-41). */
-export function PeriodInsightCard({ insight }: { insight: PeriodInsight }) {
+export function PeriodInsightCard({
+  insight,
+  eyebrow,
+}: {
+  insight: PeriodInsight;
+  /** Опциональная надпись-метка над вердиктом (различает несколько карточек
+   *  на одном экране — напр. «Ключевое движение» против общего объёма). */
+  eyebrow?: string;
+}) {
   const tone = TREND_TONE[insight.status];
 
   return (
     <section
       className={`mt-4 rounded-2xl border border-border p-5 ${tone.bg}`}
     >
+      {eyebrow ? (
+        <p className="text-muted-foreground mb-1.5 text-[10px] font-medium tracking-[0.18em] uppercase">
+          {eyebrow}
+        </p>
+      ) : null}
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-base font-semibold tracking-tight">
