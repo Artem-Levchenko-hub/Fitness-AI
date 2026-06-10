@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
@@ -36,6 +37,10 @@ export const aiAnalyses = pgTable(
     content: text("content").notNull(),
     /** Structured Gemini JSON (TrainerResponse) — nullable для legacy markdown-only. */
     resultJson: jsonb("result_json"),
+    /** Capability-токен публичного шеринга разбора. NULL = не расшарен.
+     *  Непустое значение = доступен по публичной ссылке без авторизации
+     *  (сам токен — это право доступа). См. getSharedAnalysis (R-7-исключение). */
+    shareToken: text("share_token"),
     modelVersion: text("model_version").notNull(),
     promptTokens: integer("prompt_tokens"),
     completionTokens: integer("completion_tokens"),
@@ -47,6 +52,8 @@ export const aiAnalyses = pgTable(
     index("ai_analyses_user_idx").on(t.userId, t.createdAt),
     index("ai_analyses_workout_idx").on(t.workoutId),
     index("ai_analyses_circuit_workout_idx").on(t.circuitWorkoutId),
+    // NULLS DISTINCT по умолчанию → много нерасшаренных (NULL) строк не конфликтуют.
+    uniqueIndex("ai_analyses_share_token_unq").on(t.shareToken),
   ],
 );
 

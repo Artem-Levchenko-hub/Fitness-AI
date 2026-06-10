@@ -452,6 +452,83 @@ export async function getLatestTrainerResult(
   return row ?? null;
 }
 
+/** Включить публичный шеринг разбора. R-7: правит только СВОЙ разбор
+ *  (фильтр по userId). Идемпотентно — повторный вызов возвращает тот же
+ *  токен (не перевыпускаем, чтобы старая ссылка не протухла). Возвращает
+ *  capability-токен либо null, если разбор не найден / не принадлежит юзеру. */
+export async function enableAnalysisSharing(
+  userId: string,
+  analysisId: string,
+): Promise<string | null> {
+  const [existing] = await db
+    .select({ shareToken: schema.aiAnalyses.shareToken })
+    .from(schema.aiAnalyses)
+    .where(
+      and(
+        eq(schema.aiAnalyses.id, analysisId),
+        eq(schema.aiAnalyses.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!existing) return null;
+  if (existing.shareToken) return existing.shareToken;
+
+  const token = crypto.randomUUID();
+  await db
+    .update(schema.aiAnalyses)
+    .set({ shareToken: token })
+    .where(
+      and(
+        eq(schema.aiAnalyses.id, analysisId),
+        eq(schema.aiAnalyses.userId, userId),
+      ),
+    );
+  return token;
+}
+
+/** Отключить публичный шеринг (сбросить токен). R-7: только свой разбор.
+ *  Возвращает true, если строка обновлена. */
+export async function disableAnalysisSharing(
+  userId: string,
+  analysisId: string,
+): Promise<boolean> {
+  const rows = await db
+    .update(schema.aiAnalyses)
+    .set({ shareToken: null })
+    .where(
+      and(
+        eq(schema.aiAnalyses.id, analysisId),
+        eq(schema.aiAnalyses.userId, userId),
+      ),
+    )
+    .returning({ id: schema.aiAnalyses.id });
+  return rows.length > 0;
+}
+
+/** Публичное чтение расшаренного разбора по capability-токену.
+ *  СОЗНАТЕЛЬНОЕ R-7-исключение: сам токен (unguessable UUID) — это право
+ *  доступа, поэтому НЕТ фильтра по userId. Отдаём только non-PII поля
+ *  (никакого userId / email). null, если токен пустой или не найден. */
+export async function getSharedAnalysis(token: string): Promise<{
+  content: string;
+  resultJson: unknown;
+  modelVersion: string;
+  createdAt: Date;
+} | null> {
+  if (!token) return null;
+  const [row] = await db
+    .select({
+      content: schema.aiAnalyses.content,
+      resultJson: schema.aiAnalyses.resultJson,
+      modelVersion: schema.aiAnalyses.modelVersion,
+      createdAt: schema.aiAnalyses.createdAt,
+    })
+    .from(schema.aiAnalyses)
+    .where(eq(schema.aiAnalyses.shareToken, token))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function getActiveWorkoutId(userId: string): Promise<string | null> {
   const [row] = await db
     .select({ id: schema.workouts.id })

@@ -71,6 +71,13 @@
       "when": 1781650000000,
       "tag": "0009_friendships",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781072087397,
+      "tag": "0010_damp_cloak",
+      "breakpoints": true
     }
   ]
 }
