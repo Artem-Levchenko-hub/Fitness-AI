@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, Clock, Users } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clock, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -134,21 +134,27 @@ export default async function FriendsPage() {
         ) : (
           <ul className="space-y-3">
             {friends.map((f) => (
-              <li
-                key={f.friendshipId}
-                className="bg-card border-border flex items-center gap-3 rounded-2xl border p-4"
-              >
-                <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-                  {displayName(f.user).charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold tracking-tight">
-                    {displayName(f.user)}
-                  </p>
-                  <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                    {f.user.email}
-                  </p>
-                </div>
+              <li key={f.friendshipId}>
+                <Link
+                  href={`/friends/${f.user.id}`}
+                  className="bg-card hover:bg-accent/40 border-border flex min-h-14 items-center gap-3 rounded-2xl border p-4 transition-colors"
+                >
+                  <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+                    {displayName(f.user).charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold tracking-tight">
+                      {displayName(f.user)}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                      {f.user.email}
+                    </p>
+                  </div>
+                  <ChevronRight
+                    className="text-muted-foreground size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                </Link>
               </li>
             ))}
           </ul>

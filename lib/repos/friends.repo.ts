@@ -145,6 +145,55 @@ export async function findUserByEmail(
   return u ?? null;
 }
 
+/** Являются ли userId и otherId принятыми друзьями (в любом направлении)?
+ *  R-7: одна из сторон обязательно === userId — гейт для просмотра чужого
+ *  профиля/тренировок. Себя другом не считаем. */
+export async function areFriends(
+  userId: string,
+  otherId: string,
+): Promise<boolean> {
+  if (userId === otherId) return false;
+  const [row] = await db
+    .select({ id: schema.friendships.id })
+    .from(schema.friendships)
+    .where(
+      and(
+        eq(schema.friendships.status, "accepted"),
+        or(
+          and(
+            eq(schema.friendships.requesterId, userId),
+            eq(schema.friendships.addresseeId, otherId),
+          ),
+          and(
+            eq(schema.friendships.requesterId, otherId),
+            eq(schema.friendships.addresseeId, userId),
+          ),
+        ),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+/** Публичная карточка друга — ТОЛЬКО если otherId является принятым другом
+ *  userId. Иначе null. Единый R-7-гейт: чужие данные смотрим лишь по дружбе. */
+export async function getFriendProfile(
+  userId: string,
+  otherId: string,
+): Promise<FriendUser | null> {
+  if (!(await areFriends(userId, otherId))) return null;
+  const [u] = await db
+    .select({
+      id: schema.users.id,
+      name: schema.users.name,
+      email: schema.users.email,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, otherId))
+    .limit(1);
+  return u ?? null;
+}
+
 /** Дополнить строки дружбы карточкой «другого» пользователя одним запросом
  *  (inArray) вместо N+1. partnerIdOf указывает, какая сторона — партнёр. */
 async function attachPartner(
