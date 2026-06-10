@@ -221,14 +221,19 @@ export function ActiveCircuit({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, phase, currentExerciseIdx, currentRound]);
 
-  function startWorking() {
+  // forExercise — упражнение, на которое переходим. ОБЯЗАТЕЛЬНО передавать
+  // при переходах: вызов идёт сразу после setCurrentExerciseIdx/Round, поэтому
+  // `currentExercise` ещё СТАРЫЙ (state обновится только со след. рендера —
+  // React docs «next state value»). Иначе вес/повторы заполнятся от прошлого
+  // упражнения и сохранятся не туда (G4: вес приседа лип к подтягиваниям).
+  function startWorking(forExercise: CircuitExerciseWithName | null = currentExercise) {
     ensureAudio();
     void acquireWakeLock();
     beepWork();
     setOverrideReps("");
     setOverrideWeight(
-      currentExercise?.targetWeightKg != null
-        ? String(currentExercise.targetWeightKg)
+      forExercise?.targetWeightKg != null
+        ? String(forExercise.targetWeightKg)
         : "",
     );
     setElapsedSec(0);
@@ -305,7 +310,7 @@ export function ActiveCircuit({
         setRunning(true);
       } else {
         setCurrentExerciseIdx(nextExerciseIdx);
-        startWorking();
+        startWorking(exercises[nextExerciseIdx] ?? null);
       }
       return;
     }
@@ -331,18 +336,19 @@ export function ActiveCircuit({
     } else {
       setCurrentRound(nextRound);
       setCurrentExerciseIdx(0);
-      startWorking();
+      startWorking(exercises[0] ?? null);
     }
   }
 
   function advanceAfterRest() {
     if (phase === "rest_between_exercises") {
-      setCurrentExerciseIdx((i) => i + 1);
-      startWorking();
+      const nextIdx = currentExerciseIdx + 1;
+      setCurrentExerciseIdx(nextIdx);
+      startWorking(exercises[nextIdx] ?? null);
     } else if (phase === "rest_between_rounds") {
       setCurrentRound((r) => r + 1);
       setCurrentExerciseIdx(0);
-      startWorking();
+      startWorking(exercises[0] ?? null);
     }
   }
 
@@ -441,7 +447,7 @@ export function ActiveCircuit({
             type="button"
             size="xl"
             className="w-full"
-            onClick={startWorking}
+            onClick={() => startWorking()}
           >
             <Play className="size-5 fill-current" />
             Старт
