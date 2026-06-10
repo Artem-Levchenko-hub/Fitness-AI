@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type {
   CircuitRoundLog,
@@ -70,6 +71,9 @@ export function ActiveCircuit({
   // Override полей при логе раунда: reps/weight можно править вручную.
   const [overrideReps, setOverrideReps] = useState<string>("");
   const [overrideWeight, setOverrideWeight] = useState<string>("");
+  // Самочувствие после круговой (F3 feeling-note, распространённый на круговую) —
+  // тренер учтёт в разборе, видно в истории.
+  const [finishNote, setFinishNote] = useState<string>("");
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -364,6 +368,8 @@ export function ActiveCircuit({
     setRunning(false);
     const fd = new FormData();
     fd.append("circuitId", workout.id);
+    const note = finishNote.trim();
+    if (note) fd.append("notes", note.slice(0, 500));
     await finishCircuitAction(fd);
   }
 
@@ -389,6 +395,24 @@ export function ActiveCircuit({
         <p className="text-muted-foreground mt-1 text-sm">
           Сохраним и запустим разбор тренером.
         </p>
+        <div className="mt-4 space-y-1.5 text-left">
+          <label
+            htmlFor="circuit-finish-note"
+            className="text-muted-foreground block text-xs font-medium"
+          >
+            Как прошла круговая?{" "}
+            <span className="opacity-70">(необязательно)</span>
+          </label>
+          <Textarea
+            id="circuit-finish-note"
+            value={finishNote}
+            onChange={(e) => setFinishNote(e.target.value)}
+            rows={3}
+            maxLength={500}
+            placeholder="Самочувствие, энергия, что было тяжело — тренер учтёт это в разборе"
+            className="resize-none"
+          />
+        </div>
         <Button size="xl" className="mt-4 w-full" onClick={finishAll}>
           Завершить и сохранить
         </Button>
