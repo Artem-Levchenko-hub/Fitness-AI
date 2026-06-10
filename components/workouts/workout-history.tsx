@@ -138,6 +138,57 @@ export function HistoryCard({ item }: { item: HistoryItem }) {
   );
 }
 
+/** Компактный тайл «Последняя» для дашборда: отражает последнюю сессию
+ *  ЛЮБОГО формата (силовая/круговая/кардио), а не только силовую — единый
+ *  поток. Одна заглавная метрика на формат, ведёт в свой detail-роут. */
+export function LastSessionMini({ item }: { item: HistoryItem }) {
+  const href = `${FORMAT_HREF[item.kind]}/${item.id}`;
+
+  return (
+    <Link
+      href={href}
+      className="bg-card hover:bg-accent/40 border-border block rounded-2xl border p-4 transition-colors"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          Последняя
+        </p>
+        <FormatPill label={formatLabel(item)} />
+      </div>
+      <p className="mt-1 truncate text-base font-semibold tracking-tight">
+        {item.name}
+      </p>
+      <p className="text-muted-foreground mt-0.5 text-xs">
+        {formatShortDate(item.startedAt)}
+      </p>
+      <div className="text-muted-foreground tabular mt-3 flex items-center justify-between text-xs">
+        <span>{lastSessionHeadline(item)}</span>
+        {item.kind === "strength" && item.hasAnalysis ? (
+          <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+            <Sparkles className="size-3" />
+            AI
+          </span>
+        ) : null}
+      </div>
+    </Link>
+  );
+}
+
+/** Одна короткая метрика-заголовок на формат для компактного тайла. */
+function lastSessionHeadline(item: HistoryItem): string {
+  switch (item.kind) {
+    case "strength":
+      return `${item.setCount} подходов`;
+    case "circuit":
+      return `${item.totalRounds} кругов · ${item.exerciseCount} упр.`;
+    case "cardio": {
+      const sec = item.totalActualSec || item.totalPlannedSec;
+      const min = sec > 0 ? Math.max(1, Math.round(sec / 60)) : null;
+      return min !== null ? `${min} мин` : CARDIO_FORMAT_LABEL[item.preset];
+    }
+  }
+}
+
 function FormatPill({ label }: { label: string }) {
   return (
     <span className="bg-muted/60 text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">

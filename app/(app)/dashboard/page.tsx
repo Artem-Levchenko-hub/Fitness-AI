@@ -1,10 +1,4 @@
-import {
-  ArrowRight,
-  ChevronRight,
-  Dumbbell,
-  Plus,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, ChevronRight, Dumbbell, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -16,6 +10,7 @@ import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
 import {
   buildHistory,
   HistoryCard,
+  LastSessionMini,
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
 import {
@@ -52,14 +47,15 @@ export default async function DashboardPage() {
   ]);
 
   const completed = recent.filter((w) => w.status === "completed");
+  // `last` = последняя СИЛОВАЯ — нужна для AI-тренера (анализирует силовые).
   const last = completed[0] ?? null;
   const week = sumThisWeek(completed);
-  // Единый поток: «Недавние» сливает силовые + круговые + кардио (как /workouts),
-  // а не показывает только силовые — иначе круговая/кардио-сессия «пропадает».
-  const recentHistory = buildHistory(recent, recentCircuits, recentCardio).slice(
-    0,
-    3,
-  );
+  // Единый поток: «Недавние» и тайл «Последняя» сливают силовые + круговые +
+  // кардио (как /workouts), а не показывают только силовые — иначе круговая/
+  // кардио-сессия «пропадает» и форматы живут в разных мирах.
+  const history = buildHistory(recent, recentCircuits, recentCardio);
+  const recentHistory = history.slice(0, 3);
+  const latestSession = history[0] ?? null;
 
   // Единый вход: один CTA «Начать тренировку» → /create (пикер формата) вместо
   // трёх формат-тайлов. Активные сессии любого формата — общий ResumeBanner.
@@ -101,8 +97,8 @@ export default async function DashboardPage() {
           workouts={week.count}
           tonnage={week.tonnage}
         />
-        {last ? (
-          <LastWorkoutMini workout={last} />
+        {latestSession ? (
+          <LastSessionMini item={latestSession} />
         ) : (
           <EmptyMini />
         )}
@@ -195,39 +191,6 @@ function WeekCard({ workouts, tonnage }: { workouts: number; tonnage: number }) 
         kg·reps
       </p>
     </div>
-  );
-}
-
-function LastWorkoutMini({ workout }: { workout: RecentWorkout }) {
-  return (
-    <Link
-      href={`/workouts/${workout.id}`}
-      className="bg-card hover:bg-accent/40 border-border block rounded-2xl border p-4 transition-colors"
-    >
-      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-        Последняя
-      </p>
-      <p className="mt-1 truncate text-base font-semibold tracking-tight">
-        {workout.name}
-      </p>
-      <p className="text-muted-foreground mt-0.5 text-xs">
-        {workout.startedAt.toLocaleDateString("ru-RU", {
-          day: "numeric",
-          month: "short",
-        })}
-      </p>
-      <div className="text-muted-foreground tabular mt-3 flex items-center justify-between text-xs">
-        <span>
-          {workout.setCount} подходов
-        </span>
-        {workout.hasAnalysis ? (
-          <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-            <Sparkles className="size-3" />
-            AI
-          </span>
-        ) : null}
-      </div>
-    </Link>
   );
 }
 
