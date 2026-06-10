@@ -1,0 +1,246 @@
+import { ChevronRight, Sparkles } from "lucide-react";
+import Link from "next/link";
+
+import type { CardioPresetKind } from "@/lib/domain/cardio/presets";
+import type { CardioSummary } from "@/lib/repos/cardio.repo";
+import type { CircuitSummary } from "@/lib/repos/circuits.repo";
+import type { RecentWorkout } from "@/lib/repos/workouts.repo";
+
+/** Единая история: силовые + круговые + кардио в одном списке с неяркими
+ *  подписями формата (F5). Каждый формат ведёт в свой detail-роут и
+ *  показывает свои метрики; общая оболочка (дата · формат · название).
+ *  Переиспользуется на /workouts (вся история по неделям) и на дашборде
+ *  («Недавние» — один поток вместо трёх разрозненных списков по типу). */
+export type HistoryItem =
+  | {
+      kind: "strength";
+      id: string;
+      name: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      setCount: number;
+      tonnageKg: number;
+      hasAnalysis: boolean;
+    }
+  | {
+      kind: "circuit";
+      id: string;
+      name: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      totalRounds: number;
+      exerciseCount: number;
+    }
+  | {
+      kind: "cardio";
+      id: string;
+      name: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      preset: CardioPresetKind;
+      totalActualSec: number;
+      totalPlannedSec: number;
+      hrAvg: number | null;
+    };
+
+const CARDIO_FORMAT_LABEL: Record<CardioPresetKind, string> = {
+  tabata: "Tabata",
+  norwegian_4x4: "4×4",
+  emom: "EMOM",
+  custom: "Кардио",
+};
+
+const FORMAT_HREF: Record<HistoryItem["kind"], string> = {
+  strength: "/workouts",
+  circuit: "/circuits",
+  cardio: "/cardio",
+};
+
+/** Сливает три источника в один хронологический список (новые сверху),
+ *  оставляя только завершённые сессии. */
+export function buildHistory(
+  strength: RecentWorkout[],
+  circuits: CircuitSummary[],
+  cardio: CardioSummary[],
+): HistoryItem[] {
+  const items: HistoryItem[] = [
+    ...strength
+      .filter((w) => w.status === "completed")
+      .map((w): HistoryItem => ({ kind: "strength", ...w })),
+    ...circuits
+      .filter((c) => c.status === "completed")
+      .map(
+        (c): HistoryItem => ({
+          kind: "circuit",
+          id: c.id,
+          name: c.name,
+          startedAt: c.startedAt,
+          finishedAt: c.finishedAt,
+          totalRounds: c.totalRounds,
+          exerciseCount: c.exerciseCount,
+        }),
+      ),
+    ...cardio
+      .filter((c) => c.status === "completed")
+      .map(
+        (c): HistoryItem => ({
+          kind: "cardio",
+          id: c.id,
+          name: c.name,
+          startedAt: c.startedAt,
+          finishedAt: c.finishedAt,
+          preset: c.preset,
+          totalActualSec: c.totalActualSec,
+          totalPlannedSec: c.totalPlannedSec,
+          hrAvg: c.hrAvg,
+        }),
+      ),
+  ];
+
+  return items.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+}
+
+export function HistoryCard({ item }: { item: HistoryItem }) {
+  const href = `${FORMAT_HREF[item.kind]}/${item.id}`;
+
+  return (
+    <Link
+      href={href}
+      className="bg-card hover:bg-accent/40 border-border block rounded-2xl border p-4 transition-colors"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+              {formatShortDate(item.startedAt)}
+            </p>
+            <FormatPill label={formatLabel(item)} />
+          </div>
+          <h3 className="mt-0.5 truncate text-base font-semibold tracking-tight">
+            {item.name}
+          </h3>
+          <HistoryMetrics item={item} />
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          {item.kind === "strength" && item.hasAnalysis ? (
+            <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+              <Sparkles className="size-3" />
+              AI
+            </span>
+          ) : null}
+          <ChevronRight
+            className="text-muted-foreground size-4"
+            aria-hidden="true"
+          />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function FormatPill({ label }: { label: string }) {
+  return (
+    <span className="bg-muted/60 text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+      {label}
+    </span>
+  );
+}
+
+function formatLabel(item: HistoryItem): string {
+  switch (item.kind) {
+    case "strength":
+      return "Силовая";
+    case "circuit":
+      return "Круговая";
+    case "cardio":
+      return CARDIO_FORMAT_LABEL[item.preset];
+  }
+}
+
+function HistoryMetrics({ item }: { item: HistoryItem }) {
+  switch (item.kind) {
+    case "strength": {
+      const min = durationMinutes(item.startedAt, item.finishedAt);
+      return (
+        <dl className="text-muted-foreground tabular mt-3 grid grid-cols-3 gap-3 text-xs">
+          <KPI label="подходов" value={String(item.setCount)} />
+          <KPI
+            label="kg·reps"
+            value={Math.round(item.tonnageKg).toLocaleString("ru-RU")}
+          />
+          <KPI label="мин" value={min?.toString() ?? "—"} />
+        </dl>
+      );
+    }
+    case "circuit":
+      return (
+        <dl className="text-muted-foreground tabular mt-3 grid grid-cols-3 gap-3 text-xs">
+          <KPI label="кругов" value={String(item.totalRounds)} />
+          <KPI label="упр." value={String(item.exerciseCount)} />
+          <KPI
+            label="мин"
+            value={
+              durationMinutes(item.startedAt, item.finishedAt)?.toString() ??
+              "—"
+            }
+          />
+        </dl>
+      );
+    case "cardio": {
+      const sec = item.totalActualSec || item.totalPlannedSec;
+      const min = sec > 0 ? Math.max(1, Math.round(sec / 60)) : null;
+      return (
+        <dl className="text-muted-foreground tabular mt-3 grid grid-cols-3 gap-3 text-xs">
+          <KPI label="мин" value={min?.toString() ?? "—"} />
+          <KPI label="bpm" value={item.hrAvg?.toString() ?? "—"} />
+          <KPI label="формат" value={CARDIO_FORMAT_LABEL[item.preset]} />
+        </dl>
+      );
+    }
+  }
+}
+
+function KPI({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-foreground tabular text-sm font-semibold">{value}</p>
+      <p className="mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+function durationMinutes(
+  startedAt: Date,
+  finishedAt: Date | null,
+): number | null {
+  if (!finishedAt) return null;
+  return Math.max(
+    1,
+    Math.round((finishedAt.getTime() - startedAt.getTime()) / 60_000),
+  );
+}
+
+function formatShortDate(d: Date): string {
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return `Сегодня · ${d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate();
+  if (isYesterday) {
+    return `Вчера · ${d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  return d.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "short",
+    weekday: "short",
+  });
+}

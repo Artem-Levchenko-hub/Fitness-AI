@@ -15,11 +15,16 @@ import { CircuitTile } from "@/components/dashboard/CircuitTile";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
+import {
+  buildHistory,
+  HistoryCard,
+} from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   getActiveCardioId,
   listRecentCardio,
 } from "@/lib/repos/cardio.repo";
+import { listCircuits } from "@/lib/repos/circuits.repo";
 import {
   getActiveWorkoutId,
   listRecentWorkouts,
@@ -32,17 +37,25 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const name = user.name?.split(" ")[0] ?? user.email.split("@")[0];
 
-  const [recent, activeId, recentCardio, activeCardioId] = await Promise.all([
-    listRecentWorkouts(user.id, 30),
-    getActiveWorkoutId(user.id),
-    listRecentCardio(user.id, 5),
-    getActiveCardioId(user.id),
-  ]);
+  const [recent, activeId, recentCardio, activeCardioId, recentCircuits] =
+    await Promise.all([
+      listRecentWorkouts(user.id, 30),
+      getActiveWorkoutId(user.id),
+      listRecentCardio(user.id, 10),
+      getActiveCardioId(user.id),
+      listCircuits(user.id, 10),
+    ]);
 
   const completed = recent.filter((w) => w.status === "completed");
   const last = completed[0] ?? null;
   const week = sumThisWeek(completed);
   const lastCardio = recentCardio.find((c) => c.status === "completed") ?? null;
+  // Единый поток: «Недавние» сливает силовые + круговые + кардио (как /workouts),
+  // а не показывает только силовые — иначе круговая/кардио-сессия «пропадает».
+  const recentHistory = buildHistory(recent, recentCircuits, recentCardio).slice(
+    0,
+    3,
+  );
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -89,7 +102,7 @@ export default async function DashboardPage() {
         <TrainerTrigger lastWorkoutId={last?.id ?? null} />
       </section>
 
-      {completed.length > 0 ? (
+      {recentHistory.length > 0 ? (
         <section className="mt-8">
           <div className="mb-3 flex items-center justify-between px-1">
             <h2 className="font-serif text-2xl font-normal tracking-tight">
@@ -104,9 +117,9 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <ul className="space-y-2">
-            {completed.slice(0, 3).map((w) => (
-              <li key={w.id}>
-                <RecentRow workout={w} />
+            {recentHistory.map((it) => (
+              <li key={`${it.kind}-${it.id}`}>
+                <HistoryCard item={it} />
               </li>
             ))}
           </ul>
@@ -299,34 +312,6 @@ function EmptyMini() {
         <ArrowRight className="size-3" />
       </Link>
     </div>
-  );
-}
-
-function RecentRow({ workout }: { workout: RecentWorkout }) {
-  return (
-    <Link
-      href={`/workouts/${workout.id}`}
-      className="bg-card hover:bg-accent/40 border-border flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-colors"
-    >
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold tracking-tight">
-          {workout.name}
-        </p>
-        <p className="text-muted-foreground mt-0.5 text-xs">
-          {workout.startedAt.toLocaleDateString("ru-RU", {
-            day: "numeric",
-            month: "short",
-            weekday: "short",
-          })}
-          {" · "}
-          {workout.setCount} подходов
-        </p>
-      </div>
-      {workout.hasAnalysis ? (
-        <Sparkles className="text-primary size-4" aria-label="есть AI-анализ" />
-      ) : null}
-      <ChevronRight className="text-muted-foreground size-4" />
-    </Link>
   );
 }
 
