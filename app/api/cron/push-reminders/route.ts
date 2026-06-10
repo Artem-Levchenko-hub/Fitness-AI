@@ -135,17 +135,27 @@ export async function POST(req: Request) {
       }
 
       // Тренировка: по расписанию (день недели + локальный час).
-      // Дедуп по kind+день → одно напоминание о тренировке в сутки, даже
-      // если несколько расписаний совпали (достаточно для v1).
+      // Дедуп по kind+ЧАС (а не по дню) → разрешаем несколько напоминаний в
+      // сутки, если у юзера расписания на разные часы (напр. Ноги 18:00 +
+      // Кардио 20:00). Все расписания на ТЕКУЩИЙ час объединяем в одно
+      // уведомление (без спама), названия через запятую.
       const isoDay = localIsoDay(now, tz);
       const schedules = await listEnabledSchedulesForUser(u.id);
-      const due = schedules.find(
+      const due = schedules.filter(
         (s) => s.hour === hour && s.daysOfWeek.includes(isoDay),
       );
-      if (due && !(await alreadySentToday(u.id, "workout_reminder", now))) {
+      if (
+        due.length > 0 &&
+        !(await alreadySentSince(
+          u.id,
+          "workout_reminder",
+          startOfHour(now),
+        ))
+      ) {
+        const label = due.map((s) => s.label).join(", ");
         await sendPushToUser(u.id, subs, {
           kind: "workout_reminder",
-          title: `🏋️ Пора тренироваться: ${due.label}`,
+          title: `🏋️ Пора тренироваться: ${label}`,
           body: "Открой приложение и начни тренировку.",
           url: "/create",
           tag: "workout-reminder",
@@ -168,13 +178,19 @@ export async function GET(req: Request) {
   return POST(req);
 }
 
-async function alreadySentToday(
+/** Начало текущего UTC-часа — граница окна дедупа для почасовых напоминаний. */
+function startOfHour(now: Date): Date {
+  const d = new Date(now);
+  d.setUTCMinutes(0, 0, 0);
+  return d;
+}
+
+/** Уже слали уведомление этого kind с момента `since` (с реальной доставкой)? */
+async function alreadySentSince(
   userId: string,
   kind: typeof schema.pushKind.enumValues[number],
-  now: Date,
+  since: Date,
 ): Promise<boolean> {
-  const todayStart = new Date(now);
-  todayStart.setUTCHours(0, 0, 0, 0);
   const [row] = await db
     .select({ id: schema.notificationsLog.id })
     .from(schema.notificationsLog)
@@ -182,10 +198,20 @@ async function alreadySentToday(
       and(
         eq(schema.notificationsLog.userId, userId),
         eq(schema.notificationsLog.kind, kind),
-        gte(schema.notificationsLog.sentAt, todayStart),
+        gte(schema.notificationsLog.sentAt, since),
         sql`${schema.notificationsLog.deliveredCount} > 0`,
       ),
     )
     .limit(1);
   return !!row;
+}
+
+async function alreadySentToday(
+  userId: string,
+  kind: typeof schema.pushKind.enumValues[number],
+  now: Date,
+): Promise<boolean> {
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
+  return alreadySentSince(userId, kind, todayStart);
 }
