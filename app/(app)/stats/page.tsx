@@ -5,11 +5,14 @@ import { FrequencyHeatmap } from "@/components/charts/FrequencyHeatmap";
 import { MuscleVolumeBars } from "@/components/charts/MuscleVolumeChart";
 import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
+import { PeriodInsightCard } from "@/components/stats/PeriodInsightCard";
 import { requireUser } from "@/lib/auth/require-user";
+import { summarizeVolumeChange } from "@/lib/domain/stats/period-insight";
 import { listMeasurements } from "@/lib/repos/body.repo";
 import {
   dailyVolume,
   oneRmTrend,
+  periodVolumeComparison,
   rangeToFromDate,
   repRangeDistribution,
   trainedExercises,
@@ -51,6 +54,7 @@ export default async function StatsPage({ searchParams }: Props) {
     frequency,
     exercises,
     measurements,
+    volumeCompare,
   ] = await Promise.all([
     topLineKpi(user.id, range),
     granularity === "week"
@@ -61,7 +65,14 @@ export default async function StatsPage({ searchParams }: Props) {
     workoutFrequency(user.id, "365d"),
     trainedExercises(user.id),
     listMeasurements(user.id, 60),
+    periodVolumeComparison(user.id, range),
   ]);
+
+  const periodInsight = summarizeVolumeChange(
+    volumeCompare.current,
+    volumeCompare.previous,
+    range,
+  );
 
   const currentExId = sp.ex && exercises.some((e) => e.id === sp.ex)
     ? sp.ex
@@ -105,6 +116,8 @@ export default async function StatsPage({ searchParams }: Props) {
       </header>
 
       <PeriodPills />
+
+      <PeriodInsightCard insight={periodInsight} />
 
       <section className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi

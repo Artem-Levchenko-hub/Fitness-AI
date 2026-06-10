@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -368,6 +368,72 @@ export async function topLineKpi(
     totalReps: Number(agg?.reps ?? 0),
     totalTonnageKg: Number(agg?.tonnage ?? 0),
   };
+}
+
+export type PeriodVolumeComparison = {
+  /** Working-тоннаж за текущее окно периода. */
+  current: number;
+  /** Working-тоннаж за предыдущее окно той же длины, или null если сравнить
+   *  не с чем (range='all' — нет ограниченного прошлого окна). */
+  previous: number | null;
+};
+
+/** Working-тоннаж (вес × повторы) за произвольное окно [from, to). Только
+ *  completed-тренировки (G1). `from`/`to` null → без соответствующей границы. */
+async function workingTonnage(
+  userId: string,
+  from: Date | null,
+  to: Date | null,
+): Promise<number> {
+  const [agg] = await db
+    .select({
+      tonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+        from ? gte(schema.workouts.startedAt, from) : undefined,
+        to ? lt(schema.workouts.startedAt, to) : undefined,
+      ),
+    );
+
+  return Number(agg?.tonnage ?? 0);
+}
+
+/** Сравнение объёма текущего периода с предыдущим окном той же длины —
+ *  для человекочитаемого вывода «растёшь/стоишь/падаешь» (G6). */
+export async function periodVolumeComparison(
+  userId: string,
+  range: StatsRange,
+): Promise<PeriodVolumeComparison> {
+  const from = rangeToFromDate(range);
+
+  // range='all' → окно неограниченно, сравнивать не с чем.
+  if (!from) {
+    const current = await workingTonnage(userId, null, null);
+    return { current, previous: null };
+  }
+
+  const lengthMs = Date.now() - from.getTime();
+  const prevFrom = new Date(from.getTime() - lengthMs);
+
+  const [current, previous] = await Promise.all([
+    workingTonnage(userId, from, null),
+    workingTonnage(userId, prevFrom, from),
+  ]);
+
+  return { current, previous };
 }
 
 /** Список упражнений, с которыми хоть раз тренировались — для селектора
