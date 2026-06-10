@@ -2,7 +2,11 @@ import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
+import {
+  bestEstimatedOneRepMax,
+  bodyweightEffectiveLoad,
+  totalVolume,
+} from "@/lib/domain";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
 
@@ -13,6 +17,7 @@ type WorkoutSummary = {
   exercises: Array<{
     exerciseId: string;
     nameRu: string;
+    isBodyweight: boolean;
     sets: Array<{
       weightKg: number;
       reps: number;
@@ -44,6 +49,10 @@ export async function buildCoachContext(
   const since = new Date(Date.now() - HISTORY_DAYS * 24 * 60 * 60 * 1000);
 
   const pastWorkouts = await loadPastWorkouts(userId, workoutId, since);
+  // Текущий вес тела — для численной эффективной нагрузки bodyweight-упражнений.
+  // Историю веса тела по дате не храним → к прошлым тренировкам применяем тот же
+  // вес (аппроксимация: за 60 дней колебания малы относительно тотала).
+  const bodyweightKg = await loadLatestBodyweight(userId);
 
   const exerciseNotes = exerciseIds.length
     ? await db
@@ -90,7 +99,9 @@ export async function buildCoachContext(
 
   const sections: string[] = [];
 
-  sections.push(`# Сегодняшняя тренировка\n\n${formatWorkout(todayWorkout)}`);
+  sections.push(
+    `# Сегодняшняя тренировка\n\n${formatWorkout(todayWorkout, bodyweightKg)}`,
+  );
 
   if (oneRmTrends.length > 0) {
     sections.push(
@@ -107,7 +118,7 @@ export async function buildCoachContext(
   if (pastWorkouts.length > 0) {
     sections.push(
       `# Последние ${pastWorkouts.length} тренировок (полностью, set-by-set)\n\n${pastWorkouts
-        .map(formatWorkout)
+        .map((w) => formatWorkout(w, bodyweightKg))
         .join("\n\n")}`,
     );
   }
@@ -161,6 +172,7 @@ async function loadWorkoutSummary(
       exerciseId: schema.workoutExercises.exerciseId,
       position: schema.workoutExercises.position,
       nameRu: schema.exercises.nameRu,
+      isBodyweight: schema.exercises.isBodyweight,
     })
     .from(schema.workoutExercises)
     .innerJoin(
@@ -193,6 +205,7 @@ async function loadWorkoutSummary(
     exercises: exerciseRows.map((r) => ({
       exerciseId: r.exerciseId,
       nameRu: r.nameRu,
+      isBodyweight: r.isBodyweight,
       sets: (setsByWe.get(r.id) ?? []).map((s) => ({
         weightKg: s.weightKg,
         reps: s.reps,
@@ -235,6 +248,7 @@ async function loadPastWorkouts(
       workoutId: schema.workoutExercises.workoutId,
       exerciseId: schema.workoutExercises.exerciseId,
       nameRu: schema.exercises.nameRu,
+      isBodyweight: schema.exercises.isBodyweight,
       position: schema.workoutExercises.position,
     })
     .from(schema.workoutExercises)
@@ -267,6 +281,7 @@ async function loadPastWorkouts(
     arr.push({
       exerciseId: ex.exerciseId,
       nameRu: ex.nameRu,
+      isBodyweight: ex.isBodyweight,
       sets: (setsByWe.get(ex.we_id) ?? []).map((s) => ({
         weightKg: s.weightKg,
         reps: s.reps,
@@ -378,7 +393,10 @@ async function loadVolumeByMuscle(
     .sort((a, b) => b.volume - a.volume);
 }
 
-function formatWorkout(w: WorkoutSummary): string {
+function formatWorkout(
+  w: WorkoutSummary,
+  bodyweightKg?: number | null,
+): string {
   const lines = [`**${w.name}** · ${formatDate(w.startedAt)}`];
   for (const e of w.exercises) {
     if (e.sets.length === 0) {
@@ -397,11 +415,32 @@ function formatWorkout(w: WorkoutSummary): string {
       .join(", ");
     const tv = totalVolume(e.sets);
     const e1rm = bestEstimatedOneRepMax(e.sets);
+    // Для bodyweight-упражнений введённый вес = добавка → даём AI численную
+    // эффективную нагрузку (вес тела + добавка) и долю добавки в тотале.
+    const bwLoad =
+      e.isBodyweight && bodyweightKg != null
+        ? bodyweightEffectiveLoad(bodyweightKg, e.sets)
+        : null;
+    const bwLine = bwLoad
+      ? `\n  вес тела ${bodyweightKg} кг → эфф. нагрузка top-set ≈ ${bwLoad.effectiveKg} кг (добавка ${bwLoad.addedKg} кг = ${bwLoad.pct}% тотала)`
+      : "";
     lines.push(
-      `- **${e.nameRu}**: ${setsStr}\n  vol=${Math.round(tv)} kg·reps, e1RM=${e1rm.toFixed(1)} kg`,
+      `- **${e.nameRu}**: ${setsStr}\n  vol=${Math.round(tv)} kg·reps, e1RM=${e1rm.toFixed(1)} kg${bwLine}`,
     );
   }
   return lines.join("\n");
+}
+
+/** Последний записанный вес тела атлета (kg) или null. Используется для
+ *  численной эффективной нагрузки bodyweight-упражнений в formatWorkout. */
+async function loadLatestBodyweight(userId: string): Promise<number | null> {
+  const [body] = await db
+    .select({ weightKg: schema.bodyMeasurements.weightKg })
+    .from(schema.bodyMeasurements)
+    .where(eq(schema.bodyMeasurements.userId, userId))
+    .orderBy(desc(schema.bodyMeasurements.measuredAt))
+    .limit(1);
+  return body?.weightKg ?? null;
 }
 
 /** Блок «Профиль атлета» для AI: вес тела + рост + возраст + явная подсказка
