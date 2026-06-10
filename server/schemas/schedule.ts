@@ -13,6 +13,13 @@ export const scheduleSchema = z.object({
     .min(1, "Выберите хотя бы один день")
     .transform((days) => Array.from(new Set(days)).sort((a, b) => a - b)),
   hour: z.coerce.number().int().min(0).max(23),
+  // Опц. привязка к конкретной заготовке (G7a). Формат "kind:id", где
+  // kind ∈ {template, circuit, cardio}. Пусто/нет = «свободное» расписание.
+  // Действие нормализует "" → undefined перед safeParse.
+  preset: z
+    .string()
+    .regex(/^(?:template|circuit|cardio):.+/, "Некорректная заготовка")
+    .optional(),
 });
 
 export type ScheduleInput = z.input<typeof scheduleSchema>;

@@ -22,11 +22,26 @@ const initial: ScheduleState = { status: "idle" };
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
-export function ScheduleForm() {
+/** Опция пикера заготовки: value = "kind:id", label = имя заготовки. */
+export type PresetOption = { value: string; label: string };
+
+export type ScheduleFormProps = {
+  presetGroups: {
+    templates: PresetOption[];
+    circuits: PresetOption[];
+    cardio: PresetOption[];
+  };
+};
+
+export function ScheduleForm({ presetGroups }: ScheduleFormProps) {
   const [state, formAction, pending] = useActionState<ScheduleState, FormData>(
     createScheduleAction,
     initial,
   );
+
+  const { templates, circuits, cardio } = presetGroups;
+  const hasPresets =
+    templates.length > 0 || circuits.length > 0 || cardio.length > 0;
 
   return (
     <form action={formAction} className="space-y-5" key={state.status === "success" ? "reset" : "form"}>
@@ -81,6 +96,51 @@ export function ScheduleForm() {
           По вашему часовому поясу из профиля.
         </p>
       </div>
+
+      {hasPresets ? (
+        <div className="space-y-2">
+          <Label htmlFor="preset">Какую тренировку делать (необязательно)</Label>
+          <select
+            id="preset"
+            name="preset"
+            defaultValue=""
+            className="border-input bg-background ring-offset-background focus-visible:ring-ring h-11 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <option value="">Свободное — выбрать при старте</option>
+            {templates.length > 0 ? (
+              <optgroup label="Силовые шаблоны">
+                {templates.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {circuits.length > 0 ? (
+              <optgroup label="Круговые">
+                {circuits.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {cardio.length > 0 ? (
+              <optgroup label="Кардио">
+                {cardio.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+          <p className="text-muted-foreground/70 text-xs">
+            Привяжите конкретную заготовку — и в нужный день увидите «сегодня
+            надо вот эту».
+          </p>
+        </div>
+      ) : null}
 
       {state.status === "error" ? (
         <p

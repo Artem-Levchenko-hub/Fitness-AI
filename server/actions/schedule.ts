@@ -7,6 +7,7 @@ import {
   createSchedule,
   deleteSchedule,
   setScheduleEnabled,
+  type SchedulePresetLink,
 } from "@/lib/repos/schedule.repo";
 import { scheduleSchema } from "@/server/schemas/schedule";
 
@@ -14,6 +15,17 @@ export type ScheduleState =
   | { status: "idle" }
   | { status: "error"; message: string }
   | { status: "success" };
+
+/** "template:abc" → {kind:"template", id:"abc"}. Формат уже провалидирован
+ *  zod-регуляркой (kind ∈ template|circuit|cardio, id непустой). */
+function parsePresetLink(
+  raw: string | undefined,
+): SchedulePresetLink | null {
+  if (!raw) return null;
+  const idx = raw.indexOf(":");
+  const kind = raw.slice(0, idx) as SchedulePresetLink["kind"];
+  return { kind, id: raw.slice(idx + 1) };
+}
 
 export async function createScheduleAction(
   _prev: ScheduleState,
@@ -25,6 +37,8 @@ export async function createScheduleAction(
     label: formData.get("label"),
     hour: formData.get("hour"),
     daysOfWeek: formData.getAll("days"),
+    // Native select шлёт "" для «свободное» — нормализуем в undefined.
+    preset: formData.get("preset") || undefined,
   });
   if (!parsed.success) {
     return {
@@ -32,7 +46,17 @@ export async function createScheduleAction(
       message: parsed.error.issues[0]?.message ?? "Проверьте поля расписания",
     };
   }
-  await createSchedule(user.id, parsed.data);
+  try {
+    await createSchedule(user.id, {
+      ...parsed.data,
+      preset: parsePresetLink(parsed.data.preset),
+    });
+  } catch {
+    return {
+      status: "error",
+      message: "Не удалось привязать заготовку — попробуйте ещё раз",
+    };
+  }
   revalidatePath("/schedule");
   return { status: "success" };
 }
