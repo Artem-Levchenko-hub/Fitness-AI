@@ -40,6 +40,10 @@ export const cardioWorkouts = pgTable(
       mode: "date",
       withTimezone: true,
     }),
+    /** Заметка «как прошло» после завершения (G7c feeling-note, как у силовой
+     *  workouts.notes / circuit_workouts.notes). Nullable: большинство сессий
+     *  без заметки. AI читает целиком при разборе. */
+    notes: text("notes"),
   },
   (t) => [
     index("cardio_workouts_user_started_idx").on(t.userId, t.startedAt),
