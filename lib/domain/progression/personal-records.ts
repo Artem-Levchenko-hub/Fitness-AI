@@ -1,4 +1,5 @@
 import { estimatedOneRepMax } from "./one-rep-max";
+import { assessProgressJump } from "./sanity";
 
 export type PRSet = {
   exerciseId: string;
@@ -13,6 +14,9 @@ export type PRCheckResult = {
   improvementKg: number;
   previousBestOneRepMaxKg: number;
   candidateOneRepMaxKg: number;
+  /** true → прирост неправдоподобно большой (вероятно ошибка ввода).
+   *  Рекорд НЕ показываем молча зелёным — помечаем «проверь ввод» (G5). */
+  suspicious: boolean;
 };
 
 /** Проверка нового PR по оценочному 1RM против истории.
@@ -39,5 +43,9 @@ export function checkPersonalRecord(
     improvementKg: candidateOneRepMaxKg - previousBestOneRepMaxKg,
     previousBestOneRepMaxKg,
     candidateOneRepMaxKg,
+    suspicious: assessProgressJump(
+      previousBestOneRepMaxKg,
+      candidateOneRepMaxKg,
+    ).suspicious,
   };
 }

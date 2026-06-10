@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import {
+  assessProgressJump,
   bestEstimatedOneRepMax,
   bodyweightEffectiveLoad,
   totalVolume,
@@ -505,7 +506,13 @@ function formatOneRmTrend(t: {
   }
   const delta = t.todayKg - t.previousKg;
   const sign = delta >= 0 ? "+" : "";
-  return `- **${t.nameRu}**: ${t.previousKg.toFixed(1)} → ${t.todayKg.toFixed(1)} kg (${sign}${delta.toFixed(1)})`;
+  const base = `- **${t.nameRu}**: ${t.previousKg.toFixed(1)} → ${t.todayKg.toFixed(1)} kg (${sign}${delta.toFixed(1)})`;
+  const jump = assessProgressJump(t.previousKg, t.todayKg);
+  if (jump.suspicious) {
+    const pctStr = Math.round(jump.pct * 100);
+    return `${base} ⚠️ ПОДОЗРИТЕЛЬНЫЙ СКАЧОК (+${pctStr}% за сессию) — вероятно ошибка ввода (вес записан не к тому упражнению или опечатка); НЕ считать рекордом, не хвалить за этот прирост, мягко попросить атлета проверить введённые данные`;
+  }
+  return base;
 }
 
 function formatDate(d: Date): string {
