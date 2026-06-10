@@ -85,6 +85,13 @@
       "when": 1781750000000,
       "tag": "0011_exercises_is_bodyweight",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781850000000,
+      "tag": "0012_workout_schedules_template_link",
+      "breakpoints": true
     }
   ]
 }
