@@ -114,6 +114,15 @@ export function CompletedCardio({
         </ul>
       </section>
 
+      {workout.notes ? (
+        <section className="bg-card border-border rounded-2xl border p-4 text-sm">
+          <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+            Заметка
+          </p>
+          <p className="mt-1 whitespace-pre-wrap">{workout.notes}</p>
+        </section>
+      ) : null}
+
       {totalActualSec > 0 && totalActualSec < totalPlannedSec ? (
         <p className="text-muted-foreground/70 px-1 text-xs">
           Сделано {totalActualSec}с из плановых {totalPlannedSec}с.

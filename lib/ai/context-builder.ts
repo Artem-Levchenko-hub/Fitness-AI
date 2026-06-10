@@ -665,6 +665,7 @@ async function loadRecentCardio(userId: string, limit: number) {
       startedAt: schema.cardioWorkouts.startedAt,
       finishedAt: schema.cardioWorkouts.finishedAt,
       status: schema.cardioWorkouts.status,
+      notes: schema.cardioWorkouts.notes,
     })
     .from(schema.cardioWorkouts)
     .where(eq(schema.cardioWorkouts.userId, userId))
@@ -712,6 +713,7 @@ async function loadRecentCardio(userId: string, limit: number) {
         ? Math.round((r.finishedAt.getTime() - r.startedAt.getTime()) / 60_000)
         : null,
       status: r.status,
+      notes: r.notes,
       workRounds: work.length,
       completedRounds: completedWork.length,
       hrAvg:
@@ -733,6 +735,7 @@ function formatCardioBlock(
     startedAt: Date;
     durationMin: number | null;
     status: string;
+    notes: string | null;
     workRounds: number;
     completedRounds: number;
     hrAvg: number | null;
@@ -753,7 +756,9 @@ function formatCardioBlock(
     ]
       .filter(Boolean)
       .join(" · ");
-    return `- ${formatDate(r.startedAt)} · **${r.name}** · ${meta}`;
+    const note = r.notes?.trim();
+    const noteLine = note ? `\n  - заметка атлета: «${note}»` : "";
+    return `- ${formatDate(r.startedAt)} · **${r.name}** · ${meta}${noteLine}`;
   });
   return `# Кардио (последние ${rows.length})\n\n${lines.join("\n")}`;
 }

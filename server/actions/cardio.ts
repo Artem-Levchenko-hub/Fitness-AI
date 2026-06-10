@@ -124,14 +124,19 @@ export async function logCardioBlockAction(
 }
 
 const finishSchema = z.object({ cardioId: z.string().uuid() });
+// finish с опциональной feeling-note (G7c). Отдельная схема — cancel notes не несёт.
+const finishWithNoteSchema = finishSchema.extend({
+  notes: z.string().max(500).optional().nullable(),
+});
 
 export async function finishCardioAction(formData: FormData) {
   const user = await requireUser();
-  const parsed = finishSchema.safeParse({
+  const parsed = finishWithNoteSchema.safeParse({
     cardioId: formData.get("cardioId"),
+    notes: formData.get("notes") || null,
   });
   if (!parsed.success) throw new Error("Bad cardioId");
-  await finishCardioWorkout(user.id, parsed.data.cardioId);
+  await finishCardioWorkout(user.id, parsed.data.cardioId, parsed.data.notes);
   revalidatePath(`/cardio/${parsed.data.cardioId}`);
   revalidatePath("/cardio");
   revalidatePath("/dashboard");

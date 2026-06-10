@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { CardioBlock, CardioWorkout } from "@/db/schema";
 import {
@@ -37,6 +38,7 @@ export function ActiveCardio({
     return idx === -1 ? blocks.length : idx;
   });
   const [running, setRunning] = useState(false);
+  const [finishNote, setFinishNote] = useState<string>("");
   const [remainingSec, setRemainingSec] = useState(() =>
     blocks[0]?.plannedDurationSec ?? 0,
   );
@@ -240,6 +242,8 @@ export function ActiveCardio({
     setRunning(false);
     const fd = new FormData();
     fd.append("cardioId", workout.id);
+    const note = finishNote.trim();
+    if (note) fd.append("notes", note.slice(0, 500));
     await finishCardioAction(fd);
   }
 
@@ -253,6 +257,24 @@ export function ActiveCardio({
         <p className="text-muted-foreground mt-1 text-sm">
           Сохраним и покажем итог.
         </p>
+        <div className="mt-4 space-y-1.5 text-left">
+          <label
+            htmlFor="cardio-finish-note"
+            className="text-muted-foreground block text-xs font-medium"
+          >
+            Как прошла кардио?{" "}
+            <span className="opacity-70">(необязательно)</span>
+          </label>
+          <Textarea
+            id="cardio-finish-note"
+            value={finishNote}
+            onChange={(e) => setFinishNote(e.target.value)}
+            rows={3}
+            maxLength={500}
+            placeholder="Самочувствие, дыхание, что было тяжело — тренер учтёт это в разборе"
+            className="resize-none"
+          />
+        </div>
         <Button size="lg" className="mt-4 w-full" onClick={finishAll}>
           Завершить и сохранить
         </Button>

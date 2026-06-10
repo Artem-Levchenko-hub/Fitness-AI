@@ -210,10 +210,18 @@ export async function logCardioBlock(
 export async function finishCardioWorkout(
   userId: string,
   cardioId: string,
+  notes?: string | null,
 ): Promise<void> {
+  const trimmed = notes?.trim();
   await db
     .update(schema.cardioWorkouts)
-    .set({ status: "completed", finishedAt: new Date() })
+    .set({
+      status: "completed",
+      finishedAt: new Date(),
+      // Заметка «как прошло» (G7c feeling-note) — пишем только если непуста,
+      // чтобы повторный finish не затирал её в NULL.
+      ...(trimmed ? { notes: trimmed.slice(0, 500) } : {}),
+    })
     .where(
       and(
         eq(schema.cardioWorkouts.id, cardioId),
