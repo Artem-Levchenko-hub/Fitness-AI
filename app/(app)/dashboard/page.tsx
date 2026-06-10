@@ -2,17 +2,15 @@ import {
   ArrowRight,
   ChevronRight,
   Dumbbell,
-  Play,
   Plus,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { CircuitTile } from "@/components/dashboard/CircuitTile";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
+import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
 import {
@@ -24,7 +22,7 @@ import {
   getActiveCardioId,
   listRecentCardio,
 } from "@/lib/repos/cardio.repo";
-import { listCircuits } from "@/lib/repos/circuits.repo";
+import { getActiveCircuitId, listCircuits } from "@/lib/repos/circuits.repo";
 import {
   getActiveWorkoutId,
   listRecentWorkouts,
@@ -37,25 +35,45 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const name = user.name?.split(" ")[0] ?? user.email.split("@")[0];
 
-  const [recent, activeId, recentCardio, activeCardioId, recentCircuits] =
-    await Promise.all([
-      listRecentWorkouts(user.id, 30),
-      getActiveWorkoutId(user.id),
-      listRecentCardio(user.id, 10),
-      getActiveCardioId(user.id),
-      listCircuits(user.id, 10),
-    ]);
+  const [
+    recent,
+    activeId,
+    recentCardio,
+    activeCardioId,
+    recentCircuits,
+    activeCircuitId,
+  ] = await Promise.all([
+    listRecentWorkouts(user.id, 30),
+    getActiveWorkoutId(user.id),
+    listRecentCardio(user.id, 10),
+    getActiveCardioId(user.id),
+    listCircuits(user.id, 10),
+    getActiveCircuitId(user.id),
+  ]);
 
   const completed = recent.filter((w) => w.status === "completed");
   const last = completed[0] ?? null;
   const week = sumThisWeek(completed);
-  const lastCardio = recentCardio.find((c) => c.status === "completed") ?? null;
   // Единый поток: «Недавние» сливает силовые + круговые + кардио (как /workouts),
   // а не показывает только силовые — иначе круговая/кардио-сессия «пропадает».
   const recentHistory = buildHistory(recent, recentCircuits, recentCardio).slice(
     0,
     3,
   );
+
+  // Единый вход: один CTA «Начать тренировку» → /create (пикер формата) вместо
+  // трёх формат-тайлов. Активные сессии любого формата — общий ResumeBanner.
+  const resumes = [
+    activeId
+      ? { href: `/workouts/${activeId}`, label: "Активная тренировка" }
+      : null,
+    activeCircuitId
+      ? { href: `/circuits/${activeCircuitId}`, label: "Активная круговая" }
+      : null,
+    activeCardioId
+      ? { href: `/cardio/${activeCardioId}`, label: "Активная кардио-сессия" }
+      : null,
+  ].filter((r): r is { href: string; label: string } => r !== null);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -68,7 +86,15 @@ export default async function DashboardPage() {
         </h1>
       </header>
 
-      {activeId ? <ResumeCard workoutId={activeId} /> : <StartCard />}
+      {resumes.length > 0 ? (
+        <div className="mb-6 space-y-3">
+          {resumes.map((r) => (
+            <ResumeBanner key={r.href} href={r.href} label={r.label} />
+          ))}
+        </div>
+      ) : null}
+
+      <StartCard />
 
       <section className="mt-6 grid grid-cols-2 gap-3">
         <WeekCard
@@ -80,14 +106,6 @@ export default async function DashboardPage() {
         ) : (
           <EmptyMini />
         )}
-      </section>
-
-      <section className="mt-6">
-        <CardioTile activeId={activeCardioId} lastName={lastCardio?.name ?? null} lastDate={lastCardio?.startedAt ?? null} />
-      </section>
-
-      <section className="mt-3">
-        <CircuitTile userId={user.id} />
       </section>
 
       <section className="mt-6 space-y-2">
@@ -129,30 +147,6 @@ export default async function DashboardPage() {
   );
 }
 
-function ResumeCard({ workoutId }: { workoutId: string }) {
-  return (
-    <Link
-      href={`/workouts/${workoutId}`}
-      className="bg-primary text-primary-foreground flex items-center justify-between rounded-2xl px-6 py-5 transition-transform hover:-translate-y-px"
-    >
-      <div className="flex items-center gap-4">
-        <div className="bg-primary-foreground/15 flex size-12 items-center justify-center rounded-full">
-          <Play className="size-5 fill-current" />
-        </div>
-        <div>
-          <p className="text-[10px] font-medium tracking-[0.18em] uppercase opacity-70">
-            Активная тренировка
-          </p>
-          <p className="font-serif mt-0.5 text-xl font-normal tracking-tight">
-            Продолжить
-          </p>
-        </div>
-      </div>
-      <ChevronRight className="size-5 opacity-70" aria-hidden="true" />
-    </Link>
-  );
-}
-
 function StartCard() {
   return (
     <section className="bg-card text-card-foreground border-border rounded-2xl border p-6">
@@ -160,20 +154,20 @@ function StartCard() {
         Готовы тренироваться?
       </h2>
       <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-        Откройте шаблон и запустите сессию одним касанием. Или создайте новый.
+        Один вход для всех форматов — силовая, круговая, кардио и интервалы.
       </p>
 
       <div className="mt-5 flex flex-col gap-3">
         <Button asChild size="xl" className="w-full">
-          <Link href="/templates">
-            <Dumbbell className="size-5" />
-            Мои шаблоны
+          <Link href="/create">
+            <Plus className="size-5" />
+            Начать тренировку
           </Link>
         </Button>
         <Button asChild size="xl" variant="outline" className="w-full">
-          <Link href="/create">
-            <Plus className="size-5" />
-            Создать тренировку
+          <Link href="/templates">
+            <Dumbbell className="size-5" />
+            Мои шаблоны
           </Link>
         </Button>
       </div>
@@ -233,64 +227,6 @@ function LastWorkoutMini({ workout }: { workout: RecentWorkout }) {
           </span>
         ) : null}
       </div>
-    </Link>
-  );
-}
-
-function CardioTile({
-  activeId,
-  lastName,
-  lastDate,
-}: {
-  activeId: string | null;
-  lastName: string | null;
-  lastDate: Date | null;
-}) {
-  if (activeId) {
-    return (
-      <Link
-        href={`/cardio/${activeId}`}
-        className="bg-primary text-primary-foreground flex items-center justify-between rounded-2xl px-5 py-4 transition-transform hover:-translate-y-px"
-      >
-        <div className="flex items-center gap-3">
-          <div className="bg-primary-foreground/15 flex size-10 items-center justify-center rounded-full">
-            <Zap className="size-5" />
-          </div>
-          <div>
-            <p className="text-[10px] font-medium tracking-[0.18em] uppercase opacity-70">
-              Активная кардио-сессия
-            </p>
-            <p className="text-base font-semibold tracking-tight">
-              Продолжить
-            </p>
-          </div>
-        </div>
-        <ChevronRight className="size-5 opacity-70" aria-hidden="true" />
-      </Link>
-    );
-  }
-
-  return (
-    <Link
-      href="/cardio/new"
-      className="bg-card hover:bg-accent/40 border-border flex items-center justify-between rounded-2xl border px-5 py-4 transition-colors"
-    >
-      <div className="flex items-center gap-3">
-        <div className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-full">
-          <Zap className="size-5" />
-        </div>
-        <div>
-          <p className="text-[10px] font-medium tracking-[0.18em] uppercase opacity-70">
-            Кардио · HIIT
-          </p>
-          <p className="text-base font-semibold tracking-tight">
-            {lastName && lastDate
-              ? `Последнее: ${lastName} · ${lastDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}`
-              : "Начать сессию"}
-          </p>
-        </div>
-      </div>
-      <ChevronRight className="text-muted-foreground size-5" aria-hidden="true" />
     </Link>
   );
 }
