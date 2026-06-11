@@ -161,4 +161,28 @@ describe("renderTrainerMarkdown", () => {
     const md = renderTrainerMarkdown(VALID);
     expect(md).not.toContain("Чтобы разбор был точнее");
   });
+
+  it("whatWorked present → секция «Что хорошо» (H5.4)", () => {
+    const md = renderTrainerMarkdown({
+      ...VALID,
+      whatWorked: "Жим +2.5 kg vs прошлый раз",
+    });
+    expect(md).toContain("## Что хорошо");
+    expect(md).toContain("Жим +2.5 kg vs прошлый раз");
+  });
+
+  it("followUpQuestion present → секция «Вопрос от тренера» (H5.4)", () => {
+    const md = renderTrainerMarkdown({
+      ...VALID,
+      followUpQuestion: "Как плечо после жима?",
+    });
+    expect(md).toContain("## Вопрос от тренера");
+    expect(md).toContain("_Как плечо после жима?_");
+  });
+
+  it("whatWorked/followUpQuestion отсутствуют → секции опущены (legacy)", () => {
+    const md = renderTrainerMarkdown(VALID);
+    expect(md).not.toContain("## Что хорошо");
+    expect(md).not.toContain("## Вопрос от тренера");
+  });
 });

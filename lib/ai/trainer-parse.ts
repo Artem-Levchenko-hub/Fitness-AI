@@ -27,6 +27,11 @@ export type TrainerResponse = {
   nextSessionFocus: string;
   missingDataAdvice: string | null;
   motivation: string;
+  /** H5.4 «что хорошо» — 1-2 конкретных позитива сессии с цифрами. Optional:
+   *  legacy-разборы (до H5.4) его не несут — safeParse не должен их валить. */
+  whatWorked?: string;
+  /** H5.4 завершающий вопрос-приглашение к диалогу. Optional по той же причине. */
+  followUpQuestion?: string;
 };
 
 export const trainerSchema = z.object({
@@ -59,6 +64,10 @@ export const trainerSchema = z.object({
   nextSessionFocus: z.string(),
   missingDataAdvice: z.string().nullable(),
   motivation: z.string(),
+  // optional — legacy resultJson (до H5.4) их не несёт; знак «?» в
+  // followUpQuestion проверяет не схема (fail-soft R-10), а assertCoachTemplate.
+  whatWorked: z.string().optional(),
+  followUpQuestion: z.string().optional(),
 });
 
 /** Достаёт JSON-объект из ответа: срезает ```-ограждение и reasoning-текст
@@ -105,6 +114,11 @@ export function renderTrainerMarkdown(r: TrainerResponse): string {
     "",
     `## Качество тренировки · ${r.trainingQuality.score}/100`,
     r.trainingQuality.comment,
+  ];
+  if (r.whatWorked?.trim()) {
+    lines.push("", "## Что хорошо", r.whatWorked);
+  }
+  lines.push(
     "",
     `## Восстановление (сон) · ${r.recoveryContext.score ?? "—"}`,
     r.recoveryContext.comment,
@@ -116,9 +130,12 @@ export function renderTrainerMarkdown(r: TrainerResponse): string {
     `_Фокус: ${r.nextSessionFocus}_`,
     "",
     ...r.recommendations.map((rec) => `- ${rec}`),
-  ];
+  );
   if (r.missingDataAdvice) {
     lines.push("", "## Чтобы разбор был точнее", r.missingDataAdvice);
+  }
+  if (r.followUpQuestion?.trim()) {
+    lines.push("", "## Вопрос от тренера", `_${r.followUpQuestion}_`);
   }
   return lines.join("\n");
 }

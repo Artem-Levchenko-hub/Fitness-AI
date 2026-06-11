@@ -23,6 +23,8 @@ export type TrainerResultData = {
   nextSessionFocus: string;
   missingDataAdvice: string | null;
   motivation: string;
+  whatWorked?: string;
+  followUpQuestion?: string;
 };
 
 function scoreColor(score: number | null): string {
@@ -89,6 +91,17 @@ export function TrainerResultCard({
         />
       </dl>
 
+      {data.whatWorked?.trim() ? (
+        <section className="bg-success/5 border-success/30 rounded-xl border p-4">
+          <h3 className="text-success text-xs font-semibold tracking-tight uppercase">
+            Что хорошо
+          </h3>
+          <p className="text-foreground mt-1 text-sm leading-relaxed">
+            {data.whatWorked}
+          </p>
+        </section>
+      ) : null}
+
       {data.exerciseComparisons && data.exerciseComparisons.length > 0 ? (
         <section>
           <h3 className="text-sm font-semibold tracking-tight">
@@ -128,6 +141,15 @@ export function TrainerResultCard({
             {data.missingDataAdvice}
           </p>
         </section>
+      ) : null}
+
+      {data.followUpQuestion?.trim() ? (
+        <blockquote className="border-l-primary/40 text-foreground border-l-2 pl-4 text-sm leading-relaxed">
+          <span className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
+            Вопрос от тренера
+          </span>
+          <p className="mt-1 italic">{data.followUpQuestion}</p>
+        </blockquote>
       ) : null}
     </div>
   );

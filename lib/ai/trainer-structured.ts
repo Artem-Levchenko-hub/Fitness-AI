@@ -34,9 +34,11 @@ export const JSON_SHAPE_INSTRUCTION = `Верни ТОЛЬКО валидный 
   "nutritionContext": { "score": <целое 0..100 ИЛИ null если нет данных о КБЖУ>, "comment": <строка> },
   "exerciseComparisons": [ { "name": <упражнение>, "prevTopSet": <"60×5" ИЛИ null если раньше не было>, "curTopSet": <"60×6">, "deltaReps": <число ИЛИ null>, "deltaWeightKg": <число ИЛИ null>, "status": <"improved"|"regressed"|"stagnant"|"new"> } ] (3-6 ключевых упр. сегодняшней силовой; [] если не силовая),
   "recommendations": [<строка>, ...] (3-5 элементов),
-  "nextSessionFocus": <строка>,
+  "nextSessionFocus": <строка — ОДНА конкретная корректировка на след. сессию с цифрой>,
   "missingDataAdvice": <строка ИЛИ null>,
-  "motivation": <строка>
+  "motivation": <строка>,
+  "whatWorked": <строка — что получилось в этой сессии, 1-2 конкретных позитива С ЦИФРАМИ>,
+  "followUpQuestion": <строка — завершающий вопрос-приглашение к диалогу, ОБЯЗАТЕЛЬНО заканчивается на "?">
 }
 Никакого текста до или после JSON.`;
 
