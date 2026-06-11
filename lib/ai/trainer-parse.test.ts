@@ -185,4 +185,18 @@ describe("renderTrainerMarkdown", () => {
     expect(md).not.toContain("## Что хорошо");
     expect(md).not.toContain("## Вопрос от тренера");
   });
+
+  it("pastAdviceFollowUp present → секция «Прошлый совет» (H5.5)", () => {
+    const md = renderTrainerMarkdown({
+      ...VALID,
+      pastAdviceFollowUp: "В прошлый раз я советовал жим 85×5 — вышел на 85×5, выполнил.",
+    });
+    expect(md).toContain("## Прошлый совет");
+    expect(md).toContain("В прошлый раз я советовал");
+  });
+
+  it("pastAdviceFollowUp отсутствует → секция опущена (legacy)", () => {
+    const md = renderTrainerMarkdown(VALID);
+    expect(md).not.toContain("## Прошлый совет");
+  });
 });

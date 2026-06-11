@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -19,6 +30,10 @@ import {
   formatExerciseComparison,
   type ExerciseComparisonPoint,
 } from "./exercise-comparison";
+import {
+  extractPastAdvice,
+  formatTrainerMemoryBlock,
+} from "./trainer-memory";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
 
@@ -602,6 +617,48 @@ function formatDate(d: Date): string {
   });
 }
 
+const MAX_TRAINER_MEMORY = 3;
+
+/** Блок «Память тренера» (H5.5): последние N AiAnalysis ТОГО ЖЕ формата с их
+ *  прошлыми рекомендациями (nextSessionFocus) — чтобы тренер сослался на
+ *  прошлый совет и оценил его выполнение (поле pastAdviceFollowUp). Формат
+ *  определяется по kind через наличие workoutId/circuitWorkoutId:
+ *  strength (post_workout/on_demand) = workoutId есть, circuit нет;
+ *  circuit = circuitWorkoutId есть; digest = оба null. Текущую тренировку
+ *  исключаем (on_demand на уже разобранной сессии не должен видеть свой же
+ *  прошлый разбор как «память»). fail-soft (R-10). */
+async function loadTrainerMemoryBlock(
+  userId: string,
+  kind: AiJobKindLiteral,
+  excludeWorkoutId: string | null,
+  excludeCircuitId: string | null,
+): Promise<string> {
+  try {
+    const a = schema.aiAnalyses;
+    const formatFilter =
+      kind === "circuit_post_workout"
+        ? isNotNull(a.circuitWorkoutId)
+        : kind === "daily_digest"
+          ? and(isNull(a.workoutId), isNull(a.circuitWorkoutId))
+          : and(isNotNull(a.workoutId), isNull(a.circuitWorkoutId));
+
+    const conditions = [eq(a.userId, userId), formatFilter];
+    if (excludeWorkoutId) conditions.push(ne(a.workoutId, excludeWorkoutId));
+    if (excludeCircuitId) conditions.push(ne(a.circuitWorkoutId, excludeCircuitId));
+
+    const rows = await db
+      .select({ createdAt: a.createdAt, resultJson: a.resultJson })
+      .from(a)
+      .where(and(...conditions))
+      .orderBy(desc(a.createdAt))
+      .limit(MAX_TRAINER_MEMORY);
+
+    return formatTrainerMemoryBlock(rows.map(extractPastAdvice), formatDate);
+  } catch {
+    return "# Память тренера\n_(прошлые разборы недоступны)_";
+  }
+}
+
 /** Контекст для AI-тренера (Gemini structured JSON):
  *  Coach-контекст (если есть workoutId) ИЛИ детальный circuit-контекст (если
  *  circuitWorkoutId) + sleep за 7 дней + nutrition за 7 дней + история круговых.
@@ -643,6 +700,15 @@ export async function buildTrainerContext(
   sections.push(formatCircuitHistoryBlock(circuits));
 
   sections.push(await loadScheduleBlock(userId));
+
+  sections.push(
+    await loadTrainerMemoryBlock(
+      userId,
+      opts.kind,
+      workoutId,
+      opts.circuitWorkoutId ?? null,
+    ),
+  );
 
   sections.push(`# Режим\nKind: \`${opts.kind}\``);
 

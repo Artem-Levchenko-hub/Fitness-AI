@@ -32,6 +32,10 @@ export type TrainerResponse = {
   whatWorked?: string;
   /** H5.4 завершающий вопрос-приглашение к диалогу. Optional по той же причине. */
   followUpQuestion?: string;
+  /** H5.5 «память тренера»: оценка выполнения прошлой рекомендации
+   *  («В прошлый раз я советовал …»). Optional — заполняется только когда в
+   *  контексте есть прошлые разборы того же формата; legacy не несут. */
+  pastAdviceFollowUp?: string;
 };
 
 export const trainerSchema = z.object({
@@ -68,6 +72,7 @@ export const trainerSchema = z.object({
   // followUpQuestion проверяет не схема (fail-soft R-10), а assertCoachTemplate.
   whatWorked: z.string().optional(),
   followUpQuestion: z.string().optional(),
+  pastAdviceFollowUp: z.string().optional(),
 });
 
 /** Достаёт JSON-объект из ответа: срезает ```-ограждение и reasoning-текст
@@ -117,6 +122,9 @@ export function renderTrainerMarkdown(r: TrainerResponse): string {
   ];
   if (r.whatWorked?.trim()) {
     lines.push("", "## Что хорошо", r.whatWorked);
+  }
+  if (r.pastAdviceFollowUp?.trim()) {
+    lines.push("", "## Прошлый совет", r.pastAdviceFollowUp);
   }
   lines.push(
     "",

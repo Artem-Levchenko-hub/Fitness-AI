@@ -25,6 +25,7 @@ export type TrainerResultData = {
   motivation: string;
   whatWorked?: string;
   followUpQuestion?: string;
+  pastAdviceFollowUp?: string;
 };
 
 function scoreColor(score: number | null): string {
@@ -98,6 +99,17 @@ export function TrainerResultCard({
           </h3>
           <p className="text-foreground mt-1 text-sm leading-relaxed">
             {data.whatWorked}
+          </p>
+        </section>
+      ) : null}
+
+      {data.pastAdviceFollowUp?.trim() ? (
+        <section className="bg-primary/5 border-primary/30 rounded-xl border p-4">
+          <h3 className="text-primary text-xs font-semibold tracking-tight uppercase">
+            Прошлый совет
+          </h3>
+          <p className="text-foreground mt-1 text-sm leading-relaxed">
+            {data.pastAdviceFollowUp}
           </p>
         </section>
       ) : null}
