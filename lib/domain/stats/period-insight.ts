@@ -1,9 +1,9 @@
 import { TREND_LABEL, trendStatus, type TrendStatus } from "../progression/trend";
+import { type StatsRange } from "./range";
 
-/** Окна периода для /stats. Дублирует значения `StatsRange` из repos
- *  СОЗНАТЕЛЬНО — домен не зависит от слоя БД (R-7). Структурно совместимо:
- *  page передаёт сюда `StatsRange`. */
-export type InsightRange = "7d" | "30d" | "90d" | "365d" | "all";
+/** Окно периода для /stats = доменный `StatsRange` (единый источник правды;
+ *  раньше значения дублировались здесь). page/repo передают сюда тот же тип. */
+export type InsightRange = StatsRange;
 
 /** Человекочитаемый вывод о тренировочном объёме за период (G6): вместо
  *  абстрактных kg·повт — простая фраза «растёшь/стоишь/падаешь» со сравнением

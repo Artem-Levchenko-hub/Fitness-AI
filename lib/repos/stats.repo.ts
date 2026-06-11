@@ -3,14 +3,14 @@ import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
+import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 
-export type StatsRange = "7d" | "30d" | "90d" | "365d" | "all";
-
-export function rangeToFromDate(range: StatsRange): Date | null {
-  if (range === "all") return null;
-  const days = parseInt(range, 10);
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-}
+// Тип диапазона и дата-отсечка — чистая доменная политика (R-7), живёт в
+// lib/domain/stats. Импорт выше даёт локальные привязки для запросов ниже;
+// реэкспорт сохраняет публичный API `@/lib/repos/stats.repo` для существующих
+// потребителей (app/(app)/stats/page.tsx).
+export { rangeToFromDate };
+export type { StatsRange };
 
 export type DailyVolumePoint = {
   date: string; // YYYY-MM-DD в timezone юзера
