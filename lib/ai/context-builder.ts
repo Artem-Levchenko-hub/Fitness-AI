@@ -7,6 +7,7 @@ import {
   bestEstimatedOneRepMax,
   bodyweightEffectiveLoad,
   computeScheduleAdherence,
+  estimatedOneRepMax,
   totalVolume,
   type DayCell,
   type ScheduleAdherence,
@@ -14,7 +15,10 @@ import {
 } from "@/lib/domain";
 import { localDateIso, localIsoDay } from "@/lib/datetime/local-day";
 import { formatDays, formatHour, WEEKDAYS } from "@/lib/ui/weekdays";
-import { formatOneRmTrend } from "./one-rm-trend";
+import {
+  formatExerciseComparison,
+  type ExerciseComparisonPoint,
+} from "./exercise-comparison";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
 
@@ -103,6 +107,12 @@ export async function buildCoachContext(
     .limit(2);
 
   const oneRmTrends = compute1RmTrends(todayWorkout, pastWorkouts);
+  const allTimeBest = await loadAllTimeBestE1rm(userId, exerciseIds, workoutId);
+  const comparisons = buildExerciseComparisons(
+    pastWorkouts,
+    oneRmTrends,
+    allTimeBest,
+  );
   const volumeByMuscle = await loadVolumeByMuscle(userId, since);
 
   const sections: string[] = [];
@@ -111,9 +121,11 @@ export async function buildCoachContext(
     `# Сегодняшняя тренировка\n\n${formatWorkout(todayWorkout, bodyweightKg)}`,
   );
 
-  if (oneRmTrends.length > 0) {
+  if (comparisons.length > 0) {
     sections.push(
-      `# Прогресс 1RM (estimated)\n\n${oneRmTrends.map(formatOneRmTrend).join("\n")}`,
+      `# Сравнение с прошлым (по упражнениям сегодняшней силовой)\n\n${comparisons
+        .map(formatExerciseComparison)
+        .join("\n\n")}`,
     );
   }
 
@@ -352,6 +364,87 @@ function compute1RmTrends(
     });
   }
   return trends;
+}
+
+/** Сшивает per-упражнение блоки «сравнение с прошлым» (H5.3): тренд e1RM +
+ *  последняя прошлая сессия этого упражнения set-by-set + дистанция до PR.
+ *  Берёт упражнения из oneRmTrends (todayKg>0; bodyweight с нулевой добавкой
+ *  туда не попадают — их детальная нагрузка уже в formatWorkout). */
+function buildExerciseComparisons(
+  pastWorkouts: WorkoutSummary[],
+  trends: ReturnType<typeof compute1RmTrends>,
+  allTimeBest: Map<string, number>,
+): ExerciseComparisonPoint[] {
+  return trends.map((t) => ({
+    nameRu: t.nameRu,
+    trend: { nameRu: t.nameRu, todayKg: t.todayKg, previousKg: t.previousKg },
+    previousSession: findPreviousSession(pastWorkouts, t.exerciseId),
+    allTimeBestE1rm: allTimeBest.get(t.exerciseId) ?? null,
+  }));
+}
+
+/** Последняя по времени прошлая сессия с этим упражнением (pastWorkouts уже
+ *  desc по startedAt). Рабочие подходы приоритетны; если их нет — все. */
+function findPreviousSession(
+  pastWorkouts: WorkoutSummary[],
+  exerciseId: string,
+): ExerciseComparisonPoint["previousSession"] {
+  for (const w of pastWorkouts) {
+    const ex = w.exercises.find((e) => e.exerciseId === exerciseId);
+    if (!ex) continue;
+    const working = ex.sets.filter((s) => s.setType === "working");
+    const chosen = working.length > 0 ? working : ex.sets;
+    if (chosen.length === 0) continue;
+    return {
+      dateLabel: formatDate(w.startedAt),
+      sets: chosen.map((s) => ({ weightKg: s.weightKg, reps: s.reps })),
+    };
+  }
+  return null;
+}
+
+/** Лучший e1RM за всю историю по каждому из exerciseIds, ИСКЛЮЧАЯ сегодняшнюю
+ *  тренировку — база «дистанции до личного рекорда» (H5.3). Только working
+ *  подходы завершённых тренировок (как bestEstimatedOneRepMax и /stats). */
+async function loadAllTimeBestE1rm(
+  userId: string,
+  exerciseIds: string[],
+  excludeWorkoutId: string,
+): Promise<Map<string, number>> {
+  if (exerciseIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      exerciseId: schema.workoutExercises.exerciseId,
+      weightKg: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
+      setType: schema.workoutSets.setType,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        inArray(schema.workoutExercises.exerciseId, exerciseIds),
+        sql`${schema.workouts.id} <> ${excludeWorkoutId}`,
+      ),
+    );
+
+  const best = new Map<string, number>();
+  for (const r of rows) {
+    if (r.setType !== "working") continue;
+    const e = estimatedOneRepMax(r.weightKg, r.reps);
+    const cur = best.get(r.exerciseId) ?? 0;
+    if (e > cur) best.set(r.exerciseId, e);
+  }
+  return best;
 }
 
 async function loadVolumeByMuscle(
