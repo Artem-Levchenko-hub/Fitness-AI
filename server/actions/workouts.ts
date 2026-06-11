@@ -10,6 +10,7 @@ import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { env } from "@/lib/env";
 import {
+  cancelWorkout,
   deleteSet,
   deleteWorkout,
   finishWorkout,
@@ -162,6 +163,22 @@ export async function finishWorkoutAction(formData: FormData) {
   // Trainer (structured JSON оценка) — основной flow. Coach (диалог) теперь
   // вторичен, доступен через кнопку на trainer/completed-view.
   redirect(`/workouts/${workoutId}/trainer`);
+}
+
+const cancelSchema = z.object({ workoutId: z.string().uuid() });
+
+/** H2: «Убрать» зависшую активную силовую прямо из resume-баннера, не заходя в
+ *  неё. Зеркало cancelCardioAction — отменяет сессию и уводит на /workouts. */
+export async function cancelWorkoutAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = cancelSchema.safeParse({
+    workoutId: formData.get("workoutId"),
+  });
+  if (!parsed.success) throw new Error("Invalid workoutId");
+  await cancelWorkout(user.id, parsed.data.workoutId);
+  revalidatePath("/workouts");
+  revalidatePath("/dashboard");
+  redirect("/workouts");
 }
 
 export async function deleteWorkoutAction(formData: FormData) {

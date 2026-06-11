@@ -1,15 +1,16 @@
 import { cancelCardioAction } from "@/server/actions/cardio";
 import { cancelCircuitAction } from "@/server/actions/circuits";
+import { cancelWorkoutAction } from "@/server/actions/workouts";
 
 import type { ResumeCancel } from "./ResumeBanner";
 
 export type Resume = { href: string; label: string; cancel?: ResumeCancel };
 
 /** Единая сборка resume-баннеров активных сессий (силовая / круговая / кардио)
- *  для дашборда и /workouts — одна правда о подписях и кнопке «Убрать» (G2b),
- *  чтобы тексты не разъезжались между двумя экранами. Силовая «Убрать» не несёт:
- *  отдельного безопасного cancel-action у неё нет, а её finish-путь корректен
- *  (G2) — зависала именно круговая/кардио, для них cancel*Action уже есть. */
+ *  для дашборда и /workouts — одна правда о подписях и кнопке «Убрать»,
+ *  чтобы тексты не разъезжались между двумя экранами. Все три формата несут
+ *  «Убрать» (H2): зависшую активную сессию можно отменить прямо из баннера, не
+ *  заходя в неё — иначе брошенный active-сеанс висел бы «фантомом» вечно. */
 export function buildResumes(opts: {
   activeId: string | null;
   activeCircuitId: string | null;
@@ -21,7 +22,17 @@ export function buildResumes(opts: {
 
   const entries: (Resume | null)[] = [
     activeId
-      ? { href: `/workouts/${activeId}`, label: "Активная тренировка" }
+      ? {
+          href: `/workouts/${activeId}`,
+          label: "Активная тренировка",
+          cancel: {
+            action: cancelWorkoutAction,
+            idField: "workoutId",
+            id: activeId,
+            title: "Убрать активную тренировку?",
+            description: cancelDescription,
+          },
+        }
       : null,
     activeCircuitId
       ? {

@@ -304,6 +304,30 @@ export async function finishWorkout(
     );
 }
 
+/** Отменяет брошенную активную силовую сессию (status active → cancelled),
+ *  чтобы resume-баннер не «висел» вечно (H2). Зеркало cancelCardio/Circuit:
+ *  фильтр active + userId (R-7) делает вызов идемпотентным — повторный тап или
+ *  уже-завершённая сессия дают 0 строк без ошибки. Прогресс остаётся в БД как
+ *  cancelled (в историю/статистику не идёт, как у других форматов). */
+export async function cancelWorkout(
+  userId: string,
+  workoutId: string,
+): Promise<void> {
+  await db
+    .update(schema.workouts)
+    .set({
+      status: "cancelled",
+      finishedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(schema.workouts.id, workoutId),
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "active"),
+      ),
+    );
+}
+
 /** Удаляет тренировку целиком. Дочерние строки (упражнения, подходы,
  *  AI-анализы, AI-задачи, заметки) уходят по ON DELETE CASCADE. Фильтр по
  *  userId (R-7) — чужую тренировку удалить нельзя (0 строк). */
