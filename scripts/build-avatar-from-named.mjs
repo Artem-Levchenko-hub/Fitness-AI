@@ -88,11 +88,16 @@ function resolveByName(name) {
 const ARM_GROUPS = new Set(["biceps", "triceps", "forearms"]);
 const LEG_GROUPS = new Set(["quads", "hamstrings", "calves"]);
 
+// Кости головы/кисти/стопы — декоративные, нейтрально-серые, НЕ группа мышц
+// и НЕ кликаются (runtime-резолвер вернёт null для «decor»). Завершают силуэт.
+const BONE = /(bone|metacarp|metatars|phalanx|calcaneus|talus|navicular|cuboid|cuneiform|scaphoid|lunate|triquetrum|pisiform|trapezium|trapezoid|capitate|hamate|maxilla|mandible|sphenoid|ethmoid|vomer|hyoid|zygomat|tooth)/i;
+
 /** Гард по положению: имя даёт идентичность мышцы, но РЕГИОН тела решает
  *  высота центроида. Чинит главную ошибку — стопные/голеностопные flexor/
  *  extensor/adductor («…longus», «…hallucis», «adductor hallucis»), которые по
  *  имени уходили в forearms/quads, а по факту это низ ноги. anterior = +Z. */
 function classify(name, centroid, H) {
+  if (BONE.test(name)) return "decor"; // кости головы/кисти/стопы → нейтраль
   const g = resolveByName(name);
   if (!g) return null;
   const hf = centroid[1] / H; // доля высоты [0..1]
