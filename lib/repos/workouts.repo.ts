@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { resumeCutoff } from "@/lib/domain";
 
 type WorkoutStatusLiteral = (typeof schema.workoutStatus.enumValues)[number];
 type SetTypeLiteral = (typeof schema.setType.enumValues)[number];
@@ -577,6 +578,8 @@ export async function getActiveWorkoutId(userId: string): Promise<string | null>
       and(
         eq(schema.workouts.userId, userId),
         eq(schema.workouts.status, "active"),
+        // H2.2b: брошенная сессия старше окна не всплывает как resume-фантом.
+        gte(schema.workouts.startedAt, resumeCutoff(new Date())),
       ),
     )
     .orderBy(desc(schema.workouts.startedAt))

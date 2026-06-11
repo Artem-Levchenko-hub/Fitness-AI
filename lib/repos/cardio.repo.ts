@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import {
   presetToBlocks,
+  resumeCutoff,
   type CardioPresetKind,
   type CustomParams,
 } from "@/lib/domain";
@@ -257,6 +258,8 @@ export async function getActiveCardioId(
       and(
         eq(schema.cardioWorkouts.userId, userId),
         eq(schema.cardioWorkouts.status, "active"),
+        // H2.2b: брошенная сессия старше окна не всплывает как resume-фантом.
+        gte(schema.cardioWorkouts.startedAt, resumeCutoff(new Date())),
       ),
     )
     .orderBy(desc(schema.cardioWorkouts.startedAt))

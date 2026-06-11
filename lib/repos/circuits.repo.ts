@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { resumeCutoff } from "@/lib/domain";
 
 export type CircuitSummary = {
   id: string;
@@ -253,6 +254,8 @@ export async function getActiveCircuitId(
       and(
         eq(schema.circuitWorkouts.userId, userId),
         eq(schema.circuitWorkouts.status, "active"),
+        // H2.2b: брошенная сессия старше окна не всплывает как resume-фантом.
+        gte(schema.circuitWorkouts.startedAt, resumeCutoff(new Date())),
       ),
     )
     .orderBy(desc(schema.circuitWorkouts.startedAt))
