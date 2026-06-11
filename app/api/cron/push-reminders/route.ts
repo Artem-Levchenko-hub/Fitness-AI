@@ -2,6 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { localDateIso, localIsoDay } from "@/lib/datetime/local-day";
 import { sendPushToUser } from "@/lib/push/vapid";
 import { getActiveForUser } from "@/lib/repos/push.repo";
 import { listEnabledSchedulesForUser } from "@/lib/repos/schedule.repo";
@@ -31,28 +32,9 @@ function localHour(now: Date, tz: string): number {
   }
 }
 
-function localDateIso(now: Date, tz: string): string {
-  try {
-    const fmt = new Intl.DateTimeFormat("sv-SE", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      timeZone: tz,
-    });
-    return fmt.format(now); // "YYYY-MM-DD"
-  } catch {
-    return now.toISOString().slice(0, 10);
-  }
-}
-
-/** ISO-день недели юзера по его timezone: 1=Пн .. 7=Вс.
- *  Берём локальную дату (та же логика, что localDateIso) и считаем день
- *  недели через UTC-полдень — без DST-краёв и без зависимости от локали. */
-function localIsoDay(now: Date, tz: string): number {
-  const d = new Date(`${localDateIso(now, tz)}T12:00:00Z`);
-  const dow = d.getUTCDay(); // 0=Вс .. 6=Сб
-  return dow === 0 ? 7 : dow;
-}
+/** `localDateIso` / `localIsoDay` импортируются из `@/lib/datetime/local-day`
+ *  (R-04, DRY про знание — раньше тут жила байт-в-байт inline-копия).
+ *  `localHour` остаётся локальным — он нужен только cron-доставке. */
 
 /** Раз в час: для каждого юзера проверяем локальное время и шлём
  *  напоминание (сон в 9:00, КБЖУ в 21:00, тренировка по расписанию) если
