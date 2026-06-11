@@ -379,6 +379,10 @@ async function loadVolumeByMuscle(
     .where(
       and(
         eq(schema.workouts.userId, userId),
+        // Только завершённые тренировки (G1) — как /stats и 3D-аватар
+        // (muscleHeatProfile). Раньше фильтра не было: AI считал объём
+        // active/cancelled-сессий и расходился с тем, что видит пользователь.
+        eq(schema.workouts.status, "completed"),
         gte(schema.workouts.startedAt, since),
       ),
     );

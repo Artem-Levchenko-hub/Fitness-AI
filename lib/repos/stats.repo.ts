@@ -2,6 +2,7 @@ import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { MUSCLE_KEYS } from "@/lib/domain/avatar/heat";
 import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 
@@ -530,6 +531,156 @@ export async function topMoverByE1rm(
     }
   }
   return top;
+}
+
+export type MuscleHeat = {
+  muscleKey: string;
+  /** Working-тоннаж группы за последние 7 дней (primary 1.0 / secondary 0.5). */
+  current7dVolume: number;
+  /** Средний недельный working-тоннаж группы за baseline-окно (прошлые недели,
+   *  БЕЗ текущих 7 дней) — «собственная норма». 0 = нормы нет. */
+  baselineWeeklyVolume: number;
+  /** Число working-подходов, задевших группу за последние 7 дней. */
+  sets: number;
+  /** Когда группа в последний раз работала (в пределах baseline-окна). null =
+   *  не тренировалась в окне. */
+  lastTrainedAt: Date | null;
+  /** Топ-3 упражнения по вкладу в группу за последние 7 дней. */
+  top3: Array<{ name: string; volume: number }>;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Профиль «нагрева» всех 14 групп мышц для 3D-аватара: объём за последние
+ *  7 дней + собственная недельная норма (среднее за `baselineWeeks` прошлых
+ *  недель, исключая текущие 7 дней) + подходы/последняя тренировка/топ-упражнения
+ *  за текущее окно. Только completed + working (G1).
+ *
+ *  Возвращает РОВНО 14 записей в порядке MUSCLE_KEYS (нетренированные —
+ *  нулями), чтобы страница раскрашивала всё тело без доуборки на своей стороне.
+ *  Один запрос за окно [baselineStart, now), агрегация в TS — данных мало
+ *  (один юзер × ~5 недель подходов). Доменный `distributeVolumeByMuscle`
+ *  фиксирует коэффициенты ролей; здесь они применяются построчно, т.к. нужно
+ *  ещё окно/подходы/топ на тот же проход. */
+export async function muscleHeatProfile(
+  userId: string,
+  now: Date,
+  baselineWeeks = 4,
+): Promise<MuscleHeat[]> {
+  const currentStart = new Date(now.getTime() - 7 * DAY_MS);
+  const baselineStart = new Date(
+    now.getTime() - (baselineWeeks + 1) * 7 * DAY_MS,
+  );
+
+  const rows = await db
+    .select({
+      setId: schema.workoutSets.id,
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      role: schema.exerciseMuscleGroups.role,
+      weight: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
+      exerciseId: schema.workoutExercises.exerciseId,
+      exName: schema.exercises.nameRu,
+      startedAt: schema.workouts.startedAt,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.workoutExercises.exerciseId,
+      ),
+    )
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.workoutExercises.exerciseId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+        gte(schema.workouts.startedAt, baselineStart),
+      ),
+    );
+
+  type Acc = {
+    current: number;
+    baseline: number;
+    setIds: Set<string>;
+    lastTrainedAt: Date | null;
+    exVolume: Map<string, { name: string; volume: number }>;
+  };
+  const byMuscle = new Map<string, Acc>();
+  const ensure = (key: string): Acc => {
+    let a = byMuscle.get(key);
+    if (!a) {
+      a = {
+        current: 0,
+        baseline: 0,
+        setIds: new Set(),
+        lastTrainedAt: null,
+        exVolume: new Map(),
+      };
+      byMuscle.set(key, a);
+    }
+    return a;
+  };
+
+  for (const r of rows) {
+    const factor = r.role === "primary" ? 1 : 0.5;
+    const vol = r.weight * r.reps * factor;
+    const acc = ensure(r.muscle);
+    const inCurrent = r.startedAt.getTime() >= currentStart.getTime();
+
+    if (inCurrent) {
+      acc.current += vol;
+      acc.setIds.add(r.setId);
+      const ex = acc.exVolume.get(r.exerciseId);
+      if (ex) ex.volume += vol;
+      else acc.exVolume.set(r.exerciseId, { name: r.exName, volume: vol });
+    } else {
+      acc.baseline += vol;
+    }
+    // lastTrainedAt — максимум по всему окну: мышца могла не работать в текущие
+    // 7 дней, но «последняя тренировка» всё равно осмысленна для панели.
+    if (!acc.lastTrainedAt || r.startedAt > acc.lastTrainedAt) {
+      acc.lastTrainedAt = r.startedAt;
+    }
+  }
+
+  return MUSCLE_KEYS.map((key) => {
+    const a = byMuscle.get(key);
+    if (!a) {
+      return {
+        muscleKey: key,
+        current7dVolume: 0,
+        baselineWeeklyVolume: 0,
+        sets: 0,
+        lastTrainedAt: null,
+        top3: [],
+      };
+    }
+    const top3 = Array.from(a.exVolume.values())
+      .sort((x, y) => y.volume - x.volume)
+      .slice(0, 3);
+    return {
+      muscleKey: key,
+      current7dVolume: a.current,
+      baselineWeeklyVolume: a.baseline / baselineWeeks,
+      sets: a.setIds.size,
+      lastTrainedAt: a.lastTrainedAt,
+      top3,
+    };
+  });
 }
 
 /** Список упражнений, с которыми хоть раз тренировались — для селектора
