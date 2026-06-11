@@ -20,13 +20,21 @@ export function brzyckiOneRepMax(weightKg: number, reps: number): number {
   return (weightKg * BRZYCKI_NUMERATOR) / (BRZYCKI_DENOMINATOR_BASE - reps);
 }
 
-/** Среднее из Epley и Brzycki — наша оценка 1RM по умолчанию. */
+/** Среднее из Epley и Brzycki — наша оценка 1RM по умолчанию.
+ *  Усредняем только ОПРЕДЕЛЁННЫЕ оценки: Brzycki не определён при reps >= 37
+ *  (возвращает 0). Для высокоповторных подходов (калистеника: отжимания,
+ *  подтягивания 30-40 раз) усреднение с нулём вдвое занижало 1RM — берём
+ *  Epley в одиночку. В диапазоне 1-36 reps обе оценки валидны → поведение
+ *  не меняется. */
 export function estimatedOneRepMax(weightKg: number, reps: number): number {
   if (weightKg <= 0 || reps < 1) return 0;
   if (reps === 1) return weightKg;
-  return (
-    (epleyOneRepMax(weightKg, reps) + brzyckiOneRepMax(weightKg, reps)) / 2
-  );
+  const estimates = [
+    epleyOneRepMax(weightKg, reps),
+    brzyckiOneRepMax(weightKg, reps),
+  ].filter((e) => e > 0);
+  if (estimates.length === 0) return 0;
+  return estimates.reduce((sum, e) => sum + e, 0) / estimates.length;
 }
 
 export type SetForOneRepMax = {
