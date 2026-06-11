@@ -3,9 +3,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ProfileAvatar } from "@/components/avatar/ProfileAvatar";
+import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { getFriendProfile } from "@/lib/repos/friends.repo";
+import { muscleHeatProfile } from "@/lib/repos/stats.repo";
 import {
   listRecentWorkouts,
   type RecentWorkout,
@@ -24,13 +27,18 @@ export default async function FriendWorkoutsPage({ params }: Props) {
   const { friendId } = await params;
   const user = await requireUser();
 
-  // R-7: запрашиваем тренировки друга ТОЛЬКО после подтверждения дружбы.
+  // R-7: запрашиваем данные друга ТОЛЬКО после подтверждения дружбы. Гейт выше
+  // — дальше тот же паттерн прямого чтения по friendId, что и для тренировок.
   const friend = await getFriendProfile(user.id, friendId);
   if (!friend) notFound();
 
-  const workouts = (await listRecentWorkouts(friendId, 30)).filter(
-    (w) => w.status === "completed",
-  );
+  const now = new Date();
+  const [workoutsRaw, heat] = await Promise.all([
+    listRecentWorkouts(friendId, 30),
+    muscleHeatProfile(friendId, now),
+  ]);
+  const workouts = workoutsRaw.filter((w) => w.status === "completed");
+  const avatarData = buildAvatarData(heat, now);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -54,6 +62,14 @@ export default async function FriendWorkoutsPage({ params }: Props) {
           </h1>
         </div>
       </header>
+
+      <section className="mb-6">
+        <ProfileAvatar data={avatarData} />
+      </section>
+
+      <h2 className="mb-3 text-sm font-semibold tracking-tight">
+        Последние тренировки
+      </h2>
 
       {workouts.length === 0 ? (
         <EmptyState />
