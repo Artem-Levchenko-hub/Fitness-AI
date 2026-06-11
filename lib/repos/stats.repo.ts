@@ -53,14 +53,11 @@ export async function dailyVolume(
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
     )
-    .groupBy(
-      sql`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
-    )
-    .orderBy(
-      asc(
-        sql`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
-      ),
-    );
+    // Группируем/сортируем по порядковому номеру select-колонки (день в TZ
+    // юзера = колонка 1). Параметр TZ в выражении нельзя повторять в GROUP BY:
+    // bound-плейсхолдеры ($1 vs $N) не считаются равными → ordinal надёжнее.
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
 
   return rows.map((r) => ({
     date: r.day,
@@ -110,14 +107,10 @@ export async function weeklyVolume(
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
     )
-    .groupBy(
-      sql`date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone})`,
-    )
-    .orderBy(
-      asc(
-        sql`date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone})`,
-      ),
-    );
+    // Ordinal-группировка (неделя в TZ юзера = колонка 1): bound-параметр TZ
+    // нельзя повторять в GROUP BY (см. dailyVolume).
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
 
   return rows.map((r) => ({
     weekStart: r.week,
@@ -318,9 +311,9 @@ export async function workoutFrequency(
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
     )
-    .groupBy(
-      sql`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
-    );
+    // Ordinal-группировка (день в TZ юзера = колонка 1): bound-параметр TZ
+    // нельзя повторять в GROUP BY (см. dailyVolume).
+    .groupBy(sql`1`);
 
   return rows.map((r) => ({
     date: r.date,
