@@ -30,6 +30,7 @@ export type HistoryItem =
       finishedAt: Date | null;
       totalRounds: number;
       exerciseCount: number;
+      hasAnalysis: boolean;
     }
   | {
       kind: "cardio";
@@ -78,6 +79,7 @@ export function buildHistory(
           finishedAt: c.finishedAt,
           totalRounds: c.totalRounds,
           exerciseCount: c.exerciseCount,
+          hasAnalysis: c.hasAnalysis,
         }),
       ),
     ...cardio
@@ -122,7 +124,8 @@ export function HistoryCard({ item }: { item: HistoryItem }) {
           <HistoryMetrics item={item} />
         </div>
         <div className="flex flex-col items-end gap-2">
-          {item.kind === "strength" && item.hasAnalysis ? (
+          {(item.kind === "strength" || item.kind === "circuit") &&
+          item.hasAnalysis ? (
             <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
               <Sparkles className="size-3" />
               AI
@@ -163,7 +166,8 @@ export function LastSessionMini({ item }: { item: HistoryItem }) {
       </p>
       <div className="text-muted-foreground tabular mt-3 flex items-center justify-between text-xs">
         <span>{lastSessionHeadline(item)}</span>
-        {item.kind === "strength" && item.hasAnalysis ? (
+        {(item.kind === "strength" || item.kind === "circuit") &&
+        item.hasAnalysis ? (
           <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase">
             <Sparkles className="size-3" />
             AI

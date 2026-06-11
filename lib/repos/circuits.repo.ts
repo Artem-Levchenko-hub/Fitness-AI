@@ -15,6 +15,7 @@ export type CircuitSummary = {
   exerciseCount: number;
   completedLogCount: number;
   totalLogCount: number;
+  hasAnalysis: boolean;
 };
 
 export type CircuitExerciseWithName = schema.CircuitExercise & {
@@ -217,6 +218,15 @@ export async function listCircuits(
     logsByCircuit.set(l.circuitWorkoutId, cur);
   }
 
+  // AI-разбор круговой хранится в ai_analyses по circuitWorkoutId (G3).
+  // Помечаем сессии с готовым разбором, чтобы единая история показала
+  // тот же AI-бейдж, что и у силовых (workouts.repo: hasAnalysis).
+  const analysisRows = await db
+    .select({ circuitWorkoutId: schema.aiAnalyses.circuitWorkoutId })
+    .from(schema.aiAnalyses)
+    .where(inArray(schema.aiAnalyses.circuitWorkoutId, ids));
+  const hasAnalysis = new Set(analysisRows.map((r) => r.circuitWorkoutId));
+
   return rows.map((w) => ({
     id: w.id,
     name: w.name,
@@ -229,6 +239,7 @@ export async function listCircuits(
     exerciseCount: exByCircuit.get(w.id) ?? 0,
     completedLogCount: logsByCircuit.get(w.id)?.completed ?? 0,
     totalLogCount: logsByCircuit.get(w.id)?.total ?? 0,
+    hasAnalysis: hasAnalysis.has(w.id),
   }));
 }
 
