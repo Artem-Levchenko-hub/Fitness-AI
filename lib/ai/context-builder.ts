@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import {
+  ageFromBirthDateString,
   assessProgressJump,
   bestEstimatedOneRepMax,
   bodyweightEffectiveLoad,
@@ -479,7 +480,7 @@ async function loadAthleteProfileBlock(userId: string): Promise<string> {
   if (user?.heightCm != null) lines.push(`- Рост: ${user.heightCm} см`);
   if (body?.bodyFatPct != null) lines.push(`- % жира: ${body.bodyFatPct}`);
   if (user?.birthDate) {
-    const age = computeAge(user.birthDate);
+    const age = ageFromBirthDateString(user.birthDate);
     if (age != null) lines.push(`- Возраст: ~${age}`);
   }
   if (user?.sex) lines.push(`- Пол: ${user.sex}`);
@@ -488,12 +489,6 @@ async function loadAthleteProfileBlock(userId: string): Promise<string> {
     "Учитывай вес тела для относительной нагрузки: bodyweight-упражнения (подтягивания, брусья, отжимания) = вес тела + добавка. Снижение добавки на 5–10 кг у тяжёлого атлета — малый % тотала, не штрафуй как сильный регресс.",
   );
   return lines.join("\n");
-}
-
-function computeAge(birthDate: string): number | null {
-  const y = Number(birthDate.slice(0, 4));
-  if (!Number.isFinite(y) || y < 1900) return null;
-  return new Date().getFullYear() - y;
 }
 
 function formatOneRmTrend(t: {

@@ -34,6 +34,26 @@ export function ageFromBirthDate(
   return age;
 }
 
+/** Возраст из ISO-строки "YYYY-MM-DD" (формат колонки `users.birthDate`).
+ *  Учитывает наступил ли уже день рождения в этом году (в отличие от грубого
+ *  вычитания годов). null при мусоре/сентинеле (год < 1900). Дату собираем
+ *  как ЛОКАЛЬНУЮ — без TZ-сдвига `new Date("YYYY-MM-DD")` (UTC-полночь). */
+export function ageFromBirthDateString(
+  birthDate: string,
+  now: Date = new Date(),
+): number | null {
+  const [y, m, d] = birthDate.split("-").map(Number);
+  if (
+    !Number.isFinite(y) ||
+    y < 1900 ||
+    !Number.isFinite(m) ||
+    !Number.isFinite(d)
+  ) {
+    return null;
+  }
+  return ageFromBirthDate(new Date(y, m - 1, d), now);
+}
+
 /** Lean body mass = weight × (1 − BF%/100). Для отслеживания roster mass. */
 export function leanBodyMassKg(
   weightKg: number,

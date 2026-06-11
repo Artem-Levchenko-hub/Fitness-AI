@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ageFromBirthDate,
+  ageFromBirthDateString,
   bmiCategory,
   calculateBmi,
   leanBodyMassKg,
@@ -101,6 +102,40 @@ describe("ageFromBirthDate", () => {
     const birth = new Date(2000, 1, 29); // 29 фев 2000 (високосный)
     const now = new Date(2026, 1, 28); // 28 фев 2026
     expect(ageFromBirthDate(birth, now)).toBe(25);
+  });
+});
+
+describe("ageFromBirthDateString", () => {
+  const now = new Date(2026, 5, 11); // 11 июн 2026
+
+  it("день рождения уже прошёл → полный возраст", () => {
+    expect(ageFromBirthDateString("1990-01-15", now)).toBe(36);
+  });
+
+  it("сегодня день рождения → полный возраст", () => {
+    expect(ageFromBirthDateString("1990-06-11", now)).toBe(36);
+  });
+
+  // Регрессия, которую давала старая грубая формула (year-only вычитание):
+  // 2026 − 1990 = 36, хотя день рождения (31 дек) ещё не наступил → должно 35.
+  it("день рождения в этом году ЕЩЁ НЕ наступил → возраст −1 (не грубое вычитание лет)", () => {
+    expect(ageFromBirthDateString("1990-12-31", now)).toBe(35);
+  });
+
+  it("мусорная строка → null", () => {
+    expect(ageFromBirthDateString("not-a-date", now)).toBeNull();
+  });
+
+  it("пустая строка → null", () => {
+    expect(ageFromBirthDateString("", now)).toBeNull();
+  });
+
+  it("год < 1900 (сентинел/мусор) → null", () => {
+    expect(ageFromBirthDateString("1899-06-11", now)).toBeNull();
+  });
+
+  it("только год, без месяца/дня → null", () => {
+    expect(ageFromBirthDateString("1990", now)).toBeNull();
   });
 });
 
