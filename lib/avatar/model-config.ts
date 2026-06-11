@@ -8,4 +8,4 @@
  *  public/models/muscles.glb и поставить здесь "/models/muscles.glb". Раскраска,
  *  тап и вращение уже работают — больше менять ничего не нужно.
  *  См. public/models/README.md. */
-export const MUSCLE_MODEL_URL: string | null = null;
+export const MUSCLE_MODEL_URL: string | null = "/models/muscles.glb";

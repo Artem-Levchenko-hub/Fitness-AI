@@ -1,8 +1,22 @@
 # Атрибуция 3D-моделей
 
-## Z-Anatomy (если используется)
+## muscles.glb — Z-Anatomy «Myology» (АКТИВНА)
 
-Если `public/models/muscles.glb` собран из Z-Anatomy:
+`public/models/muscles.glb` собран из Sketchfab-выгрузки Z-Anatomy «Myology».
+Обязательная кредит-строка (показывается в UI под аватаром, см.
+`components/avatar/ProfileAvatar.tsx`):
+
+> This work is based on "Myology"
+> (https://sketchfab.com/3d-models/myology-31b40fd809b14665b93773936d67c52c)
+> by Z-Anatomy (https://sketchfab.com/Z-Anatomy) licensed under CC-BY-SA-4.0
+> (http://creativecommons.org/licenses/by-sa/4.0/)
+
+Изменения: оставлены только мышцы (LINES-аннотации убраны), геометрия упрощена
+(meshopt) и сжата (draco), меши сгруппированы в 14 групп по пространственному
+центроиду (`scripts/build-avatar-glb.mjs`). Производная распространяется под той
+же CC BY-SA 4.0.
+
+## Общие требования Z-Anatomy
 
 - **Источник:** Z-Anatomy — https://github.com/Z-Anatomy/Models-of-human-anatomy
 - **Лицензия:** Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)

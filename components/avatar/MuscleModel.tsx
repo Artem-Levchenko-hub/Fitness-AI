@@ -4,10 +4,13 @@ import { useGLTF } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useLayoutEffect, useMemo } from "react";
 import {
+  Box3,
   Color,
+  Group,
   Mesh,
   MeshStandardMaterial,
   type Object3D,
+  Vector3,
 } from "three";
 
 import { resolveMuscleKey } from "@/lib/avatar/muscle-mesh-map";
@@ -36,8 +39,10 @@ type Props = {
 export function MuscleModel({ url, data, selected, onSelect }: Props) {
   const { scene } = useGLTF(url);
 
-  // Клонируем сцену и даём каждому мешу свой материал + кэшируем muscleKey в
-  // userData (резолвим один раз, не на каждый кадр).
+  // Клонируем сцену, даём каждому мешу свой материал + кэшируем muscleKey, и
+  // вписываем модель в кадр: центрируем по X/Z, ставим стопы около низа и
+  // масштабируем под целевую высоту — чтобы реальная модель (ноги y=0,
+  // голова y~1.7) кадрировалась так же, как процедурный placeholder.
   const root = useMemo(() => {
     const cloned = scene.clone(true);
     cloned.traverse((obj: Object3D) => {
@@ -50,7 +55,22 @@ export function MuscleModel({ url, data, selected, onSelect }: Props) {
         });
       }
     });
-    return cloned;
+
+    const box = new Box3().setFromObject(cloned);
+    const size = box.getSize(new Vector3());
+    const center = box.getCenter(new Vector3());
+    const TARGET_HEIGHT = 1.85;
+    const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
+
+    const fitted = new Group();
+    cloned.position.set(-center.x, -center.y, -center.z); // центр модели → 0
+    fitted.add(cloned);
+    fitted.scale.setScalar(scale);
+    // Модель Z-Anatomy смотрит анатомическим «передом» в +X; камера — на +Z.
+    // Доворачиваем −90° по Y (+X → +Z), чтобы перёд смотрел в камеру, как у
+    // placeholder.
+    fitted.rotation.y = -Math.PI / 2;
+    return fitted;
   }, [scene]);
 
   // Перекрашиваем при смене data/selected (без пересоздания геометрии).

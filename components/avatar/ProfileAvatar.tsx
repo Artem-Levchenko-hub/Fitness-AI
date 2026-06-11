@@ -3,6 +3,8 @@
 import dynamic from "next/dynamic";
 import { useState, useSyncExternalStore } from "react";
 
+import { MUSCLE_MODEL_URL } from "@/lib/avatar/model-config";
+
 import { MuscleInfoPanel } from "./MuscleInfoPanel";
 import type { AvatarMuscleDatum } from "./types";
 
@@ -63,6 +65,22 @@ export function ProfileAvatar({ data }: { data: AvatarMuscleDatum[] }) {
         onAdvance={() => selected && onSelect(selected)}
         onClose={() => onSelect(null)}
       />
+
+      {/* Атрибуция CC BY-SA 4.0 — обязательна при использовании Z-Anatomy. */}
+      {MUSCLE_MODEL_URL ? (
+        <p className="text-muted-foreground/60 text-center text-[10px]">
+          3D-модель на основе{" "}
+          <a
+            href="https://sketchfab.com/3d-models/myology-31b40fd809b14665b93773936d67c52c"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2"
+          >
+            «Myology»
+          </a>{" "}
+          by Z-Anatomy · CC BY-SA 4.0
+        </p>
+      ) : null}
     </div>
   );
 }
