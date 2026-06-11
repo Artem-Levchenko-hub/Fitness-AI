@@ -59,10 +59,11 @@ export async function withCircuitBreaker<T>(
 
   try {
     const result = await fn();
-    if (s.state !== "closed") {
-      s.state = "closed";
-      s.failures = 0;
-    }
+    // Успех = разрыв серии падений: счётчик ВСЕГДА в 0 (порог считает ПОДРЯД
+    // идущие падения, не суммарные за всё время — иначе редкие разрозненные
+    // сбои AI накопятся и ложно откроют breaker при живом сервисе).
+    s.failures = 0;
+    if (s.state !== "closed") s.state = "closed";
     return result;
   } catch (err) {
     s.failures += 1;
