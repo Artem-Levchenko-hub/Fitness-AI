@@ -6,8 +6,14 @@ import {
   ageFromBirthDateString,
   bestEstimatedOneRepMax,
   bodyweightEffectiveLoad,
+  computeScheduleAdherence,
   totalVolume,
+  type DayCell,
+  type ScheduleAdherence,
+  type ScheduleLite,
 } from "@/lib/domain";
+import { localDateIso, localIsoDay } from "@/lib/datetime/local-day";
+import { formatDays, formatHour, WEEKDAYS } from "@/lib/ui/weekdays";
 import { formatOneRmTrend } from "./one-rm-trend";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
@@ -543,6 +549,8 @@ export async function buildTrainerContext(
   );
   sections.push(formatCircuitHistoryBlock(circuits));
 
+  sections.push(await loadScheduleBlock(userId));
+
   sections.push(`# Режим\nKind: \`${opts.kind}\``);
 
   return { prompt: sections.join("\n\n") };
@@ -768,6 +776,165 @@ async function loadRecentWorkoutsCompactBlock(
   return `## Последние ${rows.length} тренировок\n\n${rows
     .map((r) => `- ${formatDate(r.startedAt)}: ${r.name}`)
     .join("\n")}`;
+}
+
+// ─── Расписание (план vs факт) ────────────────────────────────────────────
+
+const SCHEDULE_PAST_OFFSETS = [-1, -2, -3, -4, -5, -6, -7];
+const SCHEDULE_UPCOMING_OFFSETS = [0, 1, 2, 3, 4, 5, 6];
+const SHORT_DOW = new Map(WEEKDAYS.map((d) => [d.iso, d.short]));
+
+/** Календарные дни юзера для offset'ов: локальная дата + ISO-день недели в его
+ *  timezone. Шаг ровно 24ч (Москва без DST — дефолт; для DST-зон adherence
+ *  остаётся приблизительным, R-05/R-10). */
+function scheduleDayCells(now: Date, tz: string, offsets: number[]): DayCell[] {
+  return offsets.map((k) => {
+    const d = new Date(now.getTime() + k * 24 * 60 * 60 * 1000);
+    return { date: localDateIso(d, tz), isoDay: localIsoDay(d, tz) };
+  });
+}
+
+/** Timezone юзера (дефолт Europe/Moscow — как в схеме). */
+async function loadUserTimezone(userId: string): Promise<string> {
+  const [u] = await db
+    .select({ tz: schema.users.timezone })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return u?.tz ?? "Europe/Moscow";
+}
+
+/** Включённые расписания юзера (R-7: фильтр по userId). */
+async function loadEnabledSchedules(userId: string): Promise<ScheduleLite[]> {
+  return db
+    .select({
+      label: schema.workoutSchedules.label,
+      daysOfWeek: schema.workoutSchedules.daysOfWeek,
+      hour: schema.workoutSchedules.hour,
+    })
+    .from(schema.workoutSchedules)
+    .where(
+      and(
+        eq(schema.workoutSchedules.userId, userId),
+        eq(schema.workoutSchedules.enabled, true),
+      ),
+    )
+    .orderBy(asc(schema.workoutSchedules.hour));
+}
+
+/** Множество локальных дат с ≥1 завершённой сессией ЛЮБОГО формата за окно.
+ *  Бакетим startedAt → локальную дату тем же helper'ом, что и day-cells, чтобы
+ *  «план» и «факт» сравнивались в одной системе дат. */
+async function loadCompletedSessionDates(
+  userId: string,
+  tz: string,
+  sinceDays: number,
+): Promise<Set<string>> {
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+  const [strength, circuits, cardio] = await Promise.all([
+    db
+      .select({ startedAt: schema.workouts.startedAt })
+      .from(schema.workouts)
+      .where(
+        and(
+          eq(schema.workouts.userId, userId),
+          eq(schema.workouts.status, "completed"),
+          gte(schema.workouts.startedAt, since),
+        ),
+      ),
+    db
+      .select({ startedAt: schema.circuitWorkouts.startedAt })
+      .from(schema.circuitWorkouts)
+      .where(
+        and(
+          eq(schema.circuitWorkouts.userId, userId),
+          eq(schema.circuitWorkouts.status, "completed"),
+          gte(schema.circuitWorkouts.startedAt, since),
+        ),
+      ),
+    db
+      .select({ startedAt: schema.cardioWorkouts.startedAt })
+      .from(schema.cardioWorkouts)
+      .where(
+        and(
+          eq(schema.cardioWorkouts.userId, userId),
+          eq(schema.cardioWorkouts.status, "completed"),
+          gte(schema.cardioWorkouts.startedAt, since),
+        ),
+      ),
+  ]);
+
+  const dates = new Set<string>();
+  for (const r of [...strength, ...circuits, ...cardio]) {
+    dates.add(localDateIso(r.startedAt, tz));
+  }
+  return dates;
+}
+
+/** Собирает блок «Расписание» для AI-тренера: план + план-vs-факт за 7 дней +
+ *  ближайшие 7 дней. Fail-soft (R-10): любой сбой загрузки не валит весь разбор
+ *  — отдаём мягкий плейсхолдер. */
+async function loadScheduleBlock(userId: string): Promise<string> {
+  try {
+    const tz = await loadUserTimezone(userId);
+    const schedules = await loadEnabledSchedules(userId);
+    if (schedules.length === 0) {
+      return "# Расписание тренировок\n_(расписание не задано)_";
+    }
+    const now = new Date();
+    const completedDates = await loadCompletedSessionDates(userId, tz, 8);
+    const adherence = computeScheduleAdherence(
+      schedules,
+      scheduleDayCells(now, tz, SCHEDULE_PAST_OFFSETS),
+      scheduleDayCells(now, tz, SCHEDULE_UPCOMING_OFFSETS),
+      completedDates,
+    );
+    return formatScheduleBlock(schedules, adherence);
+  } catch {
+    return "# Расписание тренировок\n_(расписание недоступно)_";
+  }
+}
+
+function formatScheduleBlock(
+  schedules: ScheduleLite[],
+  adherence: ScheduleAdherence,
+): string {
+  const dow = (isoDay: number) => SHORT_DOW.get(isoDay) ?? "?";
+
+  const plan = schedules
+    .map(
+      (s) => `- **${s.label}**: ${formatDays(s.daysOfWeek)} · ${formatHour(s.hour)}`,
+    )
+    .join("\n");
+
+  const lines = ["# Расписание тренировок (план)", "", plan, ""];
+
+  lines.push(
+    "## План vs факт за 7 дней",
+    `Запланировано тренировочных дней: ${adherence.planned7d} · выполнено: ${adherence.done7d}`,
+  );
+  if (adherence.missed.length > 0) {
+    lines.push(
+      `Пропущено: ${adherence.missed
+        .map((m) => `${dow(m.isoDay)} ${m.date} (${m.labels.join(", ")})`)
+        .join("; ")}`,
+    );
+  }
+
+  if (adherence.upcoming.length > 0) {
+    lines.push(
+      "",
+      "## Ближайшие 7 дней",
+      adherence.upcoming
+        .map(
+          (u) =>
+            `- ${dow(u.isoDay)} ${u.date} ${formatHour(u.hour)} — ${u.label}`,
+        )
+        .join("\n"),
+    );
+  }
+
+  return lines.join("\n");
 }
 
 // ─── Круговые тренировки ──────────────────────────────────────────────────

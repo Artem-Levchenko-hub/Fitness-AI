@@ -5,6 +5,7 @@ export * from "./progression/personal-records";
 export * from "./progression/sanity";
 export * from "./progression/trend";
 export * from "./workouts/active-session";
+export * from "./schedule/adherence";
 export * from "./cycle/iso-week";
 export * from "./body/bmi";
 export * from "./cardio/presets";
