@@ -71,9 +71,13 @@ export function MuscleModel({ url, data, selected, onSelect }: Props) {
     return fitted;
   }, [scene]);
 
-  // Перекрашиваем при смене data/selected (без пересоздания геометрии).
+  // Перекрашиваем при смене data/selected (без пересоздания геометрии). Когда
+  // что-то выбрано — выбранная мышца ЯРКО горит, остальные гаснут (тускнеют),
+  // чтобы выбранная не сливалась с соседями (напр. бицепс бедра рядом с
+  // ягодицами/икрами).
   useLayoutEffect(() => {
     const byKey = new Map(data.map((d) => [d.key, d]));
+    const hasSelection = selected != null;
     root.traverse((obj: Object3D) => {
       if (!(obj instanceof Mesh)) return;
       const key = obj.userData.muscleKey as string | null;
@@ -82,9 +86,22 @@ export function MuscleModel({ url, data, selected, onSelect }: Props) {
       const t = datum?.t ?? 0;
       const isSelected = key != null && key === selected;
       const mat = obj.material as MeshStandardMaterial;
-      mat.color.set(new Color(hex));
-      mat.emissive.set(new Color(hex));
-      mat.emissiveIntensity = (isSelected ? 0.85 : 0.25) + t * 0.75;
+      const col = new Color(hex);
+      const emi = new Color(hex);
+      let intensity: number;
+      if (isSelected) {
+        col.multiplyScalar(1.12); // выбранная — чуть ярче основа
+        intensity = 1.25 + t * 0.5; // сильное свечение
+      } else if (hasSelection) {
+        col.multiplyScalar(0.32); // невыбранные — притушить
+        emi.multiplyScalar(0.32);
+        intensity = 0.05;
+      } else {
+        intensity = 0.25 + t * 0.75; // обычный режим (нет выбора)
+      }
+      mat.color.copy(col);
+      mat.emissive.copy(emi);
+      mat.emissiveIntensity = intensity;
     });
   }, [root, data, selected]);
 

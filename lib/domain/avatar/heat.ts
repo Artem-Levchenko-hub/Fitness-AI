@@ -66,10 +66,11 @@ export function heatFromSets(weeklySets: number): Heat {
  *  рампа закодирована здесь как доменная константа (single source), а не
  *  Tailwind-токены — three.js рендерит реальный цвет, а не CSS-класс. */
 const RAMP: ReadonlyArray<{ t: number; rgb: [number, number, number] }> = [
-  { t: 0.0, rgb: [0x6b, 0x6b, 0x66] }, // тёплый серый — холодная мышца
-  { t: 0.35, rgb: [0xd4, 0xa0, 0x2c] }, // янтарь
-  { t: 0.7, rgb: [0xe2, 0x6d, 0x2a] }, // оранжевый
-  { t: 1.0, rgb: [0xd6, 0x28, 0x28] }, // раскалённый красный
+  { t: 0.0, rgb: [0x5b, 0x62, 0x6b] }, // прохладный сланец — холодная мышца
+  { t: 0.26, rgb: [0xe0, 0xa5, 0x2a] }, // золото
+  { t: 0.5, rgb: [0xf2, 0x73, 0x1e] }, // оранжевый
+  { t: 0.76, rgb: [0xe5, 0x35, 0x2c] }, // красный
+  { t: 1.0, rgb: [0xe5, 0x0a, 0x46] }, // алый-малиновый — «на огне»
 ];
 
 export function heatColorStop(t: number): string {
