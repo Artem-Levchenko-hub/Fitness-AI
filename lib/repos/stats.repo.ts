@@ -2,6 +2,7 @@ import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
 
 export type StatsRange = "7d" | "30d" | "90d" | "365d" | "all";
 
@@ -242,7 +243,8 @@ export async function oneRmTrend(
 ): Promise<OneRmTrendPoint[]> {
   const from = rangeToFromDate(range);
 
-  // Достаём все working-подходы с e1RM по Epley × Brzycki avg
+  // Достаём все working-подходы; e1RM считаем общей доменной функцией
+  // (Epley × Brzycki avg с корректным фолбэком на высокоповторных, R-04).
   const rows = await db
     .select({
       date: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
@@ -271,11 +273,8 @@ export async function oneRmTrend(
 
   const byDay = new Map<string, number>();
   for (const r of rows) {
-    if (r.reps < 1) continue;
-    const epley = r.weight * (1 + r.reps / 30);
-    const brzycki =
-      r.reps >= 37 ? 0 : (r.weight * 36) / (37 - r.reps);
-    const e1 = r.reps === 1 ? r.weight : (epley + brzycki) / 2;
+    const e1 = estimatedOneRepMax(r.weight, r.reps);
+    if (e1 <= 0) continue;
     const prev = byDay.get(r.date) ?? 0;
     if (e1 > prev) byDay.set(r.date, e1);
   }
@@ -445,15 +444,6 @@ export type ExerciseTrend = {
   previousE1rm: number;
 };
 
-/** Оценочный 1RM одного подхода — Epley × Brzycki avg, как в `oneRmTrend`.
- *  Один источник формулы: тренд-график и инсайт «ключевое движение» совпадают. */
-function setE1rm(weightKg: number, reps: number): number {
-  if (reps < 1) return 0;
-  const epley = weightKg * (1 + reps / 30);
-  const brzycki = reps >= 37 ? 0 : (weightKg * 36) / (37 - reps);
-  return reps === 1 ? weightKg : (epley + brzycki) / 2;
-}
-
 /** Лучший e1RM по каждому упражнению за окно [from, to). Только completed +
  *  working подходы (G1). */
 async function bestE1rmByExercise(
@@ -493,7 +483,7 @@ async function bestE1rmByExercise(
 
   const best = new Map<string, { name: string; e1rm: number }>();
   for (const r of rows) {
-    const e1 = setE1rm(r.weight, r.reps);
+    const e1 = estimatedOneRepMax(r.weight, r.reps);
     const prev = best.get(r.exerciseId);
     if (!prev || e1 > prev.e1rm) {
       best.set(r.exerciseId, { name: r.name, e1rm: e1 });
