@@ -11,6 +11,8 @@ import {
   type HistoryItem,
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
+import { addDaysIso, isoWeekStartIso } from "@/lib/datetime/iso-week";
+import { getUserProfile } from "@/lib/repos/body.repo";
 import { getActiveCardioId, listRecentCardio } from "@/lib/repos/cardio.repo";
 import { getActiveCircuitId, listCircuits } from "@/lib/repos/circuits.repo";
 import {
@@ -29,6 +31,7 @@ export default async function WorkoutsPage() {
     activeId,
     activeCircuitId,
     activeCardioId,
+    profile,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 60),
     listCircuits(user.id, 60),
@@ -36,10 +39,14 @@ export default async function WorkoutsPage() {
     getActiveWorkoutId(user.id),
     getActiveCircuitId(user.id),
     getActiveCardioId(user.id),
+    getUserProfile(user.id),
   ]);
 
+  // Группировка истории по неделям — в TZ юзера, иначе тренировка у границы
+  // воскресенье↔понедельник попадает не в ту неделю (см. lib/datetime/iso-week).
+  const tz = profile?.timezone ?? "Europe/Moscow";
   const items = buildHistory(strength, circuits, cardio);
-  const groups = groupByWeek(items);
+  const groups = groupByWeek(items, tz);
 
   // Единый поток: активная сессия любого формата (силовая/круговая/кардио) —
   // один общий ResumeBanner, как на дашборде. /workouts — единственный экран
@@ -128,23 +135,22 @@ type WeekGroup = {
   items: HistoryItem[];
 };
 
-function groupByWeek(items: HistoryItem[]): WeekGroup[] {
+function groupByWeek(items: HistoryItem[], tz: string): WeekGroup[] {
   if (items.length === 0) return [];
 
-  const now = new Date();
-  const thisWeekStart = startOfWeek(now);
-  const lastWeekStart = addDays(thisWeekStart, -7);
+  // Все границы недели считаем в TZ юзера через "YYYY-MM-DD"-ключи понедельников.
+  const thisWeekKey = isoWeekStartIso(new Date(), tz);
+  const lastWeekKey = addDaysIso(thisWeekKey, -7);
 
   const buckets = new Map<string, HistoryItem[]>();
   const labels = new Map<string, string>();
 
   for (const w of items) {
-    const weekStart = startOfWeek(w.startedAt);
-    const key = weekStart.toISOString().slice(0, 10);
+    const key = isoWeekStartIso(w.startedAt, tz);
 
     if (!buckets.has(key)) {
       buckets.set(key, []);
-      labels.set(key, labelForWeek(weekStart, thisWeekStart, lastWeekStart));
+      labels.set(key, labelForWeek(key, thisWeekKey, lastWeekKey));
     }
     buckets.get(key)!.push(w);
   }
@@ -158,43 +164,27 @@ function groupByWeek(items: HistoryItem[]): WeekGroup[] {
     }));
 }
 
-function startOfWeek(d: Date): Date {
-  // ISO week — Monday start
-  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const day = date.getDay(); // 0..6 (Sun..Sat)
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function addDays(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
 function labelForWeek(
-  weekStart: Date,
-  thisWeek: Date,
-  lastWeek: Date,
+  weekKey: string,
+  thisWeekKey: string,
+  lastWeekKey: string,
 ): string {
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
-
-  if (sameDay(weekStart, thisWeek)) return "Эта неделя";
-  if (sameDay(weekStart, lastWeek)) return "Прошлая неделя";
+  if (weekKey === thisWeekKey) return "Эта неделя";
+  if (weekKey === lastWeekKey) return "Прошлая неделя";
 
   const diffDays = Math.round(
-    (thisWeek.getTime() - weekStart.getTime()) / 86_400_000,
+    (Date.parse(`${thisWeekKey}T12:00:00Z`) -
+      Date.parse(`${weekKey}T12:00:00Z`)) /
+      86_400_000,
   );
   const weeksAgo = Math.round(diffDays / 7);
   if (weeksAgo < 4) return `${weeksAgo} нед. назад`;
 
-  return weekStart.toLocaleDateString("ru-RU", {
+  // Понедельник недели как дата — формат в UTC, чтобы совпадал с ключом
+  // независимо от серверной TZ.
+  return new Date(`${weekKey}T12:00:00Z`).toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "long",
+    timeZone: "UTC",
   });
 }
