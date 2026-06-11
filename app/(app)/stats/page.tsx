@@ -11,7 +11,7 @@ import {
   summarizeExerciseTrend,
   summarizeVolumeChange,
 } from "@/lib/domain/stats/period-insight";
-import { listMeasurements } from "@/lib/repos/body.repo";
+import { getUserProfile, listMeasurements } from "@/lib/repos/body.repo";
 import {
   dailyVolume,
   oneRmTrend,
@@ -50,6 +50,12 @@ export default async function StatsPage({ searchParams }: Props) {
     : "30d";
   const granularity: "day" | "week" = sp.g === "week" ? "week" : "day";
 
+  // Календарные дни/недели графиков бакетятся в timezone юзера — РОВНО как
+  // история `/workouts` (G1): graph и история показывают тренировку в один и
+  // тот же день. Фолбэк Europe/Moscow = TZ сервера (как `/workouts`).
+  const profile = await getUserProfile(user.id);
+  const tz = profile?.timezone ?? "Europe/Moscow";
+
   const [
     kpi,
     volume,
@@ -63,11 +69,11 @@ export default async function StatsPage({ searchParams }: Props) {
   ] = await Promise.all([
     topLineKpi(user.id, range),
     granularity === "week"
-      ? weeklyVolume(user.id, range)
-      : dailyVolume(user.id, range),
+      ? weeklyVolume(user.id, range, tz)
+      : dailyVolume(user.id, range, tz),
     volumeByMuscle(user.id, range),
     repRangeDistribution(user.id, range),
-    workoutFrequency(user.id, "365d"),
+    workoutFrequency(user.id, "365d", tz),
     trainedExercises(user.id),
     listMeasurements(user.id, 60),
     periodVolumeComparison(user.id, range),
@@ -97,7 +103,7 @@ export default async function StatsPage({ searchParams }: Props) {
     ? sp.ex
     : exercises[0]?.id;
   const oneRm = currentExId
-    ? await oneRmTrend(user.id, currentExId, range)
+    ? await oneRmTrend(user.id, currentExId, range, tz)
     : [];
 
   const totalSetsByBucket = repBuckets.reduce((s, b) => s + b.sets, 0) || 1;

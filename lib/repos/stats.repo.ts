@@ -13,22 +13,25 @@ export function rangeToFromDate(range: StatsRange): Date | null {
 }
 
 export type DailyVolumePoint = {
-  date: string; // YYYY-MM-DD (UTC)
+  date: string; // YYYY-MM-DD в timezone юзера
   volume: number;
   sets: number;
   reps: number;
 };
 
-/** Объём по дням за период. Учитывает только working подходы. */
+/** Объём по дням за период. Учитывает только working подходы. Дни
+ *  бакетятся в `timeZone` юзера — РОВНО как история `/workouts` (G1): один и
+ *  тот же instant попадает в тот же календарный день в графике и в истории. */
 export async function dailyVolume(
   userId: string,
   range: StatsRange,
+  timeZone: string,
 ): Promise<DailyVolumePoint[]> {
   const from = rangeToFromDate(range);
 
   const rows = await db
     .select({
-      day: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+      day: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
       volume: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
       sets: sql<number>`COUNT(${schema.workoutSets.id})`,
       reps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}), 0)`,
@@ -51,11 +54,11 @@ export async function dailyVolume(
       ),
     )
     .groupBy(
-      sql`to_char(${schema.workouts.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+      sql`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
     )
     .orderBy(
       asc(
-        sql`to_char(${schema.workouts.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+        sql`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
       ),
     );
 
@@ -74,16 +77,18 @@ export type WeeklyVolumePoint = {
   reps: number;
 };
 
-/** Объём по неделям (ISO неделя, начало — понедельник). */
+/** Объём по неделям (ISO неделя, начало — понедельник). Границы недели
+ *  считаются в `timeZone` юзера — РОВНО как история `/workouts` (G1). */
 export async function weeklyVolume(
   userId: string,
   range: StatsRange,
+  timeZone: string,
 ): Promise<WeeklyVolumePoint[]> {
   const from = rangeToFromDate(range);
 
   const rows = await db
     .select({
-      week: sql<string>`to_char(date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE 'UTC'), 'YYYY-MM-DD')`,
+      week: sql<string>`to_char(date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`,
       volume: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
       sets: sql<number>`COUNT(${schema.workoutSets.id})`,
       reps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}), 0)`,
@@ -106,11 +111,11 @@ export async function weeklyVolume(
       ),
     )
     .groupBy(
-      sql`date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE 'UTC')`,
+      sql`date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone})`,
     )
     .orderBy(
       asc(
-        sql`date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE 'UTC')`,
+        sql`date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone})`,
       ),
     );
 
@@ -240,14 +245,16 @@ export async function oneRmTrend(
   userId: string,
   exerciseId: string,
   range: StatsRange,
+  timeZone: string,
 ): Promise<OneRmTrendPoint[]> {
   const from = rangeToFromDate(range);
 
   // Достаём все working-подходы; e1RM считаем общей доменной функцией
   // (Epley × Brzycki avg с корректным фолбэком на высокоповторных, R-04).
+  // Дни группируем в timezone юзера (G1 — как история `/workouts`).
   const rows = await db
     .select({
-      date: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
       weight: schema.workoutSets.weightKg,
       reps: schema.workoutSets.reps,
     })
@@ -290,16 +297,17 @@ export type FrequencyPoint = {
 };
 
 /** Календарная активность — сколько тренировок в каждый день
- *  (для heatmap-графика). */
+ *  (для heatmap-графика). Дни — в timezone юзера (G1, как `/workouts`). */
 export async function workoutFrequency(
   userId: string,
   range: StatsRange,
+  timeZone: string,
 ): Promise<FrequencyPoint[]> {
   const from = rangeToFromDate(range);
 
   const rows = await db
     .select({
-      date: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
       count: sql<number>`COUNT(*)`,
     })
     .from(schema.workouts)
@@ -311,7 +319,7 @@ export async function workoutFrequency(
       ),
     )
     .groupBy(
-      sql`to_char(${schema.workouts.startedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+      sql`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
     );
 
   return rows.map((r) => ({
