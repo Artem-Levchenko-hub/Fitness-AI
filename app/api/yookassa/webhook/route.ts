@@ -9,6 +9,7 @@ import {
   YOOKASSA_IP_WHITELIST,
   isYookassaConfigured,
 } from "@/lib/billing/yookassa";
+import { ipInAnyCidr } from "@/lib/net/cidr";
 
 export const runtime = "nodejs";
 
@@ -106,40 +107,5 @@ function isIpAllowed(ip: string): boolean {
   // В dev (без X-Forwarded-For из ЮKassa) пропускаем — иначе нельзя
   // протестировать. На проде nginx всегда подставит X-Forwarded-For.
   if (!ip) return true;
-
-  for (const cidr of YOOKASSA_IP_WHITELIST) {
-    if (cidr.includes("/")) {
-      if (ipInCidr(ip, cidr)) return true;
-    } else if (ip === cidr) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function ipInCidr(ip: string, cidr: string): boolean {
-  const [base, prefixStr] = cidr.split("/");
-  if (!base || !prefixStr) return false;
-  const prefix = parseInt(prefixStr, 10);
-
-  // IPv4 only — для IPv6 пропускаем (наша инфра v4)
-  if (ip.includes(":") || base.includes(":")) return false;
-
-  const ipNum = ipv4ToNum(ip);
-  const baseNum = ipv4ToNum(base);
-  if (ipNum === null || baseNum === null) return false;
-
-  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
-  return (ipNum & mask) === (baseNum & mask);
-}
-
-function ipv4ToNum(ip: string): number | null {
-  const parts = ip.split(".").map((p) => parseInt(p, 10));
-  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
-    return null;
-  }
-  return (
-    ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>>
-    0
-  );
+  return ipInAnyCidr(ip, YOOKASSA_IP_WHITELIST);
 }
