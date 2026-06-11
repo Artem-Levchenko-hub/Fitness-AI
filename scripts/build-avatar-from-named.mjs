@@ -65,6 +65,13 @@ const RULES = [
   [["gluteus"], "glutes"], [["gluteal"], "glutes"],
   [["biceps"], "biceps"], [["triceps"], "triceps"], [["quad"], "quads"],
 ];
+// Мелкие intrinsics кисти/стопы и большого пальца — не «качковые» группы,
+// сбивают регион и клики. Дропаем по имени (форму предплечья всё равно держат
+// carpi/digitorum/brachioradialis/pronator).
+const DROP_INTRINSIC = [
+  "of hand", "lumbric", "interosse", "opponens", "indicis", "pollicis",
+  "palmaris brevis", "abductor digiti",
+];
 const SIDE = new Set(["l", "r", "j", "left", "right", "lr", "musclel", "muscler", "musclej"]);
 function tokenize(name) {
   return name.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t && !SIDE.has(t) && !/^\d+$/.test(t));
@@ -72,9 +79,34 @@ function tokenize(name) {
 function resolveByName(name) {
   const low = name.toLowerCase();
   if (CONNECTIVE.some((c) => low.includes(c))) return null;
+  if (DROP_INTRINSIC.some((c) => low.includes(c))) return null;
   const ts = new Set(tokenize(name));
   for (const [toks, key] of RULES) if (toks.every((t) => ts.has(t))) return key;
   return null;
+}
+
+const ARM_GROUPS = new Set(["biceps", "triceps", "forearms"]);
+const LEG_GROUPS = new Set(["quads", "hamstrings", "calves"]);
+
+/** Гард по положению: имя даёт идентичность мышцы, но РЕГИОН тела решает
+ *  высота центроида. Чинит главную ошибку — стопные/голеностопные flexor/
+ *  extensor/adductor («…longus», «…hallucis», «adductor hallucis»), которые по
+ *  имени уходили в forearms/quads, а по факту это низ ноги. anterior = +Z. */
+function classify(name, centroid, H) {
+  const g = resolveByName(name);
+  if (!g) return null;
+  const hf = centroid[1] / H; // доля высоты [0..1]
+  const z = centroid[2]; // глубина, перёд > 0
+  if (ARM_GROUPS.has(g) && hf < 0.45) {
+    // на самом деле низ тела (стопа/голень/бедро)
+    if (hf < 0.28) return "calves";
+    return z >= 0 ? "quads" : "hamstrings";
+  }
+  if (LEG_GROUPS.has(g)) {
+    if (hf < 0.22) return "calves"; // стопа/голеностоп
+    if (hf > 0.55) return "forearms"; // ошибочно «в руку»
+  }
+  return g;
 }
 
 async function main() {
@@ -92,31 +124,42 @@ async function main() {
 
   // Классификация ПО ИМЕНИ НОДЫ + запекание мировой матрицы + бакеты по группе.
   // Геометрия уже запечена в world-координаты в Blender (make_single_user +
-  // transform_apply, ноды identity) — трансформы тут НЕ применяем (двойной
-  // transform на инстансах L/R схлопывал бы модель).
+  // transform_apply, ноды identity) → centroid = центр AABB меша (min/max
+  // POSITION уже в мире). Трансформы тут НЕ применяем.
+  const meshNodes = [];
+  const collect = (node) => {
+    const mesh = node.getMesh();
+    if (mesh) {
+      let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+      for (const prim of mesh.listPrimitives()) {
+        const pos = prim.getAttribute("POSITION");
+        if (!pos) continue;
+        const mn = pos.getMinNormalized([]), mx = pos.getMaxNormalized([]);
+        for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], mn[k]); hi[k] = Math.max(hi[k], mx[k]); }
+      }
+      const centroid = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+      meshNodes.push({ node, mesh, name: node.getName(), centroid, maxY: hi[1] });
+    }
+    for (const ch of node.listChildren()) collect(ch);
+  };
+  for (const r of scene.listChildren()) collect(r);
+  const H = Math.max(...meshNodes.map((m) => m.maxY));
+
   const buckets = new Map();
   const counts = {};
   let dropped = 0;
-  const walk = (node) => {
-    const mesh = node.getMesh();
-    if (mesh) {
-      const group = resolveByName(node.getName());
-      if (group) {
-        counts[group] = (counts[group] || 0) + 1;
-        for (const prim of mesh.listPrimitives()) {
-          for (const sem of prim.listSemantics())
-            if (sem !== "POSITION" && sem !== "NORMAL") prim.setAttribute(sem, null);
-          prim.setMaterial(neutral);
-          if (!buckets.has(group)) buckets.set(group, []);
-          buckets.get(group).push(prim);
-        }
-      } else {
-        dropped++;
-      }
+  for (const mn of meshNodes) {
+    const group = classify(mn.name, mn.centroid, H);
+    if (!group) { dropped++; continue; }
+    counts[group] = (counts[group] || 0) + 1;
+    for (const prim of mn.mesh.listPrimitives()) {
+      for (const sem of prim.listSemantics())
+        if (sem !== "POSITION" && sem !== "NORMAL") prim.setAttribute(sem, null);
+      prim.setMaterial(neutral);
+      if (!buckets.has(group)) buckets.set(group, []);
+      buckets.get(group).push(prim);
     }
-    for (const ch of node.listChildren()) walk(ch);
-  };
-  for (const r of scene.listChildren()) walk(r);
+  }
 
   const oldNodes = root.listNodes();
   const oldMeshes = root.listMeshes();
