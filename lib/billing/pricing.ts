@@ -1,33 +1,18 @@
 import { env } from "@/lib/env";
 
+// Чистая денежная арифметика/форматирование вынесена в env-free `./money`
+// (юнит-тестируема). Реэкспорт сохраняет публичный API `@/lib/billing/pricing`.
+export {
+  TOPUP_PACKAGES,
+  MIN_TOPUP_RUB,
+  MAX_TOPUP_RUB,
+  rubToKopecks,
+  kopecksToRub,
+  formatRub,
+} from "./money";
+
 /** Цена одного коуч-разговора в копейках. Default 1000 (10 ₽).
  *  Меняется через AI_COACH_PRICE_KOPECKS в .env.production. */
 export function aiCoachPriceKopecks(): number {
   return env.AI_COACH_PRICE_KOPECKS ?? 1000;
-}
-
-export const TOPUP_PACKAGES = [
-  { rub: 250, label: "250 ₽", subtitle: "≈ 25 анализов" },
-  { rub: 500, label: "500 ₽", subtitle: "≈ 50 анализов" },
-  { rub: 1000, label: "1 000 ₽", subtitle: "≈ 100 анализов" },
-  { rub: 2000, label: "2 000 ₽", subtitle: "≈ 200 анализов" },
-] as const;
-
-export const MIN_TOPUP_RUB = 250;
-export const MAX_TOPUP_RUB = 50_000;
-
-export function rubToKopecks(rub: number): number {
-  return Math.round(rub * 100);
-}
-
-export function kopecksToRub(kopecks: number): number {
-  return kopecks / 100;
-}
-
-export function formatRub(kopecks: number): string {
-  const rub = kopecks / 100;
-  return `${rub.toLocaleString("ru-RU", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })} ₽`;
 }
