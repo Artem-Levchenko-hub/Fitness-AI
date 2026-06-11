@@ -2,7 +2,11 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
+import { Suspense } from "react";
 
+import { MUSCLE_MODEL_URL } from "@/lib/avatar/model-config";
+
+import { MuscleModel } from "./MuscleModel";
 import { PlaceholderBody } from "./PlaceholderBody";
 import type { AvatarMuscleDatum } from "./types";
 
@@ -34,7 +38,26 @@ export default function AvatarCanvas({ data, selected, onSelect }: Props) {
       <directionalLight position={[2.5, 3, 4]} intensity={1.15} />
       <directionalLight position={[-3, 1, -3]} intensity={0.45} />
 
-      <PlaceholderBody data={data} selected={selected} onSelect={onSelect} />
+      <Suspense
+        fallback={
+          <PlaceholderBody data={data} selected={selected} onSelect={onSelect} />
+        }
+      >
+        {MUSCLE_MODEL_URL ? (
+          <MuscleModel
+            url={MUSCLE_MODEL_URL}
+            data={data}
+            selected={selected}
+            onSelect={onSelect}
+          />
+        ) : (
+          <PlaceholderBody
+            data={data}
+            selected={selected}
+            onSelect={onSelect}
+          />
+        )}
+      </Suspense>
 
       <OrbitControls
         makeDefault
