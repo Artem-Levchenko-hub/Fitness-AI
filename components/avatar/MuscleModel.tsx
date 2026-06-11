@@ -66,10 +66,8 @@ export function MuscleModel({ url, data, selected, onSelect }: Props) {
     cloned.position.set(-center.x, -center.y, -center.z); // центр модели → 0
     fitted.add(cloned);
     fitted.scale.setScalar(scale);
-    // Модель Z-Anatomy смотрит анатомическим «передом» в +X; камера — на +Z.
-    // Доворачиваем −90° по Y (+X → +Z), чтобы перёд смотрел в камеру, как у
-    // placeholder.
-    fitted.rotation.y = -Math.PI / 2;
+    // glb из build-avatar-glb.mjs ориентирован передом в +Z; камера на +Z →
+    // перёд смотрит в камеру на покое без доворота (подтверждено рендером).
     return fitted;
   }, [scene]);
 

@@ -535,44 +535,52 @@ export async function topMoverByE1rm(
 
 export type MuscleHeat = {
   muscleKey: string;
-  /** Working-тоннаж группы за последние 7 дней (primary 1.0 / secondary 0.5). */
-  current7dVolume: number;
-  /** Средний недельный working-тоннаж группы за baseline-окно (прошлые недели,
-   *  БЕЗ текущих 7 дней) — «собственная норма». 0 = нормы нет. */
-  baselineWeeklyVolume: number;
-  /** Число working-подходов, задевших группу за последние 7 дней. */
+  /** Эффективные рабочие подходы за неделю (primary 1.0 / secondary 0.5;
+   *  силовые + круговые) — вход для нагрева аватара. */
+  weeklySets: number;
+  /** Целое число подходов, задевших группу за неделю (для панели). */
   sets: number;
-  /** Когда группа в последний раз работала (в пределах baseline-окна). null =
-   *  не тренировалась в окне. */
+  /** Working-тоннаж группы за неделю (кг·повт), там где есть вес/повторы. */
+  volume7d: number;
+  /** Когда группа в последний раз работала за неделю. null = не на этой неделе. */
   lastTrainedAt: Date | null;
-  /** Топ-3 упражнения по вкладу в группу за последние 7 дней. */
+  /** Топ-3 упражнения по вкладу в группу за неделю. */
   top3: Array<{ name: string; volume: number }>;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Профиль «нагрева» всех 14 групп мышц для 3D-аватара: объём за последние
- *  7 дней + собственная недельная норма (среднее за `baselineWeeks` прошлых
- *  недель, исключая текущие 7 дней) + подходы/последняя тренировка/топ-упражнения
- *  за текущее окно. Только completed + working (G1).
+/** Унифицированная строка «подход × группа мышц» из любого формата. */
+type HeatRow = {
+  /** Уникальный id подхода (s:setId для силовых, c:logId для круговых) —
+   *  чтобы один подход не считался дважды по разным группам. */
+  sourceId: string;
+  muscle: string;
+  role: "primary" | "secondary";
+  weight: number | null;
+  reps: number | null;
+  exerciseId: string;
+  exName: string;
+  at: Date;
+};
+
+/** Профиль «нагрева» всех 14 групп мышц для 3D-аватара за последнюю неделю.
+ *  Нагрев = АБСОЛЮТНОЕ число эффективных рабочих подходов на группу (см.
+ *  доменный `heatFromSets`): серый → красный. Считает И силовые подходы, И
+ *  круговые (circuit_round_logs) — иначе круговая тренировка не «грела» бы тело
+ *  (баг: пользователь тренировался круговыми, а аватар оставался серым).
+ *  Только completed-сессии (G1).
  *
- *  Возвращает РОВНО 14 записей в порядке MUSCLE_KEYS (нетренированные —
- *  нулями), чтобы страница раскрашивала всё тело без доуборки на своей стороне.
- *  Один запрос за окно [baselineStart, now), агрегация в TS — данных мало
- *  (один юзер × ~5 недель подходов). Доменный `distributeVolumeByMuscle`
- *  фиксирует коэффициенты ролей; здесь они применяются построчно, т.к. нужно
- *  ещё окно/подходы/топ на тот же проход. */
+ *  Возвращает РОВНО 14 записей в порядке MUSCLE_KEYS (нетренированные — нулями).
+ *  primary = полный подход, secondary = 0.5 (стандарт оценки нагрузки). */
 export async function muscleHeatProfile(
   userId: string,
   now: Date,
-  baselineWeeks = 4,
 ): Promise<MuscleHeat[]> {
-  const currentStart = new Date(now.getTime() - 7 * DAY_MS);
-  const baselineStart = new Date(
-    now.getTime() - (baselineWeeks + 1) * 7 * DAY_MS,
-  );
+  const from = new Date(now.getTime() - 7 * DAY_MS);
 
-  const rows = await db
+  // Силовые рабочие подходы за неделю.
+  const strengthRows = await db
     .select({
       setId: schema.workoutSets.id,
       muscle: schema.exerciseMuscleGroups.muscleGroupKey,
@@ -581,7 +589,7 @@ export async function muscleHeatProfile(
       reps: schema.workoutSets.reps,
       exerciseId: schema.workoutExercises.exerciseId,
       exName: schema.exercises.nameRu,
-      startedAt: schema.workouts.startedAt,
+      at: schema.workouts.startedAt,
     })
     .from(schema.workoutSets)
     .innerJoin(
@@ -608,14 +616,61 @@ export async function muscleHeatProfile(
         eq(schema.workouts.userId, userId),
         eq(schema.workouts.status, "completed"),
         eq(schema.workoutSets.setType, "working"),
-        gte(schema.workouts.startedAt, baselineStart),
+        gte(schema.workouts.startedAt, from),
       ),
     );
 
+  // Круговые: каждый невыполненный-пропуск лог раунда = один подход своего
+  // упражнения (completed-сессии). Вес/повторы — если есть (часто bodyweight).
+  const circuitRows = await db
+    .select({
+      logId: schema.circuitRoundLogs.id,
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      role: schema.exerciseMuscleGroups.role,
+      weight: schema.circuitRoundLogs.actualWeightKg,
+      reps: schema.circuitRoundLogs.actualReps,
+      exerciseId: schema.circuitExercises.exerciseId,
+      exName: schema.exercises.nameRu,
+      at: schema.circuitRoundLogs.completedAt,
+    })
+    .from(schema.circuitRoundLogs)
+    .innerJoin(
+      schema.circuitExercises,
+      eq(schema.circuitExercises.id, schema.circuitRoundLogs.circuitExerciseId),
+    )
+    .innerJoin(
+      schema.circuitWorkouts,
+      eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.circuitExercises.exerciseId,
+      ),
+    )
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.circuitExercises.exerciseId),
+    )
+    .where(
+      and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "completed"),
+        eq(schema.circuitRoundLogs.skipped, false),
+        gte(schema.circuitRoundLogs.completedAt, from),
+      ),
+    );
+
+  const rows: HeatRow[] = [
+    ...strengthRows.map((r) => ({ ...r, sourceId: `s:${r.setId}` })),
+    ...circuitRows.map((r) => ({ ...r, sourceId: `c:${r.logId}` })),
+  ];
+
   type Acc = {
-    current: number;
-    baseline: number;
-    setIds: Set<string>;
+    /** sourceId → максимальный role-вес (primary вытесняет secondary). */
+    setWeights: Map<string, number>;
+    volume: number;
     lastTrainedAt: Date | null;
     exVolume: Map<string, { name: string; volume: number }>;
   };
@@ -623,38 +678,24 @@ export async function muscleHeatProfile(
   const ensure = (key: string): Acc => {
     let a = byMuscle.get(key);
     if (!a) {
-      a = {
-        current: 0,
-        baseline: 0,
-        setIds: new Set(),
-        lastTrainedAt: null,
-        exVolume: new Map(),
-      };
+      a = { setWeights: new Map(), volume: 0, lastTrainedAt: null, exVolume: new Map() };
       byMuscle.set(key, a);
     }
     return a;
   };
 
   for (const r of rows) {
-    const factor = r.role === "primary" ? 1 : 0.5;
-    const vol = r.weight * r.reps * factor;
+    const w = r.role === "primary" ? 1 : 0.5;
     const acc = ensure(r.muscle);
-    const inCurrent = r.startedAt.getTime() >= currentStart.getTime();
-
-    if (inCurrent) {
-      acc.current += vol;
-      acc.setIds.add(r.setId);
+    if ((acc.setWeights.get(r.sourceId) ?? 0) < w) acc.setWeights.set(r.sourceId, w);
+    if (r.weight != null && r.reps != null) {
+      const vol = r.weight * r.reps * w;
+      acc.volume += vol;
       const ex = acc.exVolume.get(r.exerciseId);
       if (ex) ex.volume += vol;
       else acc.exVolume.set(r.exerciseId, { name: r.exName, volume: vol });
-    } else {
-      acc.baseline += vol;
     }
-    // lastTrainedAt — максимум по всему окну: мышца могла не работать в текущие
-    // 7 дней, но «последняя тренировка» всё равно осмысленна для панели.
-    if (!acc.lastTrainedAt || r.startedAt > acc.lastTrainedAt) {
-      acc.lastTrainedAt = r.startedAt;
-    }
+    if (!acc.lastTrainedAt || r.at > acc.lastTrainedAt) acc.lastTrainedAt = r.at;
   }
 
   return MUSCLE_KEYS.map((key) => {
@@ -662,21 +703,23 @@ export async function muscleHeatProfile(
     if (!a) {
       return {
         muscleKey: key,
-        current7dVolume: 0,
-        baselineWeeklyVolume: 0,
+        weeklySets: 0,
         sets: 0,
+        volume7d: 0,
         lastTrainedAt: null,
         top3: [],
       };
     }
+    let weeklySets = 0;
+    for (const wt of a.setWeights.values()) weeklySets += wt;
     const top3 = Array.from(a.exVolume.values())
       .sort((x, y) => y.volume - x.volume)
       .slice(0, 3);
     return {
       muscleKey: key,
-      current7dVolume: a.current,
-      baselineWeeklyVolume: a.baseline / baselineWeeks,
-      sets: a.setIds.size,
+      weeklySets,
+      sets: a.setWeights.size,
+      volume7d: a.volume,
       lastTrainedAt: a.lastTrainedAt,
       top3,
     };

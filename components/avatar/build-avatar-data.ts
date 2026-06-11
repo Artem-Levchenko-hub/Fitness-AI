@@ -1,19 +1,19 @@
 import { muscleLabel } from "@/components/app/MuscleBadges";
-import { heatColorStop, heatLabel, heatLevel } from "@/lib/domain/avatar/heat";
+import { heatColorStop, heatFromSets, heatLabel } from "@/lib/domain/avatar/heat";
 import type { MuscleHeat } from "@/lib/repos/stats.repo";
 
 import type { AvatarMuscleDatum } from "./types";
 
-/** Серверный сборщик view-model аватара: сырые объёмы из repo → доменный нагрев
- *  (heatLevel) → цвет/ярлык/сериализуемые поля для client-компонента. Общий для
- *  своего /profile и профиля друга — единственное место, где repo-числа
- *  превращаются в то, что красит и показывает 3D-аватар. */
+/** Серверный сборщик view-model аватара: подходы за неделю из repo → доменный
+ *  нагрев (heatFromSets) → цвет/ярлык/сериализуемые поля для client-компонента.
+ *  Общий для своего /profile и профиля друга — единственное место, где
+ *  repo-числа превращаются в то, что красит и показывает 3D-аватар. */
 export function buildAvatarData(
   heat: MuscleHeat[],
   now: Date,
 ): AvatarMuscleDatum[] {
   return heat.map((m) => {
-    const h = heatLevel(m.current7dVolume, m.baselineWeeklyVolume);
+    const h = heatFromSets(m.weeklySets);
     return {
       key: m.muscleKey,
       label: muscleLabel(m.muscleKey),
@@ -21,7 +21,7 @@ export function buildAvatarData(
       t: h.t,
       level: h.level,
       levelLabel: heatLabel(h.level),
-      volume7d: m.current7dVolume,
+      volume7d: m.volume7d,
       sets: m.sets,
       lastTrainedLabel: formatLastTrained(m.lastTrainedAt, now),
       top3: m.top3,
@@ -29,9 +29,9 @@ export function buildAvatarData(
   });
 }
 
-/** Есть ли у атлета хоть какая-то история (для empty-state). */
+/** Есть ли у атлета хоть какая-то история за неделю (для empty-state). */
 export function hasTrainingData(heat: MuscleHeat[]): boolean {
-  return heat.some((m) => m.sets > 0 || m.baselineWeeklyVolume > 0);
+  return heat.some((m) => m.sets > 0);
 }
 
 function formatLastTrained(d: Date | null, now: Date): string {

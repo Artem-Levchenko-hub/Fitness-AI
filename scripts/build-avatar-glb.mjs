@@ -2,20 +2,36 @@
  *
  * Имена мешей в выгрузке потеряны (Object_N), поэтому 14 групп назначаются
  * ПРОСТРАНСТВЕННО — по мировому центроиду каждого меша (классификатор ниже).
- * LINES-меши (контуры-аннотации Z-Anatomy) выкидываются. Геометрия
+ * LINES-меши (контуры-аннотации Z-Anatomy) выкидываются.
+ *
+ * Затем меши КАЖДОЙ группы сливаются в один меш (joinPrimitives по группе) →
+ * ~15 draw calls вместо ~275. Слитый меш именуется ключом группы, поэтому
+ * рантайм-резолвер (lib/avatar/muscle-mesh-map) сводит его к группе по identity,
+ * красит по нагрузке и ловит тап — «шов модели» сохраняется. Геометрия
  * упрощается (meshopt) и сжимается (draco) под web-бюджет.
  *
+ * Оси модели (подтверждено рендером + пробником scripts/_dbg-probe):
+ *   up = Y,  anterior(перёд) = +Z,  lateral(лево-право) = X.
+ *
  * Режимы:
- *   BUILD_MODE=debug → красит каждый меш цветом группы (magenta = не
- *     классифицирован) для визуальной проверки в браузере.
- *   BUILD_MODE=final → именует меши ключом группы (резолвер-identity), один
- *     нейтральный материал (раскраска — в рантайме по нагрузке).
+ *   BUILD_MODE=debug → красит каждую группу своим цветом (magenta = не
+ *     классифицирован), пропускает simplify/draco для быстрой визуальной
+ *     проверки классификации в браузере (scripts/_dbg-serve + public/_dbg.html).
+ *   BUILD_MODE=final → один нейтральный материал (раскраска — в рантайме по
+ *     нагрузке), simplify + draco.
  *
  * Запуск:  node scripts/build-avatar-glb.mjs [src.gltf] [out.glb]
  */
 import { NodeIO } from "@gltf-transform/core";
 import { KHRDracoMeshCompression } from "@gltf-transform/extensions";
-import { dedup, prune, simplify, weld } from "@gltf-transform/functions";
+import {
+  dedup,
+  joinPrimitives,
+  prune,
+  simplify,
+  transformMesh,
+  weld,
+} from "@gltf-transform/functions";
 import draco3d from "draco3dgltf";
 import { MeshoptSimplifier } from "meshoptimizer";
 
@@ -36,42 +52,46 @@ const DEBUG_COLORS = {
   shoulders_rear: [0.6, 0.4, 0.1], biceps: [0.1, 0.8, 0.2], triceps: [0.1, 0.5, 0.3],
   forearms: [0.4, 0.9, 0.6], core: [0.8, 0.2, 0.7], glutes: [0.5, 0.1, 0.8],
   quads: [0.2, 0.9, 0.9], hamstrings: [0.3, 0.3, 0.6], calves: [0.6, 0.6, 0.2],
-  _null: [1, 0, 1],
+  unmapped: [1, 0, 1],
 };
 
-// Оси модели (подтверждено рендером): up = Y, anterior(перёд) = +X,
-// lateral(лево-право) = Z.
+// Классификатор: мировой центроид меша → группа (или null = выкинуть).
+// h — доля высоты [0,1]; ant — глубина (перёд +); lat — расстояние от средней
+// линии. Пороги подобраны по пробнику (scripts/_dbg-probe) и визуальному циклу.
 function classify(c, H) {
   const [x, y, z] = c;
   const h = y / H;
-  const a = x; // anterior положительный
-  const az = Math.abs(z); // боковое смещение
+  const ant = z; // перёд > 0, зад < 0
+  const lat = Math.abs(x); // боковое смещение от средней линии
+
   if (h > 0.88) return null; // голова/череп/лицо
-  // Дельты — высоко, есть боковое смещение
-  if (h >= 0.74 && h <= 0.9 && az >= 0.045) {
-    if (a > 0.02) return "shoulders_front";
-    if (a < -0.02) return "shoulders_rear";
+
+  // Плечи/дельты — верхняя боковая «шапка» (высоко + боковое смещение).
+  if (h >= 0.76 && lat >= 0.066) {
+    if (ant > 0.0) return "shoulders_front";
+    if (ant < -0.03) return "shoulders_rear";
     return "shoulders_side";
   }
-  // Руки — боковое смещение, ниже плеча
-  if (az >= 0.05 && h >= 0.4 && h < 0.88) {
-    if (h >= 0.56) return a >= 0 ? "biceps" : "triceps";
+
+  // Руки — боковое смещение от торса. Выше локтя → бицепс(перёд)/трицепс(зад),
+  // ниже → предплечье/кисть.
+  if (lat >= 0.11) {
+    if (h >= 0.5) return ant >= 0 ? "biceps" : "triceps";
     return "forearms";
   }
-  // Ноги — низ. Срединку (|a|<0.03) отдаём переду (видимая сторона).
-  if (az < 0.06 && h < 0.47) {
-    if (h < 0.22) return "calves";
-    if (a < -0.03 && h > 0.4) return "glutes";
-    return a >= -0.03 ? "quads" : "hamstrings";
+
+  // Ягодицы — задняя «шапка» таза (зад, на стыке торса и бедра).
+  if (h >= 0.4 && h < 0.54 && ant < -0.012) return "glutes";
+
+  // Ноги.
+  if (h < 0.46) {
+    if (h < 0.2) return "calves";
+    return ant >= -0.012 ? "quads" : "hamstrings"; // перёд/зад бедра
   }
-  // Торс — центр. Срединные меши (a около 0) → перёд, иначе серый провал
-  // на прессе. Чёткий зад только при a < -0.03.
-  if (az < 0.05 && h >= 0.43 && h <= 0.88) {
-    if (h < 0.52 && a < -0.03) return "glutes";
-    if (a >= -0.03) return h < 0.64 ? "core" : "chest";
-    return h >= 0.7 ? "back_traps" : "back_lats";
-  }
-  return null;
+
+  // Торс по центру: перёд = пресс(низ)/грудь(верх), зад = трапеции/широчайшие.
+  if (ant >= -0.012) return h < 0.63 ? "core" : "chest";
+  return h >= 0.68 ? "back_traps" : "back_lats";
 }
 
 // --- mat4 (column-major) helpers ---
@@ -94,6 +114,38 @@ function apply(m, p) {
   ];
 }
 
+// Мировой центроид (AABB-центр) и мировая матрица каждого меша. Меш в этой
+// выгрузке привязан к одной ноде (1:1), поэтому одной матрицы достаточно.
+function collectMeshWorlds(scene) {
+  const out = new Map(); // Mesh -> { center, matrix }
+  let H = 0;
+  const walk = (node, parentWorld) => {
+    const world = mul(parentWorld, node.getMatrix());
+    const mesh = node.getMesh();
+    const prim = mesh?.listPrimitives()[0];
+    const pos = prim?.getAttribute("POSITION");
+    if (mesh && pos) {
+      const mn = pos.getMinNormalized([]);
+      const mx = pos.getMaxNormalized([]);
+      let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+      for (let xi = 0; xi < 2; xi++)
+        for (let yi = 0; yi < 2; yi++)
+          for (let zi = 0; zi < 2; zi++) {
+            const p = apply(world, [xi ? mx[0] : mn[0], yi ? mx[1] : mn[1], zi ? mx[2] : mn[2]]);
+            for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]); }
+          }
+      out.set(mesh, {
+        center: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2],
+        matrix: world,
+      });
+      H = Math.max(H, hi[1]);
+    }
+    for (const ch of node.listChildren()) walk(ch, world);
+  };
+  for (const r of scene.listChildren()) walk(r, IDENT);
+  return { meshWorlds: out, H };
+}
+
 async function main() {
   const io = new NodeIO()
     .registerExtensions([KHRDracoMeshCompression])
@@ -104,103 +156,88 @@ async function main() {
 
   const doc = await io.read(SRC);
   const root = doc.getRoot();
-
-  // 1) Габариты для нормализации высоты.
-  let gMax = [-1e9, -1e9, -1e9];
-  const meshWorld = new Map(); // Mesh -> world center
   const scene = root.listScenes()[0];
-  const walk = (node, parentWorld) => {
-    const world = mul(parentWorld, node.getMatrix());
-    const mesh = node.getMesh();
-    if (mesh) {
-      const prim = mesh.listPrimitives()[0];
-      const pos = prim?.getAttribute("POSITION");
-      if (pos) {
-        const mn = pos.getMinNormalized([]);
-        const mx = pos.getMaxNormalized([]);
-        let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
-        for (let xi = 0; xi < 2; xi++)
-          for (let yi = 0; yi < 2; yi++)
-            for (let zi = 0; zi < 2; zi++) {
-              const p = apply(world, [xi ? mx[0] : mn[0], yi ? mx[1] : mn[1], zi ? mx[2] : mn[2]]);
-              for (let k = 0; k < 3; k++) {
-                lo[k] = Math.min(lo[k], p[k]);
-                hi[k] = Math.max(hi[k], p[k]);
-              }
-            }
-        const center = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
-        meshWorld.set(mesh, center);
-        for (let k = 0; k < 3; k++) gMax[k] = Math.max(gMax[k], hi[k]);
-      }
-    }
-    for (const ch of node.listChildren()) walk(ch, world);
-  };
-  for (const r of scene.listChildren()) walk(r, IDENT);
-  const H = gMax[1];
 
-  // 2) Материалы по режиму.
+  const { meshWorlds, H } = collectMeshWorlds(scene);
+
+  // Материалы по режиму. final → один нейтральный (рантайм перекрашивает).
+  // debug → свой цвет на группу (для визуальной проверки классификации).
   const matByGroup = new Map();
   const neutral = doc.createMaterial("neutral").setBaseColorFactor([0.48, 0.48, 0.45, 1]);
-  function materialFor(group) {
+  function materialFor(groupKey) {
     if (MODE !== "debug") return neutral;
-    const key = group ?? "_null";
-    if (!matByGroup.has(key)) {
-      const [r, g, b] = DEBUG_COLORS[key];
-      matByGroup.set(key, doc.createMaterial("dbg_" + key).setBaseColorFactor([r, g, b, 1]));
+    if (!matByGroup.has(groupKey)) {
+      const [r, g, b] = DEBUG_COLORS[groupKey];
+      matByGroup.set(groupKey, doc.createMaterial("dbg_" + groupKey).setBaseColorFactor([r, g, b, 1]));
     }
-    return matByGroup.get(key);
+    return matByGroup.get(groupKey);
   }
 
-  // 3) Обработка мешей: выкинуть LINES, классифицировать, назначить материал/имя.
+  // 1) Классификация + запекание мировой матрицы + бакетирование примитивов по
+  //    группе. Не-TRIANGLES примитивы (LINES-аннотации) и атрибуты кроме
+  //    POSITION/NORMAL выкидываем (нужно для совместимости при join и под бюджет).
+  const buckets = new Map(); // groupKey -> Primitive[]
   const counts = {};
-  let removed = 0, kept = 0;
+  let removedLines = 0;
   for (const mesh of root.listMeshes()) {
-    // удалить не-TRIANGLES примитивы (4 = TRIANGLES)
     for (const prim of mesh.listPrimitives()) {
-      if (prim.getMode() !== 4) {
-        prim.dispose();
-        removed++;
-      }
+      if (prim.getMode() !== 4) { prim.dispose(); removedLines++; }
     }
-    if (mesh.listPrimitives().length === 0) {
-      mesh.dispose();
-      continue;
-    }
-    const center = meshWorld.get(mesh);
-    const group = center ? classify(center, H) : null;
+    if (mesh.listPrimitives().length === 0) { mesh.dispose(); continue; }
+
+    const world = meshWorlds.get(mesh);
+    const group = world ? classify(world.center, H) : null;
+    const key = group ?? "unmapped";
     if (group) counts[group] = (counts[group] || 0) + 1;
-    kept++;
-    const mat = materialFor(group);
-    for (const prim of mesh.listPrimitives()) prim.setMaterial(mat);
-    mesh.setName(group ?? "unmapped");
+
+    if (world) transformMesh(mesh, world.matrix); // запечь в мировые координаты
+    const mat = materialFor(key);
+    for (const prim of mesh.listPrimitives()) {
+      for (const semantic of prim.listSemantics()) {
+        if (semantic !== "POSITION" && semantic !== "NORMAL") prim.setAttribute(semantic, null);
+      }
+      prim.setMaterial(mat);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(prim);
+    }
   }
 
-  // имена нод = имена их мешей (three берёт name с ноды) — резолвер по identity.
-  for (const node of root.listNodes()) {
-    const m = node.getMesh();
-    if (m) node.setName(m.getName());
+  // 2) Слить примитивы каждой группы в один меш, назвать ключом группы. Новые
+  //    ноды на identity (матрицы уже запечены). Старую сцену сносим.
+  const oldNodes = root.listNodes();
+  const oldMeshes = root.listMeshes();
+  for (const [key, prims] of buckets) {
+    const merged = prims.length === 1 ? prims[0] : joinPrimitives(prims);
+    const mesh = doc.createMesh(key).addPrimitive(merged);
+    const node = doc.createNode(key).setMesh(mesh);
+    scene.addChild(node);
   }
+  for (const n of oldNodes) n.dispose();
+  for (const m of oldMeshes) m.dispose();
 
-  // 4) Оптимизация геометрии.
-  await MeshoptSimplifier.ready;
-  await doc.transform(
-    weld(),
-    simplify({ simplifier: MeshoptSimplifier, ratio: 0.25, error: 0.008 }),
-    dedup(),
-    prune(),
-  );
-
-  // 5) Draco-сжатие.
-  doc.createExtension(KHRDracoMeshCompression).setRequired(true);
+  // 3) Оптимизация геометрии (только final — debug грузим как есть, быстрее).
+  if (MODE !== "debug") {
+    await MeshoptSimplifier.ready;
+    await doc.transform(
+      weld(),
+      simplify({ simplifier: MeshoptSimplifier, ratio: 0.25, error: 0.008 }),
+      dedup(),
+      prune(),
+    );
+    doc.createExtension(KHRDracoMeshCompression).setRequired(true);
+  } else {
+    await doc.transform(prune());
+  }
 
   await io.write(OUT, doc);
 
   console.log("MODE:", MODE);
-  console.log("meshes kept:", kept, "| LINES prims removed:", removed);
+  console.log("groups (meshes):", buckets.size, "| LINES prims removed:", removedLines);
   console.log("height H:", H.toFixed(3));
   for (const k of KEYS) console.log("  " + k.padEnd(16), counts[k] || 0);
   const missing = KEYS.filter((k) => !counts[k]);
   console.log("MISSING:", missing.length ? missing.join(", ") : "none");
+  console.log("unmapped meshes:", (buckets.get("unmapped") || []).length);
   console.log("wrote", OUT);
 }
 

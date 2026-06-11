@@ -1,13 +1,15 @@
-/** Доменная модель «нагрева» 3D-аватара. Объём мышцы за последние 7 дней
- *  сравнивается с её СОБСТВЕННОЙ нормой (среднее недельное за прошлые недели):
- *  серый (не тренировал) → красный (норма и выше). Чистый модуль — нет импортов
- *  из db/three/ui (R-7). Единственный источник правды для цвета мышцы; rendering
- *  и repo зависят от него, не наоборот. */
+/** Доменная модель «нагрева» 3D-аватара. Цвет мышцы определяется АБСОЛЮТНЫМ
+ *  числом рабочих подходов на группу за последнюю неделю: серый (не тренировал)
+ *  → красный (норма и выше). Норма ≈ SETS_PEAK подходов/нед — спорт-научный
+ *  ориентир для гипертрофии (10–20 подходов/нед на группу). По-человечески:
+ *  0 → серый, ~5 → серо-красный, ≥SETS_PEAK → ярко-красный.
+ *
+ *  Чистый модуль — нет импортов из db/three/ui (R-7). Единственный источник
+ *  правды для цвета мышцы. */
 
 /** Канонический упорядоченный список 14 групп мышц. Значения совпадают с pgEnum
  *  `muscle_group_key` (db/schema/enums.ts), но домен НЕ импортирует слой БД
- *  (R-7) — это независимая доменная константа. Тест в heat.test.ts ловит
- *  расхождение, если enum изменится. */
+ *  (R-7) — это независимая доменная константа. Тест ловит расхождение. */
 export const MUSCLE_KEYS = [
   "chest",
   "back_lats",
@@ -30,58 +32,39 @@ export type MuscleKey = (typeof MUSCLE_KEYS)[number];
 export type HeatLevel = "dormant" | "low" | "normal" | "high" | "peak";
 
 export type Heat = {
-  /** current7d / baselineWeekly. `null`, когда нормы нет (мышца ни разу не
-   *  тренировалась в baseline-окне) — сравнивать не с чем. */
-  ratio: number | null;
+  /** Эффективные рабочие подходы на группу за неделю (primary 1.0,
+   *  secondary 0.5; силовые + круговые). */
+  weeklySets: number;
   level: HeatLevel;
   /** Позиция на цветовой рампе [0,1]: 0 = серый (dormant), 1 = красный (peak). */
   t: number;
 };
 
-/** Соотношение, при котором мышца считается «раскалённой» (полный красный).
- *  1.25 = на 25% выше собственной нормы → «отлично потренировался». */
-const PEAK_RATIO = 1.25;
+/** Число подходов/нед на группу, при котором мышца «раскалена» (полный красный).
+ *  15 — середина спорт-научного коридора 10–20 подходов/нед для гипертрофии. */
+export const SETS_PEAK = 15;
 
-/** Позиция на рампе для новой мышцы (тренировал, но нормы ещё нет): тёплый
- *  оттенок между high и peak — нагрузку видно, но «пик» заявить нельзя без базы. */
-const NEW_MUSCLE_T = 0.72;
-
-/** Уровень нагрева мышцы из объёма за 7 дней и недельной нормы.
- *  - current7d = 0 → dormant (серый), независимо от базы.
- *  - база есть → ratio = current/база; уровень по порогам; t = ratio/PEAK_RATIO.
- *  - базы нет, но тренировал → ratio=null, high (поощряем нагрузку, пик не
- *    заявляем — не с чем сравнить). */
-export function heatLevel(current7d: number, baselineWeekly: number): Heat {
-  if (current7d <= 0) {
-    return {
-      ratio: baselineWeekly > 0 ? 0 : null,
-      level: "dormant",
-      t: 0,
-    };
+/** Нагрев мышцы из числа рабочих подходов за неделю.
+ *  - 0 → dormant (серый).
+ *  - иначе t = weeklySets / SETS_PEAK (клампится в 1); уровень по порогам. */
+export function heatFromSets(weeklySets: number): Heat {
+  if (weeklySets <= 0) {
+    return { weeklySets: 0, level: "dormant", t: 0 };
   }
-
-  if (baselineWeekly <= 0) {
-    return { ratio: null, level: "high", t: NEW_MUSCLE_T };
-  }
-
-  const ratio = current7d / baselineWeekly;
-  const t = clamp01(ratio / PEAK_RATIO);
-
+  const t = clamp01(weeklySets / SETS_PEAK);
   let level: HeatLevel;
-  if (ratio < 0.5) level = "low";
-  else if (ratio < 1.0) level = "normal";
-  else if (ratio < PEAK_RATIO) level = "high";
+  if (weeklySets < 5) level = "low";
+  else if (weeklySets < 10) level = "normal";
+  else if (weeklySets < SETS_PEAK) level = "high";
   else level = "peak";
-
-  return { ratio, level, t };
+  return { weeklySets, level, t };
 }
 
 /** Цветовая рампа «нагрева»: серый → янтарь → оранжевый → красный (термальный
  *  градиент «тело разогревается»). Линейная RGB-интерполяция между опорными
- *  стопами. Выход — hex (three.Color и CSS принимают его без вопросов; oklch
- *  поддержан не во всех версиях three). R-36-нюанс: рампа жёстко закодирована
- *  здесь как доменная константа (single source), а не Tailwind-токены, т.к.
- *  three.js рендерит реальный цвет, а не CSS-класс — см. спек. */
+ *  стопами. Выход — hex (three.Color и CSS принимают его без вопросов). R-36:
+ *  рампа закодирована здесь как доменная константа (single source), а не
+ *  Tailwind-токены — three.js рендерит реальный цвет, а не CSS-класс. */
 const RAMP: ReadonlyArray<{ t: number; rgb: [number, number, number] }> = [
   { t: 0.0, rgb: [0x6b, 0x6b, 0x66] }, // тёплый серый — холодная мышца
   { t: 0.35, rgb: [0xd4, 0xa0, 0x2c] }, // янтарь
