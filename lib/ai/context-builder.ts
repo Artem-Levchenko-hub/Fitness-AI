@@ -4,11 +4,11 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import {
   ageFromBirthDateString,
-  assessProgressJump,
   bestEstimatedOneRepMax,
   bodyweightEffectiveLoad,
   totalVolume,
 } from "@/lib/domain";
+import { formatOneRmTrend } from "./one-rm-trend";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
 
@@ -489,25 +489,6 @@ async function loadAthleteProfileBlock(userId: string): Promise<string> {
     "Учитывай вес тела для относительной нагрузки: bodyweight-упражнения (подтягивания, брусья, отжимания) = вес тела + добавка. Снижение добавки на 5–10 кг у тяжёлого атлета — малый % тотала, не штрафуй как сильный регресс.",
   );
   return lines.join("\n");
-}
-
-function formatOneRmTrend(t: {
-  nameRu: string;
-  todayKg: number;
-  previousKg: number | null;
-}): string {
-  if (t.previousKg == null || t.previousKg === 0) {
-    return `- **${t.nameRu}**: сегодня e1RM ${t.todayKg.toFixed(1)} kg (нет прошлых данных)`;
-  }
-  const delta = t.todayKg - t.previousKg;
-  const sign = delta >= 0 ? "+" : "";
-  const base = `- **${t.nameRu}**: ${t.previousKg.toFixed(1)} → ${t.todayKg.toFixed(1)} kg (${sign}${delta.toFixed(1)})`;
-  const jump = assessProgressJump(t.previousKg, t.todayKg);
-  if (jump.suspicious) {
-    const pctStr = Math.round(jump.pct * 100);
-    return `${base} ⚠️ ПОДОЗРИТЕЛЬНЫЙ СКАЧОК (+${pctStr}% за сессию) — вероятно ошибка ввода (вес записан не к тому упражнению или опечатка); НЕ считать рекордом, не хвалить за этот прирост, мягко попросить атлета проверить введённые данные`;
-  }
-  return base;
 }
 
 function formatDate(d: Date): string {
