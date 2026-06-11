@@ -11,6 +11,7 @@ const PROTECTED_PREFIXES = [
   "/templates",
   "/notes",
   "/stats",
+  "/profile",
   "/settings",
   "/upgrade",
 ];

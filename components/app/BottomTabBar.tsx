@@ -11,7 +11,7 @@ const TABS = [
   { href: "/workouts", icon: Activity, label: "Тренировки" },
   { href: "/exercises", icon: Dumbbell, label: "Упражнения" },
   { href: "/billing", icon: Wallet, label: "Баланс" },
-  { href: "/settings", icon: User, label: "Профиль" },
+  { href: "/profile", icon: User, label: "Профиль" },
 ] as const;
 
 export function BottomTabBar() {
