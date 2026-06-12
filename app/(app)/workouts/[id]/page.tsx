@@ -14,6 +14,7 @@ import {
   type TrainerResultData,
 } from "@/components/trainer/TrainerResultCard";
 import { Button } from "@/components/ui/button";
+import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { requireUser } from "@/lib/auth/require-user";
 import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
 import {
@@ -159,7 +160,15 @@ function CompletedView({
         // Structured-разбор (F4) — цветная карточка с per-exercise дельтами,
         // те же что на /trainer. Раньше история показывала plain markdown (G3).
         <section>
-          <TrainerResultCard data={analysis.resultJson as TrainerResultData} />
+          {/* H13.4 — детали истории = своя поверхность разбора: строки
+              упражнений и заголовки факторов жизни кликабельны идентично
+              /workouts/[id]/trainer (карта из упражнений ЭТОЙ тренировки;
+              своя/share-граница соблюдена — share/друг сюда не попадают). */}
+          <TrainerResultCard
+            data={analysis.resultJson as TrainerResultData}
+            linkExercises={buildExerciseLinkMap(workout.exercises)}
+            linkLifeFactors
+          />
           <div className="mt-4">
             <Button asChild variant="outline" size="sm">
               <Link href={`/workouts/${workout.id}/coach`}>

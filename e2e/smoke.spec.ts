@@ -140,6 +140,29 @@ test("разбор завершённой тренировки виден (Train
   }
 });
 
+test("H13.4 — разбор на детали /workouts/[id] кликабелен идентично /trainer", async ({
+  page,
+}) => {
+  test.skip(
+    !trainerWorkoutId,
+    "E2E_TRAINER_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H13.4 — та же сохранённая карточка разбора, что на /trainer, теперь
+  // кликабельна и на детали истории /workouts/<id> (одна и та же строка ведёт
+  // в источник на ОБЕИХ поверхностях своего разбора). Та же фикстура: recovery
+  // score 72 → /sleep, nutrition 65 → /nutrition, строка упражнения → история.
+  await page.goto(`/workouts/${trainerWorkoutId}`);
+  await expect(page).toHaveURL(new RegExp(`/workouts/${trainerWorkoutId}`));
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
+  await expect(page.locator('a[href="/sleep"]')).toBeVisible();
+  await expect(page.locator('a[href="/nutrition"]')).toBeVisible();
+  if (exerciseId) {
+    await expect(
+      page.locator(`a[href="/exercises/${exerciseId}"]`).first(),
+    ).toBeVisible();
+  }
+});
+
 test("/workouts: три формата (силовая+круговая+кардио) вперемешку, каждый открывается в свой detail", async ({
   page,
 }) => {
