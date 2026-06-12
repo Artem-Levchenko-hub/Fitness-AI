@@ -7,6 +7,7 @@
  *  - daily-trainer:   каждый час (роут сам решит, у кого локально 22:00)
  *  - weekly-trainer:  каждый час (роут сам решит, у кого локально Вс 20:00)
  *  - push-reminders:  каждый час
+ *  - backup-db:       каждый час (роут сам делает дамп раз в сутки + ротация)
  *
  * Запускается через ecosystem.config.cjs как отдельный pm2-app.
  * Читает CRON_SECRET и NEXT_PUBLIC_APP_URL из окружения процесса.
@@ -69,6 +70,8 @@ scheduleEveryMinute("/api/cron/process-ai-jobs");
 scheduleEveryHour("/api/cron/daily-trainer");
 scheduleEveryHour("/api/cron/weekly-trainer");
 scheduleEveryHour("/api/cron/push-reminders");
+// Дамп прод-БД: тикаем ежечасно, роут сам делает дамп раз в сутки + ротацию.
+scheduleEveryHour("/api/cron/backup-db");
 
 // Корректное завершение в pm2 (graceful shutdown).
 process.on("SIGINT", () => process.exit(0));
