@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { and, desc, eq } from "drizzle-orm";
+import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { requireUser } from "@/lib/auth/require-user";
 import { getCircuitForUser } from "@/lib/repos/circuits.repo";
+import { getPreviousAnalysisRef } from "@/lib/repos/workouts.repo";
 
 import { ActiveCircuit } from "./active-circuit";
 import { CompletedCircuit } from "./completed-circuit";
@@ -59,6 +61,13 @@ export default async function CircuitPage({ params }: Props) {
     .orderBy(desc(schema.aiJobs.scheduledAt))
     .limit(1);
 
+  // H13.6 — паритет «Прошлого совета» на круговой: заголовок ведёт на
+  // свежайший прошлый разбор круговой формата (circuitWorkoutId), исключая
+  // текущую. own-view (getCircuitForUser фильтрует userId); share — статика.
+  const pastAdviceHref = resolvePastAdviceHref(
+    await getPreviousAnalysisRef(user.id, "circuit", { circuitWorkoutId: id }),
+  );
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -89,6 +98,7 @@ export default async function CircuitPage({ params }: Props) {
           logs={c.logs}
           analysis={analysis ?? null}
           jobStatus={job?.status ?? null}
+          pastAdviceHref={pastAdviceHref}
         />
       )}
     </main>

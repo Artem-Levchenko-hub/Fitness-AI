@@ -16,6 +16,7 @@ const prevWorkoutId = process.env.E2E_PREV_WORKOUT_ID;
 const exerciseId = process.env.E2E_EXERCISE_ID;
 const friendId = process.env.E2E_FRIEND_ID;
 const circuitId = process.env.E2E_CIRCUIT_ID;
+const prevCircuitId = process.env.E2E_PREV_CIRCUIT_ID;
 const cardioId = process.env.E2E_CARDIO_ID;
 const circuitTemplateId = process.env.E2E_CIRCUIT_TEMPLATE_ID;
 
@@ -247,6 +248,50 @@ test("H13.4 — разбор на детали /workouts/[id] кликабеле
       page.locator(`a[href="/exercises/${exerciseId}"]`).first(),
     ).toBeVisible();
   }
+});
+
+test("H13.6 — «Прошлый совет» кликабелен на детали /workouts/[id] (паритет с /trainer)", async ({
+  page,
+}) => {
+  test.skip(
+    !trainerWorkoutId || !prevWorkoutId,
+    "E2E_TRAINER_WORKOUT_ID/E2E_PREV_WORKOUT_ID не заданы — засеять через scripts/e2e-seed.mjs",
+  );
+  // H13.6 — инвариант H13.4 «одна строка кликабельна одинаково на всех своих
+  // поверхностях» теперь и для «Прошлого совета»: на детали истории
+  // /workouts/<cur> заголовок «Прошлый совет» = та же ссылка
+  // /workouts/<prev>/trainer, что на /trainer. Раньше тут был статичный текст.
+  await page.goto(`/workouts/${trainerWorkoutId}`);
+  await expect(page).toHaveURL(new RegExp(`/workouts/${trainerWorkoutId}`));
+  const pastAdviceLink = page.locator(
+    `a[href="/workouts/${prevWorkoutId}/trainer"]`,
+  );
+  await expect(pastAdviceLink).toBeVisible();
+  await expect(pastAdviceLink).toContainText("Прошлый совет");
+});
+
+test("H13.6 — «Прошлый совет» круговой ведёт на прошлую круговую /circuits/<prev>", async ({
+  page,
+}) => {
+  test.skip(
+    !circuitId || !prevCircuitId,
+    "E2E_CIRCUIT_ID/E2E_PREV_CIRCUIT_ID не заданы — засеять через scripts/e2e-seed.mjs",
+  );
+  // H13.6 — паритет «Прошлого совета» на круговой: текущий разбор круговой
+  // цитирует прошлую рекомендацию (resultJson сида несёт pastAdviceFollowUp) →
+  // заголовок «Прошлый совет» = ссылка формата circuit на свежайшую прошлую
+  // круговую (/circuits/<prev>). Тап реально ведёт в тот прошлый разбор.
+  await page.goto(`/circuits/${circuitId}`);
+  await expect(page).toHaveURL(new RegExp(`/circuits/${circuitId}`));
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
+
+  const pastAdviceLink = page.locator(`a[href="/circuits/${prevCircuitId}"]`);
+  await expect(pastAdviceLink).toBeVisible();
+  await expect(pastAdviceLink).toContainText("Прошлый совет");
+
+  await pastAdviceLink.click();
+  await expect(page).toHaveURL(new RegExp(`/circuits/${prevCircuitId}`));
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
 });
 
 test("H13.4 — разбор круговой /circuits/[id] линкует факторы жизни (parity)", async ({

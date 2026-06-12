@@ -39,6 +39,8 @@ const WORKOUT_MARKER = "E2E Smoke — Жим";
 const PREV_WORKOUT_MARKER = "E2E Smoke — Жим (прошлый)";
 // H7.4 — маркеры круговой и кардио для фида трёх форматов в одном списке.
 const CIRCUIT_MARKER = "E2E Smoke — Круг";
+// H13.6 — прошлая круговая (предшественник для блока «Прошлый совет» круговой).
+const PREV_CIRCUIT_MARKER = "E2E Smoke — Круг (прошлый)";
 const CARDIO_MARKER = "E2E Smoke — Кардио";
 // H14.2 — круговой ШАБЛОН (пресет) для /templates: показывается бейджем
 // «Круговая» и стартует одним кликом.
@@ -253,7 +255,50 @@ try {
       motivation: "Все раунды без пропусков — хорошая выносливость.",
       whatWorked: "Темп держался ровным от первого до последнего раунда.",
       followUpQuestion: "Как чувствовалось дыхание к третьему раунду?",
+      // H13.6: тренер цитирует прошлую круговую → секция «Прошлый совет»
+      // рендерится, её заголовок ведёт на прошлый разбор круговой формата
+      // (prevCircuitId ниже) — паритет с /workouts/[id] и /trainer.
+      pastAdviceFollowUp:
+        "В прошлый раз советовал держать паузы — выдержал, темп ровный.",
     };
+
+    // H13.6 — ПРОШЛАЯ круговая с сохранённым разбором: свежайший предшественник
+    // круговой формата. getPreviousAnalysisRef("circuit", exclude=current) вернёт
+    // именно её circuit_workout_id → заголовок «Прошлый совет» на /circuits/<cur>
+    // ведёт сюда (формат circuit → /circuits/<prev>).
+    await sql`
+      delete from circuit_workouts where user_id = ${verifyId} and name = ${PREV_CIRCUIT_MARKER}`;
+    const prevCircuitStarted = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000); // 4 дня назад
+    const prevCircuitFinished = new Date(prevCircuitStarted.getTime() + 20 * 60 * 1000);
+    const prevCircuitId = randomUUID();
+    await sql`
+      insert into circuit_workouts (id, user_id, name, total_rounds,
+                                    rest_between_rounds_sec, rest_between_exercises_sec,
+                                    status, started_at, finished_at)
+      values (${prevCircuitId}, ${verifyId}, ${PREV_CIRCUIT_MARKER}, 3, 60, 15,
+              'completed', ${prevCircuitStarted}, ${prevCircuitFinished})`;
+    await sql`
+      insert into circuit_exercises (id, circuit_workout_id, exercise_id, order_idx,
+                                     kind, target_reps)
+      values (${randomUUID()}, ${prevCircuitId}, ${exerciseId}, 0, 'reps', 12)`;
+    const prevCircuitResultJson = {
+      overallScore: 70,
+      trainingQuality: { score: 71, comment: "Ровный темп, база для прогрессии." },
+      recoveryContext: { score: 70, comment: "Сон стабильный." },
+      nutritionContext: { score: 64, comment: "Дефицит держится." },
+      exerciseComparisons: [],
+      recommendations: ["Держи паузы между раундами на следующей."],
+      nextSessionFocus: "3 раунда, чёткие паузы",
+      missingDataAdvice: null,
+      motivation: "База готова — можно добавлять раунд.",
+    };
+    await sql`
+      insert into ai_analyses (id, user_id, circuit_workout_id, content,
+                               result_json, model_version, created_at)
+      values (${randomUUID()}, ${verifyId}, ${prevCircuitId},
+              '# Разбор круговой (70/100)\n\nБаза готова — можно добавлять раунд.',
+              ${sql.json(prevCircuitResultJson)}, 'seed-e2e', ${prevCircuitFinished})`;
+
     await sql`
       insert into ai_analyses (id, user_id, circuit_workout_id, content,
                                result_json, model_version)
@@ -318,6 +363,7 @@ try {
     console.log("PREV_WORKOUT_ID=" + prevWorkoutId);
     console.log("EXERCISE_ID=" + exerciseId);
     console.log("CIRCUIT_ID=" + circuitId);
+    console.log("PREV_CIRCUIT_ID=" + prevCircuitId);
     console.log("CARDIO_ID=" + cardioId);
     console.log("REFRESH_TOKEN=" + refresh);
   }

@@ -15,11 +15,13 @@ import {
 } from "@/components/trainer/TrainerResultCard";
 import { Button } from "@/components/ui/button";
 import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
+import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { requireUser } from "@/lib/auth/require-user";
 import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
 import {
   getActiveWorkoutForUser,
   getAiAnalysisForWorkout,
+  getPreviousAnalysisRef,
   type ActiveWorkout,
   type ActiveWorkoutExercise,
 } from "@/lib/repos/workouts.repo";
@@ -39,7 +41,19 @@ export default async function WorkoutPage({ params }: Props) {
 
   if (workout.status === "completed") {
     const analysis = await getAiAnalysisForWorkout(user.id, id);
-    return <CompletedView workout={workout} analysis={analysis} />;
+    // H13.6 — паритет «Прошлого совета»: деталь истории = своя поверхность,
+    // заголовок «Прошлый совет» кликабелен идентично /workouts/[id]/trainer
+    // (тот же резолв силового предшественника, исключая текущую тренировку).
+    const pastAdviceHref = resolvePastAdviceHref(
+      await getPreviousAnalysisRef(user.id, "strength", { workoutId: id }),
+    );
+    return (
+      <CompletedView
+        workout={workout}
+        analysis={analysis}
+        pastAdviceHref={pastAdviceHref}
+      />
+    );
   }
 
   return (
@@ -79,9 +93,11 @@ export default async function WorkoutPage({ params }: Props) {
 function CompletedView({
   workout,
   analysis,
+  pastAdviceHref,
 }: {
   workout: ActiveWorkout;
   analysis: Awaited<ReturnType<typeof getAiAnalysisForWorkout>>;
+  pastAdviceHref: string | null;
 }) {
   const totalSets = workout.exercises.reduce(
     (sum, e) => sum + e.sets.length,
@@ -168,6 +184,7 @@ function CompletedView({
             data={analysis.resultJson as TrainerResultData}
             exerciseLinks={buildExerciseLinkMap(workout.exercises)}
             linkLifeFactors
+            pastAdviceHref={pastAdviceHref}
           />
           <div className="mt-4">
             <Button asChild variant="outline" size="sm">

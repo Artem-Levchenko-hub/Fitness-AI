@@ -15,6 +15,7 @@ export function CompletedCircuit({
   logs,
   analysis,
   jobStatus,
+  pastAdviceHref,
 }: {
   workout: CircuitWorkout;
   exercises: CircuitExerciseWithName[];
@@ -26,6 +27,8 @@ export function CompletedCircuit({
     createdAt: Date;
   } | null;
   jobStatus: "pending" | "running" | "succeeded" | "failed" | null;
+  /** H13.6 — ссылка на прошлый разбор круговой (own-view); null → статика. */
+  pastAdviceHref?: string | null;
 }) {
   const isCancelled = workout.status === "cancelled";
   const totalSlots = workout.totalRounds * exercises.length;
@@ -99,7 +102,11 @@ export function CompletedCircuit({
         </div>
       </section>
 
-      <AnalysisCard analysis={analysis} jobStatus={jobStatus} />
+      <AnalysisCard
+        analysis={analysis}
+        jobStatus={jobStatus}
+        pastAdviceHref={pastAdviceHref}
+      />
 
       <section className="bg-card border-border rounded-2xl border p-4">
         <h3 className="mb-3 text-sm font-semibold tracking-tight">
@@ -164,9 +171,11 @@ export function CompletedCircuit({
 function AnalysisCard({
   analysis,
   jobStatus,
+  pastAdviceHref,
 }: {
   analysis: { content: string; resultJson: unknown } | null;
   jobStatus: "pending" | "running" | "succeeded" | "failed" | null;
+  pastAdviceHref?: string | null;
 }) {
   if (analysis) {
     // Structured-разбор (F4) — цветная карточка с оценкой/аспектами, как в
@@ -186,6 +195,7 @@ function AnalysisCard({
         <TrainerResultCard
           data={parsed.data as TrainerResultData}
           linkLifeFactors
+          pastAdviceHref={pastAdviceHref}
         />
       );
     }
