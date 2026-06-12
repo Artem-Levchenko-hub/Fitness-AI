@@ -99,6 +99,32 @@ export function heatLabel(level: HeatLevel): string {
   return LEVEL_LABELS_RU[level];
 }
 
+/** Полные RU-названия 14 групп для прозы (AI-разбор, заголовки). Намеренно
+ *  длиннее коротких бейджей в components/app/MuscleBadges (там «Дельты перед.»
+ *  ради компактности чипа) — разное назначение, не дублирование знания.
+ *  Домен владеет словарём мышц (рядом с MUSCLE_KEYS). */
+const MUSCLE_LABELS_RU: Record<MuscleKey, string> = {
+  chest: "Грудь",
+  back_lats: "Широчайшие",
+  back_traps: "Трапеция и ромбовидные",
+  shoulders_front: "Передние дельты",
+  shoulders_side: "Средние дельты",
+  shoulders_rear: "Задние дельты",
+  biceps: "Бицепс",
+  triceps: "Трицепс",
+  forearms: "Предплечья",
+  core: "Кор",
+  glutes: "Ягодицы",
+  quads: "Квадрицепс",
+  hamstrings: "Бицепс бедра",
+  calves: "Икры",
+};
+
+/** Полное RU-название группы мышц для прозы. Неизвестный ключ → сам ключ. */
+export function muscleLabelRu(key: string): string {
+  return MUSCLE_LABELS_RU[key as MuscleKey] ?? key;
+}
+
 function clamp01(x: number): number {
   if (x < 0) return 0;
   if (x > 1) return 1;

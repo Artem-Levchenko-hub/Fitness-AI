@@ -199,4 +199,19 @@ describe("renderTrainerMarkdown", () => {
     const md = renderTrainerMarkdown(VALID);
     expect(md).not.toContain("## Прошлый совет");
   });
+
+  it("muscleBalanceNote present → секция «Баланс по аватару» (H5.6)", () => {
+    const md = renderTrainerMarkdown({
+      ...VALID,
+      muscleBalanceNote:
+        "Грудь перегрета (16 подходов), квадрицепс холодный (0) — добавь присед 3×8.",
+    });
+    expect(md).toContain("## Баланс по аватару");
+    expect(md).toContain("квадрицепс холодный");
+  });
+
+  it("muscleBalanceNote отсутствует → секция опущена (legacy)", () => {
+    const md = renderTrainerMarkdown(VALID);
+    expect(md).not.toContain("## Баланс по аватару");
+  });
 });

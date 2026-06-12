@@ -26,6 +26,8 @@ import {
 } from "@/lib/domain";
 import { localDateIso, localIsoDay } from "@/lib/datetime/local-day";
 import { formatDays, formatHour, WEEKDAYS } from "@/lib/ui/weekdays";
+import { muscleHeatProfile } from "@/lib/repos/stats.repo";
+import { formatAvatarHeatBlock } from "./avatar-heat";
 import {
   formatExerciseComparison,
   type ExerciseComparisonPoint,
@@ -659,6 +661,19 @@ async function loadTrainerMemoryBlock(
   }
 }
 
+/** H5.6 — блок нагрева аватара (14 групп, абсолютные недельные подходы) в
+ *  контекст тренера. Reuse `muscleHeatProfile` (тот же источник, что красит
+ *  3D-аватар на /profile) — связь столпов 1 и 2. Fail-soft (R-10): сбой
+ *  загрузки → мягкий плейсхолдер, разбор не падает. */
+async function loadAvatarHeatBlock(userId: string): Promise<string> {
+  try {
+    const rows = await muscleHeatProfile(userId, new Date());
+    return formatAvatarHeatBlock(rows);
+  } catch {
+    return "# Аватар: недельная нагрузка по группам мышц\n_(данные нагрузки недоступны)_";
+  }
+}
+
 /** Контекст для AI-тренера (Gemini structured JSON):
  *  Coach-контекст (если есть workoutId) ИЛИ детальный circuit-контекст (если
  *  circuitWorkoutId) + sleep за 7 дней + nutrition за 7 дней + история круговых.
@@ -700,6 +715,8 @@ export async function buildTrainerContext(
   sections.push(formatCircuitHistoryBlock(circuits));
 
   sections.push(await loadScheduleBlock(userId));
+
+  sections.push(await loadAvatarHeatBlock(userId));
 
   sections.push(
     await loadTrainerMemoryBlock(

@@ -36,6 +36,11 @@ export type TrainerResponse = {
    *  («В прошлый раз я советовал …»). Optional — заполняется только когда в
    *  контексте есть прошлые разборы того же формата; legacy не несут. */
   pastAdviceFollowUp?: string;
+  /** H5.6 «баланс по аватару»: называет самую перегретую и самую недогруженную
+   *  группу мышц недели + ОДНУ рекомендацию выровнять. Optional — заполняется
+   *  только когда в контексте есть блок «Аватар: недельная нагрузка»; legacy
+   *  не несут (safeParse не должен их валить). */
+  muscleBalanceNote?: string;
 };
 
 export const trainerSchema = z.object({
@@ -73,6 +78,7 @@ export const trainerSchema = z.object({
   whatWorked: z.string().optional(),
   followUpQuestion: z.string().optional(),
   pastAdviceFollowUp: z.string().optional(),
+  muscleBalanceNote: z.string().optional(),
 });
 
 /** Достаёт JSON-объект из ответа: срезает ```-ограждение и reasoning-текст
@@ -125,6 +131,9 @@ export function renderTrainerMarkdown(r: TrainerResponse): string {
   }
   if (r.pastAdviceFollowUp?.trim()) {
     lines.push("", "## Прошлый совет", r.pastAdviceFollowUp);
+  }
+  if (r.muscleBalanceNote?.trim()) {
+    lines.push("", "## Баланс по аватару", r.muscleBalanceNote);
   }
   lines.push(
     "",
