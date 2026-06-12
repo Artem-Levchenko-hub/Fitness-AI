@@ -1,9 +1,17 @@
-import { ArrowRight, ChevronRight, Dumbbell, Plus } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  ChevronRight,
+  Dumbbell,
+  Plus,
+  Users,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { buildResumes } from "@/components/dashboard/active-resumes";
+import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { SleepTile } from "@/components/dashboard/SleepTile";
@@ -101,6 +109,24 @@ export default async function DashboardPage() {
         ) : (
           <EmptyMini />
         )}
+      </section>
+
+      {/* Бюджет компоновки (H9.1): входы «Статистика»/«Друзья» — один ряд
+          компактных tile-вход, не отдельные секции. Тут же материализуются
+          C1 (H4.1 week-strip /stats, H3.1 лента /friends). */}
+      <section className="mt-3 grid grid-cols-2 gap-3">
+        <DashboardNavTile
+          href="/stats"
+          label="Статистика"
+          icon={BarChart3}
+          hint="Объём, 1ПМ, рекорды"
+        />
+        <DashboardNavTile
+          href="/friends"
+          label="Друзья"
+          icon={Users}
+          hint="Лента и профили"
+        />
       </section>
 
       <section className="mt-6 space-y-2">

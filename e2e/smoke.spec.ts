@@ -48,6 +48,27 @@ test("/profile: аватар рендерится и его легенда та�
   await expect(chip).toBeEnabled();
 });
 
+test("/dashboard: tile-входы «Статистика» и «Друзья» ведут на /stats и /friends", async ({
+  page,
+}) => {
+  // H9.1 — бюджет компоновки: входы «Статистика»/«Друзья» выведены на главную
+  // одним рядом компактных tile (consolidation C1, фундамент H4.1/H3.1).
+  // Главное действие старта остаётся выше — проверяем сами tile-входы.
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  const statsTile = page.locator('main a[href="/stats"]').first();
+  const friendsTile = page.locator('main a[href="/friends"]').first();
+  await expect(statsTile).toBeVisible();
+  await expect(statsTile).toContainText("Статистика");
+  await expect(friendsTile).toBeVisible();
+  await expect(friendsTile).toContainText("Друзья");
+
+  // Tile реально проваливается в /stats.
+  await statsTile.click();
+  await expect(page).toHaveURL(/\/stats/);
+});
+
 test("разбор завершённой тренировки виден (TrainerResultCard)", async ({
   page,
 }) => {
