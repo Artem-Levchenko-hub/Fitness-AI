@@ -5,6 +5,7 @@ import { useState, useSyncExternalStore } from "react";
 
 import { MUSCLE_MODEL_URL } from "@/lib/avatar/model-config";
 
+import { MuscleLegend } from "./MuscleLegend";
 import { CYCLE_LEN, MuscleInfoPanel } from "./MuscleInfoPanel";
 import type { AvatarMuscleDatum } from "./types";
 
@@ -72,6 +73,8 @@ export function ProfileAvatar({
         onClose={() => onSelect(null)}
         linkExercises={linkExercises}
       />
+
+      <MuscleLegend data={data} selected={selected} onSelect={onSelect} />
 
       {/* Атрибуция CC BY-SA 4.0 — обязательна при использовании Z-Anatomy. */}
       {MUSCLE_MODEL_URL ? (
