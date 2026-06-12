@@ -9,8 +9,10 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
 import { buildResumes } from "@/components/dashboard/active-resumes";
+import { DashboardAvatarTile } from "@/components/dashboard/DashboardAvatarTile";
 import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
@@ -28,6 +30,7 @@ import {
   listRecentCardio,
 } from "@/lib/repos/cardio.repo";
 import { getActiveCircuitId, listCircuits } from "@/lib/repos/circuits.repo";
+import { muscleHeatProfile } from "@/lib/repos/stats.repo";
 import {
   getActiveWorkoutId,
   listRecentWorkouts,
@@ -39,6 +42,7 @@ export const metadata: Metadata = { title: "Главная" };
 export default async function DashboardPage() {
   const user = await requireUser();
   const name = user.name?.split(" ")[0] ?? user.email.split("@")[0];
+  const now = new Date();
 
   const [
     recent,
@@ -47,6 +51,7 @@ export default async function DashboardPage() {
     activeCardioId,
     recentCircuits,
     activeCircuitId,
+    heat,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     getActiveWorkoutId(user.id),
@@ -54,7 +59,12 @@ export default async function DashboardPage() {
     getActiveCardioId(user.id),
     listCircuits(user.id, 10),
     getActiveCircuitId(user.id),
+    muscleHeatProfile(user.id, now),
   ]);
+
+  // Мини-аватар витрины (H9.2): тот же heat-источник, что красит 3D на /profile;
+  // здесь нужен только цвет/уровень/подходы по группам (без records/forgotten).
+  const avatarData = buildAvatarData(heat, now);
 
   const completed = recent.filter((w) => w.status === "completed");
   // `last` = последняя СИЛОВАЯ — нужна для AI-тренера (анализирует силовые).
@@ -127,6 +137,12 @@ export default async function DashboardPage() {
           icon={Users}
           hint="Лента и профили"
         />
+      </section>
+
+      {/* H9.2: мини-аватар-витрина — текущий heat-силуэт, тап → полный 3D на
+          /profile. Крючок столпа 2 на главной, а не за вкладкой профиля. */}
+      <section className="mt-3">
+        <DashboardAvatarTile data={avatarData} />
       </section>
 
       <section className="mt-6 space-y-2">

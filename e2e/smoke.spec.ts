@@ -69,6 +69,23 @@ test("/dashboard: tile-входы «Статистика» и «Друзья» �
   await expect(page).toHaveURL(/\/stats/);
 });
 
+test("/dashboard: мини-аватар-витрина (H9.2) показывает heat-силуэт и ведёт на /profile", async ({
+  page,
+}) => {
+  // H9.2 — крючок столпа 2 на главной: статичный heat-силуэт, тап → полный 3D
+  // на /profile. Силуэт — инлайновый SVG (не WebGL) → надёжно проверяется в
+  // headless: тайл виден, ведёт на /profile, реальный нагрев = хотя бы один
+  // регион закрашен НЕ серым-dormant (#5b626b) у атлета с тренировками.
+  await page.goto("/dashboard");
+  const tile = page.getByTestId("dashboard-avatar-tile");
+  await expect(tile).toBeVisible();
+  await expect(tile).toHaveAttribute("href", "/profile");
+  await expect(tile.locator("svg [data-muscle]").first()).toBeVisible();
+
+  await tile.click();
+  await expect(page).toHaveURL(/\/profile/);
+});
+
 test("разбор завершённой тренировки виден (TrainerResultCard)", async ({
   page,
 }) => {
