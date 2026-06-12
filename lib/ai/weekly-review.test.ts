@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { formatWeeklyReviewBlock, type WeeklyReviewInput } from "./weekly-review";
+import {
+  formatWeeklyReviewBlock,
+  hasWeeklyData,
+  type WeeklyReviewInput,
+} from "./weekly-review";
 
 function base(): WeeklyReviewInput {
   return {
@@ -71,6 +75,25 @@ describe("formatWeeklyReviewBlock", () => {
     d.cycleNote = "   ";
     const out = formatWeeklyReviewBlock(d);
     expect(out).not.toContain("## Заметка недели атлета");
+  });
+
+  it("hasWeeklyData: есть сессии на этой неделе → true", () => {
+    const d = base();
+    d.previous = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    expect(hasWeeklyData(d)).toBe(true);
+  });
+
+  it("hasWeeklyData: сессии только на прошлой неделе → true", () => {
+    const d = base();
+    d.current = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    expect(hasWeeklyData(d)).toBe(true);
+  });
+
+  it("hasWeeklyData: обе недели пусты → false (не жжём LLM)", () => {
+    const d = base();
+    d.current = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    d.previous = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    expect(hasWeeklyData(d)).toBe(false);
   });
 
   it("ограничивает число групп мышц бюджетом (<=8 строк)", () => {

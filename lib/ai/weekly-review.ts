@@ -24,6 +24,14 @@ export type WeeklyReviewInput = {
   cycleNote: string | null;
 };
 
+/** Есть ли что разбирать: хотя бы одна силовая сессия на этой ИЛИ прошлой
+ *  неделе. Единый источник правила «разбор недели имеет смысл» — и для
+ *  кнопки «по запросу» (H8.1), и для авто-воркера (H8.2). Пустые обе недели →
+ *  не жжём LLM. Чистая (R-7), юнит-тестируема. */
+export function hasWeeklyData(data: WeeklyReviewInput): boolean {
+  return data.current.sessions > 0 || data.previous.sessions > 0;
+}
+
 /** Сколько групп показать в блоке (бюджет промпта — самые нагруженные). */
 const MAX_MUSCLE_ROWS = 8;
 

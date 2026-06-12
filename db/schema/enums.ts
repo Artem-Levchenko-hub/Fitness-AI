@@ -62,6 +62,7 @@ export const aiJobKind = pgEnum("ai_job_kind", [
   "daily_digest",
   "on_demand",
   "circuit_post_workout",
+  "weekly_review",
 ]);
 
 export const pushKind = pgEnum("push_kind", [

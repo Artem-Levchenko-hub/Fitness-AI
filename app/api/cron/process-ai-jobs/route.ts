@@ -13,6 +13,8 @@ import {
   DIGEST_SYSTEM_PROMPT,
   TRAINER_SYSTEM_PROMPT,
 } from "@/lib/ai/prompts";
+import { generateWeeklyReview } from "@/lib/ai/weekly-review-run";
+import { getUserProfile } from "@/lib/repos/body.repo";
 import { getActiveForUser } from "@/lib/repos/push.repo";
 import { sendPushToUser } from "@/lib/push/vapid";
 import {
@@ -122,6 +124,10 @@ export async function GET(req: Request) {
 async function processJob(
   job: typeof schema.aiJobs.$inferSelect,
 ): Promise<{ analysisId: string; result: TrainerResponse }> {
+  if (job.kind === "weekly_review") {
+    return processWeeklyReview(job);
+  }
+
   const context = await buildTrainerContext(job.userId, job.workoutId, {
     kind: job.kind,
     circuitWorkoutId: job.circuitWorkoutId ?? null,
@@ -181,6 +187,38 @@ ${context.prompt}`;
   return { analysisId: analysis.id, result: result.json };
 }
 
+/** H8.2 — авто-разбор недели по закрытии ISO-недели. Использует общее ядро
+ *  `generateWeeklyReview` (тот же контракт, что кнопка «по запросу» H8.1):
+ *  собирает агрегаты этой+прошлой недели, зовёт DeepSeek через breaker+timeout.
+ *  Хранит как ai_analyses без workoutId (как daily_digest); kind разбора несёт
+ *  ai_jobs.kind='weekly_review' → дисплей (H8.2c) находит через analysisId. */
+async function processWeeklyReview(
+  job: typeof schema.aiJobs.$inferSelect,
+): Promise<{ analysisId: string; result: TrainerResponse }> {
+  const profile = await getUserProfile(job.userId);
+  const tz = profile?.timezone ?? "Europe/Moscow";
+
+  const { result } = await generateWeeklyReview(job.userId, tz, new Date());
+  const md = renderTrainerMarkdown(result.json);
+
+  const [analysis] = await db
+    .insert(schema.aiAnalyses)
+    .values({
+      userId: job.userId,
+      workoutId: null,
+      circuitWorkoutId: null,
+      content: md,
+      resultJson: result.json as object,
+      modelVersion: result.modelVersion ?? TRAINER_MODEL,
+      promptTokens: result.promptTokens,
+      completionTokens: result.completionTokens,
+    })
+    .returning({ id: schema.aiAnalyses.id });
+
+  if (!analysis) throw new Error("Не удалось сохранить weekly review");
+  return { analysisId: analysis.id, result: result.json };
+}
+
 async function notifyTrainerReady(
   job: typeof schema.aiJobs.$inferSelect,
 ) {
@@ -190,7 +228,10 @@ async function notifyTrainerReady(
 
     let url = "/dashboard";
     let tag = "trainer-generic";
-    if (job.kind === "circuit_post_workout" && job.circuitWorkoutId) {
+    if (job.kind === "weekly_review") {
+      url = "/stats";
+      tag = "trainer-weekly";
+    } else if (job.kind === "circuit_post_workout" && job.circuitWorkoutId) {
       url = `/circuits/${job.circuitWorkoutId}`;
       tag = `trainer-circuit-${job.circuitWorkoutId}`;
     } else if (job.workoutId) {
@@ -200,10 +241,15 @@ async function notifyTrainerReady(
       tag = "trainer-digest";
     }
 
+    const isWeekly = job.kind === "weekly_review";
     await sendPushToUser(job.userId, subs, {
       kind: "trainer_ready",
-      title: "🏋️ Тренер разобрал тренировку",
-      body: "Открой приложение, чтобы увидеть оценку и рекомендации.",
+      title: isWeekly
+        ? "📅 Тренер разобрал твою неделю"
+        : "🏋️ Тренер разобрал тренировку",
+      body: isWeekly
+        ? "Открой приложение, чтобы увидеть итог недели и фокус на следующую."
+        : "Открой приложение, чтобы увидеть оценку и рекомендации.",
       url,
       tag,
     });
