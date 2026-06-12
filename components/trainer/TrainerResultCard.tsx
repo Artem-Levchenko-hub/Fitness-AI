@@ -43,7 +43,7 @@ function scoreColor(score: number | null): string {
 export function TrainerResultCard({
   data,
   className,
-  linkExercises,
+  exerciseLinks,
   linkLifeFactors,
 }: {
   data: TrainerResultData;
@@ -55,7 +55,7 @@ export function TrainerResultCard({
    * `/a/[token]` и разбор друга НЕ передают карту (ссылка увела бы в чужую
    * историю — прецедент H6.2b `linkExercises`).
    */
-  linkExercises?: Record<string, string>;
+  exerciseLinks?: Record<string, string>;
   /**
    * H13.2/H13.3 — на СВОЁМ разборе заголовки факторов жизни становятся входом
    * в данные: «Восстановление (сон)» → /sleep, «Питание (КБЖУ)» → /nutrition,
@@ -166,7 +166,7 @@ export function TrainerResultCard({
               <ComparisonRow
                 key={i}
                 c={c}
-                href={resolveExerciseHref(c.name, linkExercises)}
+                href={resolveExerciseHref(c.name, exerciseLinks)}
               />
             ))}
           </ul>

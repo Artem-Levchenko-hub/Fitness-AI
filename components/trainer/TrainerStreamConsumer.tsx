@@ -20,12 +20,12 @@ type Phase = "streaming" | "loading-result" | "done" | "error";
  *  разбор (GET /api/ai/trainer/latest) и показываем цветные дельты F4. */
 export function TrainerStreamConsumer({
   workoutId,
-  linkExercises,
+  exerciseLinks,
   linkLifeFactors,
 }: {
   workoutId: string;
   /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
-  linkExercises?: Record<string, string>;
+  exerciseLinks?: Record<string, string>;
   /** H13.2 — на своём разборе заголовки факторов жизни кликабельны. */
   linkLifeFactors?: boolean;
 }) {
@@ -146,7 +146,7 @@ export function TrainerStreamConsumer({
     return (
       <TrainerResultCard
         data={result}
-        linkExercises={linkExercises}
+        exerciseLinks={exerciseLinks}
         linkLifeFactors={linkLifeFactors}
       />
     );

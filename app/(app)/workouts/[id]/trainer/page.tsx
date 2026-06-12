@@ -123,7 +123,7 @@ export default async function TrainerPage({ params }: Props) {
         <>
           <TrainerResultCard
             data={savedAnalysis.resultJson as TrainerResultData}
-            linkExercises={buildExerciseLinkMap(workout.exercises)}
+            exerciseLinks={buildExerciseLinkMap(workout.exercises)}
             linkLifeFactors
           />
           <ShareAnalysisButton
@@ -139,14 +139,14 @@ export default async function TrainerPage({ params }: Props) {
         // cron уже обрабатывает (или succeeded-legacy) — поллим как fallback.
         <TrainerJobPoller
           jobId={latestJob.id}
-          linkExercises={buildExerciseLinkMap(workout.exercises)}
+          exerciseLinks={buildExerciseLinkMap(workout.exercises)}
           linkLifeFactors
         />
       ) : (
         // Свежий on_demand — генерируем live прямо в запросе (F8-B run-2).
         <TrainerStreamConsumer
           workoutId={id}
-          linkExercises={buildExerciseLinkMap(workout.exercises)}
+          exerciseLinks={buildExerciseLinkMap(workout.exercises)}
           linkLifeFactors
         />
       )}

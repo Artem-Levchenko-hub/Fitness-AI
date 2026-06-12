@@ -166,7 +166,7 @@ function CompletedView({
               своя/share-граница соблюдена — share/друг сюда не попадают). */}
           <TrainerResultCard
             data={analysis.resultJson as TrainerResultData}
-            linkExercises={buildExerciseLinkMap(workout.exercises)}
+            exerciseLinks={buildExerciseLinkMap(workout.exercises)}
             linkLifeFactors
           />
           <div className="mt-4">

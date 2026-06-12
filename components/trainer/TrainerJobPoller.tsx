@@ -33,13 +33,13 @@ type JobResponse = {
 export function TrainerJobPoller({
   jobId,
   onRetry,
-  linkExercises,
+  exerciseLinks,
   linkLifeFactors,
 }: {
   jobId: string;
   onRetry?: () => Promise<{ jobId: string }>;
   /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
-  linkExercises?: Record<string, string>;
+  exerciseLinks?: Record<string, string>;
   /** H13.2 — на своём разборе заголовки факторов жизни кликабельны. */
   linkLifeFactors?: boolean;
 }) {
@@ -140,7 +140,7 @@ export function TrainerJobPoller({
   return (
     <TrainerResultCard
       data={job.analysis.resultJson}
-      linkExercises={linkExercises}
+      exerciseLinks={exerciseLinks}
       linkLifeFactors={linkLifeFactors}
     />
   );
