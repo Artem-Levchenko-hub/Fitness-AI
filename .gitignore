@@ -45,6 +45,8 @@ yarn-error.log*
 /playwright/.cache
 /test-results
 /coverage
+# Playwright restored-session storageState (prod token) — local only, never commit
+e2e/.auth/
 
 # vercel
 .vercel
