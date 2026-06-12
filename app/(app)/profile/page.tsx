@@ -9,7 +9,7 @@ import {
 } from "@/components/avatar/build-avatar-data";
 import { requireUser } from "@/lib/auth/require-user";
 import { getLatestMeasurement, getUserProfile } from "@/lib/repos/body.repo";
-import { muscleHeatProfile } from "@/lib/repos/stats.repo";
+import { muscleGroupRecords, muscleHeatProfile } from "@/lib/repos/stats.repo";
 
 export const metadata: Metadata = { title: "Профиль" };
 
@@ -17,13 +17,14 @@ export default async function ProfilePage() {
   const user = await requireUser();
   const now = new Date();
 
-  const [heat, profile, measurement] = await Promise.all([
+  const [heat, records, profile, measurement] = await Promise.all([
     muscleHeatProfile(user.id, now),
+    muscleGroupRecords(user.id),
     getUserProfile(user.id),
     getLatestMeasurement(user.id),
   ]);
 
-  const data = buildAvatarData(heat, now);
+  const data = buildAvatarData(heat, now, records);
   const hasData = hasTrainingData(heat);
 
   const displayName = user.name?.trim() || user.email;

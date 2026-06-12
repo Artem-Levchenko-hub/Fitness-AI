@@ -11,6 +11,7 @@ import type { AvatarMuscleDatum } from "./types";
 export function buildAvatarData(
   heat: MuscleHeat[],
   now: Date,
+  records?: Map<string, Array<{ name: string; weightKg: number; reps: number }>>,
 ): AvatarMuscleDatum[] {
   return heat.map((m) => {
     const h = heatFromSets(m.weeklySets);
@@ -25,6 +26,7 @@ export function buildAvatarData(
       sets: m.sets,
       lastTrainedLabel: formatLastTrained(m.lastTrainedAt, now),
       top3: m.top3,
+      records: records?.get(m.muscleKey) ?? [],
     };
   });
 }

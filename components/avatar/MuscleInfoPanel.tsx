@@ -1,6 +1,6 @@
 "use client";
 
-import { Dumbbell, X } from "lucide-react";
+import { Dumbbell, Trophy, X } from "lucide-react";
 
 import type { AvatarMuscleDatum } from "./types";
 
@@ -9,7 +9,9 @@ import type { AvatarMuscleDatum } from "./types";
  *  панели) листает цикл; все данные уже в datum — без сетевых запросов.
  *  Обычный DOM поверх canvas (легче и доступнее drei <Html>). */
 
-const CYCLE_LEN = 4;
+/** Число показателей в цикле панели. Экспортируется как единственный источник
+ *  правды — обёртка (ProfileAvatar) берёт его же для модуля счётчика тапов. */
+export const CYCLE_LEN = 5;
 
 type Props = {
   datum: AvatarMuscleDatum | null;
@@ -120,30 +122,65 @@ function CycleField({
       </div>
     );
   }
-  // step === 3 — топ-3 упражнения
+  if (step === 3) {
+    // топ-3 упражнения по вкладу за неделю
+    return (
+      <div>
+        <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-wide uppercase">
+          Топ упражнения за 7 дней
+        </p>
+        {datum.top3.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Нет данных за неделю.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {datum.top3.map((ex) => (
+              <li
+                key={ex.name}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <Dumbbell
+                    className="text-muted-foreground size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{ex.name}</span>
+                </span>
+                <span className="text-muted-foreground tabular shrink-0 text-xs">
+                  {Math.round(ex.volume).toLocaleString("ru")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+  // step === 4 — личные рекорды (all-time PR) по упражнениям группы
   return (
     <div>
       <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-wide uppercase">
-        Топ упражнения за 7 дней
+        Рекорды группы
       </p>
-      {datum.top3.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Нет данных за неделю.</p>
+      {datum.records.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          Пока нет силовых рекордов.
+        </p>
       ) : (
         <ul className="space-y-1.5">
-          {datum.top3.map((ex) => (
+          {datum.records.map((pr) => (
             <li
-              key={ex.name}
+              key={pr.name}
               className="flex items-center justify-between gap-3 text-sm"
             >
               <span className="flex min-w-0 items-center gap-2">
-                <Dumbbell
+                <Trophy
                   className="text-muted-foreground size-3.5 shrink-0"
                   aria-hidden="true"
                 />
-                <span className="truncate">{ex.name}</span>
+                <span className="truncate">{pr.name}</span>
               </span>
-              <span className="text-muted-foreground tabular shrink-0 text-xs">
-                {Math.round(ex.volume).toLocaleString("ru")}
+              <span className="tabular shrink-0 text-xs font-medium">
+                {formatKg(pr.weightKg)} × {pr.reps}
               </span>
             </li>
           ))}
@@ -151,6 +188,10 @@ function CycleField({
       )}
     </div>
   );
+}
+
+function formatKg(kg: number): string {
+  return Number.isInteger(kg) ? String(kg) : kg.toFixed(1);
 }
 
 function Stat({

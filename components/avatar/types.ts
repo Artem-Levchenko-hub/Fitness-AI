@@ -23,4 +23,7 @@ export type AvatarMuscleDatum = {
   lastTrainedLabel: string;
   /** Топ-3 упражнения по вкладу за 7 дней. */
   top3: Array<{ name: string; volume: number }>;
+  /** All-time PR-рекорды группы: топ упражнений по 1ПМ с рекордным подходом
+   *  (вес × повторы). Пусто, если силовых рекордов с весом нет. */
+  records: Array<{ name: string; weightKg: number; reps: number }>;
 };

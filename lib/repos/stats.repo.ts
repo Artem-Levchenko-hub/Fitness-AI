@@ -3,6 +3,10 @@ import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { MUSCLE_KEYS } from "@/lib/domain/avatar/heat";
+import {
+  topMuscleRecords,
+  type MuscleRecord,
+} from "@/lib/domain/avatar/muscle-records";
 import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 
@@ -724,6 +728,65 @@ export async function muscleHeatProfile(
       top3,
     };
   });
+}
+
+/** All-time PR-рекорды по группам мышц для дрилл-дауна аватара (H6.1).
+ *  Для каждой группы — топ упражнений по оценочному 1ПМ с их рекордным
+ *  подходом (вес × повторы). Только primary-роль: рекорд приписывается группе,
+ *  которую упражнение тренирует ОСНОВНОЙ (жим — груди, не трицепсу), без
+ *  двойного учёта. Только силовые completed + working подходы (кардио/круговые
+ *  bodyweight без веса PR не образуют). Возвращает Map по `muscleKey`. */
+export async function muscleGroupRecords(
+  userId: string,
+): Promise<Map<string, MuscleRecord[]>> {
+  const rows = await db
+    .select({
+      muscleKey: schema.exerciseMuscleGroups.muscleGroupKey,
+      exerciseId: schema.workoutExercises.exerciseId,
+      name: schema.exercises.nameRu,
+      weightKg: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.workoutExercises.exerciseId,
+      ),
+    )
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.workoutExercises.exerciseId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+        eq(schema.exerciseMuscleGroups.role, "primary"),
+      ),
+    );
+
+  return topMuscleRecords(
+    rows
+      .filter((r) => r.weightKg != null && r.reps != null)
+      .map((r) => ({
+        muscleKey: r.muscleKey,
+        exerciseId: r.exerciseId,
+        name: r.name,
+        weightKg: r.weightKg as number,
+        reps: r.reps as number,
+      })),
+  );
 }
 
 /** Список упражнений, с которыми хоть раз тренировались — для селектора

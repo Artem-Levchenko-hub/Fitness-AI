@@ -5,15 +5,13 @@ import { useState, useSyncExternalStore } from "react";
 
 import { MUSCLE_MODEL_URL } from "@/lib/avatar/model-config";
 
-import { MuscleInfoPanel } from "./MuscleInfoPanel";
+import { CYCLE_LEN, MuscleInfoPanel } from "./MuscleInfoPanel";
 import type { AvatarMuscleDatum } from "./types";
 
 /** Публичная обёртка 3D-аватара. Держит состояние выбора + цикла тапа, лениво
  *  грузит WebGL-сцену (ssr:false — обязательно из Client Component, Next 16),
  *  и деградирует в список при отсутствии WebGL. Используется и на своём
  *  /profile, и на профиле друга (read-only — тот же компонент, данные друга). */
-
-const CYCLE_LEN = 4;
 
 const AvatarCanvas = dynamic(() => import("./AvatarCanvas"), {
   ssr: false,
