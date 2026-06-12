@@ -10,5 +10,6 @@ export * from "./cycle/iso-week";
 export * from "./body/bmi";
 export * from "./cardio/presets";
 export * from "./cardio/cardio-template-preset";
+export * from "./cardio/cardio-template-summary";
 export * from "./circuits/circuit-template-preset";
 export * from "./templates/template-list";

@@ -4,9 +4,15 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
-import { mergeTemplateList, type TemplateFormat } from "@/lib/domain";
+import {
+  mergeTemplateList,
+  type TemplateFormat,
+  type UnifiedTemplateItem,
+} from "@/lib/domain";
+import { listCardioTemplates } from "@/lib/repos/cardio-templates.repo";
 import { listCircuitTemplates } from "@/lib/repos/circuit-templates.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
+import { startCardioFromTemplateAction } from "@/server/actions/cardio-templates";
 import { startCircuitFromTemplateAction } from "@/server/actions/circuit-templates";
 
 export const metadata: Metadata = { title: "Шаблоны" };
@@ -14,15 +20,17 @@ export const metadata: Metadata = { title: "Шаблоны" };
 const FORMAT_LABEL: Record<TemplateFormat, string> = {
   strength: "Силовая",
   circuit: "Круговая",
+  cardio: "Кардио",
 };
 
 export default async function TemplatesPage() {
   const user = await requireUser();
-  const [strength, circuit] = await Promise.all([
+  const [strength, circuit, cardio] = await Promise.all([
     listTemplates(user.id),
     listCircuitTemplates(user.id),
+    listCardioTemplates(user.id),
   ]);
-  const templates = mergeTemplateList(strength, circuit);
+  const templates = mergeTemplateList(strength, circuit, cardio);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -43,9 +51,27 @@ export default async function TemplatesPage() {
       ) : (
         <ul className="space-y-2">
           {templates.map((tpl) =>
-            tpl.format === "circuit" ? (
-              <li key={`circuit-${tpl.id}`}>
-                <form action={startCircuitFromTemplateAction}>
+            tpl.format === "strength" ? (
+              <li key={`strength-${tpl.id}`}>
+                <Link
+                  href={`/templates/${tpl.id}`}
+                  className="bg-card hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
+                >
+                  <TemplateMeta tpl={tpl} />
+                  <ChevronRight className="text-muted-foreground size-5 shrink-0" />
+                </Link>
+              </li>
+            ) : (
+              // Круговая и кардио переиспользуются стартом одним кликом —
+              // форма с серверным экшеном формата (ноль дубля логики старта).
+              <li key={`${tpl.format}-${tpl.id}`}>
+                <form
+                  action={
+                    tpl.format === "circuit"
+                      ? startCircuitFromTemplateAction
+                      : startCardioFromTemplateAction
+                  }
+                >
                   <input type="hidden" name="templateId" value={tpl.id} />
                   <button
                     type="submit"
@@ -59,16 +85,6 @@ export default async function TemplatesPage() {
                   </button>
                 </form>
               </li>
-            ) : (
-              <li key={`strength-${tpl.id}`}>
-                <Link
-                  href={`/templates/${tpl.id}`}
-                  className="bg-card hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
-                >
-                  <TemplateMeta tpl={tpl} />
-                  <ChevronRight className="text-muted-foreground size-5 shrink-0" />
-                </Link>
-              </li>
             ),
           )}
         </ul>
@@ -77,11 +93,13 @@ export default async function TemplatesPage() {
   );
 }
 
-function TemplateMeta({
-  tpl,
-}: {
-  tpl: { name: string; description: string | null; exerciseCount: number; format: TemplateFormat };
-}) {
+function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
+  // Кардио не имеет упражнений-детей → мета-строка = сводка интервалов;
+  // силовые/круговые показывают счёт упражнений.
+  const meta =
+    tpl.format === "cardio"
+      ? tpl.metaLine
+      : `${tpl.exerciseCount} упражнен${pluralize(tpl.exerciseCount)}`;
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
@@ -89,8 +107,7 @@ function TemplateMeta({
         <FormatBadge format={tpl.format} />
       </div>
       <p className="text-muted-foreground mt-0.5 text-xs">
-        {tpl.exerciseCount} упражнен
-        {pluralize(tpl.exerciseCount)}
+        {meta}
         {tpl.description ? ` · ${tpl.description}` : ""}
       </p>
     </div>

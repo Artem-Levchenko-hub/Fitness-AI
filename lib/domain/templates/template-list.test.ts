@@ -91,4 +91,65 @@ describe("mergeTemplateList", () => {
   it("returns [] when both sources empty", () => {
     expect(mergeTemplateList([], [])).toEqual([]);
   });
+
+  it("tags cardio source and preserves metaLine (no exerciseCount)", () => {
+    const [item] = mergeTemplateList(
+      [],
+      [],
+      [
+        {
+          id: "cd1",
+          name: "Утренний HIIT",
+          description: null,
+          metaLine: "Tabata",
+          updatedAt: d("2026-06-12T00:00:00Z"),
+        },
+      ],
+    );
+    expect(item).toEqual({
+      id: "cd1",
+      name: "Утренний HIIT",
+      description: null,
+      metaLine: "Tabata",
+      updatedAt: d("2026-06-12T00:00:00Z"),
+      format: "cardio",
+    });
+  });
+
+  it("interleaves all three formats by updatedAt desc", () => {
+    const merged = mergeTemplateList(
+      [
+        {
+          id: "s",
+          name: "s",
+          description: null,
+          exerciseCount: 1,
+          updatedAt: d("2026-06-10T00:00:00Z"),
+        },
+      ],
+      [
+        {
+          id: "c",
+          name: "c",
+          description: null,
+          exerciseCount: 1,
+          updatedAt: d("2026-06-12T00:00:00Z"),
+        },
+      ],
+      [
+        {
+          id: "cd",
+          name: "cd",
+          description: null,
+          metaLine: "EMOM 10 мин",
+          updatedAt: d("2026-06-11T00:00:00Z"),
+        },
+      ],
+    );
+    expect(merged.map((m) => [m.id, m.format])).toEqual([
+      ["c", "circuit"],
+      ["cd", "cardio"],
+      ["s", "strength"],
+    ]);
+  });
 });

@@ -6,7 +6,10 @@ import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
 import { buildCardioTemplatePreset } from "@/lib/domain";
-import { createCardioTemplate } from "@/lib/repos/cardio-templates.repo";
+import {
+  createCardioTemplate,
+  startCardioFromTemplate,
+} from "@/lib/repos/cardio-templates.repo";
 
 /** Зеркало startSchema из server/actions/cardio.ts — те же поля формы, тот же
  *  диапазон. Сохранение шаблона переиспользует FormData кардио-билдера (preset +
@@ -46,4 +49,23 @@ export async function saveCardioTemplateAction(formData: FormData) {
   revalidatePath("/templates");
   revalidatePath("/dashboard");
   redirect("/templates");
+}
+
+const startSchema = z.object({ templateId: z.string().uuid() });
+
+/** H14.4 — старт кардио из шаблона (одним кликом с /templates). Засевает
+ *  существующий startCardioFromPreset пресетом шаблона (ноль дубля логики
+ *  старта), ведёт сразу на активный сеанс. */
+export async function startCardioFromTemplateAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = startSchema.safeParse({
+    templateId: formData.get("templateId"),
+  });
+  if (!parsed.success) throw new Error("Неверный id кардио-шаблона");
+
+  const { id } = await startCardioFromTemplate(user.id, parsed.data.templateId);
+
+  revalidatePath("/cardio");
+  revalidatePath("/dashboard");
+  redirect(`/cardio/${id}`);
 }
