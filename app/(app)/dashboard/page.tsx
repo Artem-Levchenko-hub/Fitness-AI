@@ -92,7 +92,7 @@ export default async function DashboardPage() {
   const completed = recent.filter((w) => w.status === "completed");
   // `last` = последняя СИЛОВАЯ — нужна для AI-тренера (анализирует силовые).
   const last = completed[0] ?? null;
-  const week = sumThisWeek(completed);
+  const weekCount = countThisWeek(completed);
   // Единый поток: «Недавние» и тайл «Последняя» сливают силовые + круговые +
   // кардио (как /workouts), а не показывают только силовые — иначе круговая/
   // кардио-сессия «пропадает» и форматы живут в разных мирах.
@@ -133,10 +133,7 @@ export default async function DashboardPage() {
       <StartCard />
 
       <section className="mt-6 grid grid-cols-2 gap-3">
-        <WeekCard
-          workouts={week.count}
-          tonnage={week.tonnage}
-        />
+        <WeekCard workouts={weekCount} />
         {latestSession ? (
           <LastSessionMini item={latestSession} />
         ) : (
@@ -232,7 +229,14 @@ function StartCard() {
   );
 }
 
-function WeekCard({ workouts, tonnage }: { workouts: number; tonnage: number }) {
+// «Эта неделя» — число завершённых сессий (всех форматов) недели. Тоннаж
+// недели СОЗНАТЕЛЬНО НЕ показываем здесь (H4.3): он живёт ровно в одном
+// носителе — week-strip превью tile «Статистика», чьи цифры по построению
+// совпадают со /stats (dailyVolume). Прежний тоннаж WeekCard считался иначе
+// (все форматы, локальная граница недели) и расходился со /stats — убран как
+// дублирующий divergent-носитель. Ноль потери: тоннаж остаётся, теперь из
+// канонического источника; число тренировок нигде не дублируется (столп 3+4).
+function WeekCard({ workouts }: { workouts: number }) {
   return (
     <div className="bg-card border-border rounded-2xl border p-4">
       <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
@@ -243,13 +247,6 @@ function WeekCard({ workouts, tonnage }: { workouts: number; tonnage: number }) 
       </p>
       <p className="text-muted-foreground text-xs">
         {pluralize(workouts, "тренировка", "тренировки", "тренировок")}
-      </p>
-      <p className="text-muted-foreground tabular mt-3 text-xs">
-        Тоннаж:{" "}
-        <span className="text-foreground font-medium">
-          {Math.round(tonnage).toLocaleString("ru-RU")}
-        </span>{" "}
-        kg·reps
       </p>
     </div>
   );
@@ -286,17 +283,13 @@ function startOfWeek(d: Date): Date {
   return date;
 }
 
-function sumThisWeek(items: RecentWorkout[]): { count: number; tonnage: number } {
+function countThisWeek(items: RecentWorkout[]): number {
   const from = startOfWeek(new Date()).getTime();
   let count = 0;
-  let tonnage = 0;
   for (const w of items) {
-    if (w.startedAt.getTime() >= from) {
-      count += 1;
-      tonnage += w.tonnageKg;
-    }
+    if (w.startedAt.getTime() >= from) count += 1;
   }
-  return { count, tonnage };
+  return count;
 }
 
 function pluralize(

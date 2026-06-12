@@ -67,7 +67,18 @@ test("/dashboard: tile-входы «Статистика» и «Друзья» �
   // H4.1 — tile «Статистика» несёт week-strip-превью (7 дней + тоннаж + дельта),
   // не статичный hint. Снимок тех же данных, что графики /stats (тяжёлый
   // Recharts остаётся за тапом).
-  await expect(statsTile.getByTestId("dashboard-week-strip")).toBeVisible();
+  const weekStrip = statsTile.getByTestId("dashboard-week-strip");
+  await expect(weekStrip).toBeVisible();
+
+  // H4.3 — ровно ОДИН носитель тоннажа недели на дашборде: тоннаж («кг·повт»)
+  // несёт week-strip tile (совпадает со /stats); карточка «Эта неделя»
+  // (WeekCard) теперь только число тренировок, без тоннажа.
+  await expect(weekStrip).toContainText("кг·повт");
+  const weekCard = page
+    .locator("main div", { hasText: "Эта неделя" })
+    .last();
+  await expect(weekCard).not.toContainText("кг·повт");
+  await expect(weekCard).not.toContainText("kg·reps");
 
   // Tile реально проваливается в /stats.
   await statsTile.click();
