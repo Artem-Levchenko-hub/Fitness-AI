@@ -2,10 +2,11 @@
 
 import { Snowflake } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useState, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 import { MUSCLE_MODEL_URL } from "@/lib/avatar/model-config";
 import { forgottenLabel } from "@/lib/domain/avatar/forgotten";
+import { hottestMuscleKey } from "@/lib/domain/avatar/hottest";
 
 import { MuscleLegend } from "./MuscleLegend";
 import { CYCLE_LEN, MuscleInfoPanel } from "./MuscleInfoPanel";
@@ -36,12 +37,21 @@ export function ProfileAvatar({
   // useSyncExternalStore: на сервере считаем поддержку (canvas всё равно
   // ssr:false), на клиенте — реальная проба. Без cascading-render в effect.
   const webgl = useWebGL();
+  // H6.5: одноразовый аффорданс «тапни мышцу». tappedBefore — persistent
+  // localStorage-флаг (server snapshot=true → нет hydration-вспышки и нет
+  // подсказки тем, кто уже тапал). Подсказка + микро-пульс самой горячей группы
+  // видны ТОЛЬКО до первого тапа в жизни и пока ничего не выбрано.
+  const tappedBefore = useTappedBefore();
+  const hottestKey = useMemo(() => hottestMuscleKey(data), [data]);
+  const showAffordance = !tappedBefore && selected === null;
+  const pulseKey = showAffordance ? hottestKey : null;
 
   const onSelect = (key: string | null) => {
     if (key === null) {
       setSelected(null);
       return;
     }
+    markTapped(); // первый тап гасит подсказку навсегда (persist)
     if (key === selected) {
       setCycle((c) => (c + 1) % CYCLE_LEN);
     } else {
@@ -66,6 +76,20 @@ export function ProfileAvatar({
             onSelect={onSelect}
           />
         )}
+        {showAffordance ? (
+          <div
+            data-avatar-hint="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-3"
+          >
+            <span className="bg-foreground/85 text-background flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg">
+              <span
+                className="bg-background/90 size-2 rounded-full motion-safe:animate-ping"
+                aria-hidden="true"
+              />
+              Тапни мышцу — откроется её история
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <MuscleInfoPanel
@@ -76,7 +100,12 @@ export function ProfileAvatar({
         linkExercises={linkExercises}
       />
 
-      <MuscleLegend data={data} selected={selected} onSelect={onSelect} />
+      <MuscleLegend
+        data={data}
+        selected={selected}
+        onSelect={onSelect}
+        pulseKey={pulseKey}
+      />
 
       {/* Атрибуция CC BY-SA 4.0 — обязательна при использовании Z-Anatomy. */}
       {MUSCLE_MODEL_URL ? (
@@ -151,6 +180,48 @@ function MuscleListFallback({
       ))}
     </ul>
   );
+}
+
+/** H6.5 — «тапал ли юзер мышцу хоть раз». Persistent localStorage-флаг как
+ *  внешнее браузерное состояние через useSyncExternalStore: серверный снапшот =
+ *  true (подсказка скрыта при SSR → нет hydration-вспышки и нет подсказки тем,
+ *  кто уже знает жест), клиентский — реальное чтение localStorage. markTapped
+ *  эмитит подписчикам, поэтому повторное снятие выбора не воскрешает подсказку. */
+const TAP_KEY = "avatar:first-tap";
+let tappedCache: boolean | null = null;
+const tapListeners = new Set<() => void>();
+
+function readTapped(): boolean {
+  try {
+    return localStorage.getItem(TAP_KEY) === "1";
+  } catch {
+    return true; // нет localStorage (приватный режим) → не навязываем подсказку
+  }
+}
+
+function getTappedSnapshot(): boolean {
+  if (tappedCache === null) tappedCache = readTapped();
+  return tappedCache;
+}
+
+function subscribeTapped(listener: () => void): () => void {
+  tapListeners.add(listener);
+  return () => tapListeners.delete(listener);
+}
+
+function markTapped(): void {
+  if (tappedCache === true) return;
+  tappedCache = true;
+  try {
+    localStorage.setItem(TAP_KEY, "1");
+  } catch {
+    /* приватный режим — подсказка просто не запомнится между перезагрузками */
+  }
+  tapListeners.forEach((l) => l());
+}
+
+function useTappedBefore(): boolean {
+  return useSyncExternalStore(subscribeTapped, getTappedSnapshot, () => true);
 }
 
 /** Поддержка WebGL как внешнее браузерное состояние (не меняется в рамках

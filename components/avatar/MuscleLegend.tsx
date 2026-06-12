@@ -1,6 +1,7 @@
 "use client";
 
 import { groupByHeatBucket } from "@/lib/domain/avatar/heat-buckets";
+import { cn } from "@/lib/utils";
 
 import type { AvatarMuscleDatum } from "./types";
 
@@ -14,10 +15,15 @@ export function MuscleLegend({
   data,
   selected,
   onSelect,
+  pulseKey = null,
 }: {
   data: AvatarMuscleDatum[];
   selected: string | null;
   onSelect: (key: string | null) => void;
+  /** H6.5: ключ самой горячей группы — её чип микро-пульсирует до первого тапа,
+   *  направляя взгляд на вход в дрилл. null → ничего не пульсирует. Анимация
+   *  уважает prefers-reduced-motion (Tailwind motion-safe). */
+  pulseKey?: string | null;
 }) {
   const groups = groupByHeatBucket(data);
   if (groups.length === 0) return null;
@@ -36,8 +42,13 @@ export function MuscleLegend({
                   type="button"
                   onClick={() => onSelect(d.key)}
                   aria-pressed={selected === d.key}
+                  data-pulsing={d.key === pulseKey ? "true" : undefined}
                   aria-label={`${d.label}: ${d.levelLabel}, ${d.sets} подходов за неделю`}
-                  className="border-border bg-card/60 hover:bg-muted aria-pressed:border-foreground/40 aria-pressed:bg-muted flex min-h-14 items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition-colors"
+                  className={cn(
+                    "border-border bg-card/60 hover:bg-muted aria-pressed:border-foreground/40 aria-pressed:bg-muted flex min-h-14 items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition-colors",
+                    d.key === pulseKey &&
+                      "ring-foreground/30 ring-2 motion-safe:animate-pulse",
+                  )}
                 >
                   <span
                     className="size-3 shrink-0 rounded-full"
