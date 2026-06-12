@@ -162,7 +162,8 @@ test("H14.2 — /templates показывает круговой шаблон б
     .locator("li", { hasText: "E2E Smoke — Круг-шаблон" })
     .first();
   await expect(tplRow).toBeVisible();
-  await expect(tplRow.getByText("Круговая", { exact: true })).toBeVisible();
+  // H14.5a — формат ведёт мета-строку как текст (R-41): «Круговая · N упражнений».
+  await expect(tplRow.getByText(/^Круговая ·/)).toBeVisible();
 
   // «Начать» стартует круговую из пресета → активный сеанс /circuits/<id> с тем
   // же именем шаблона. one-off /circuits/new остаётся (столп 4) — здесь не трогаем.
@@ -191,9 +192,9 @@ test("H14.4 — /templates показывает кардио-шаблон бей
     .locator("li", { hasText: "E2E Smoke — Кардио-шаблон" })
     .first();
   await expect(tplRow).toBeVisible();
-  await expect(tplRow.getByText("Кардио", { exact: true })).toBeVisible();
+  // H14.5a — формат ведёт мета-строку как текст (R-41): «Кардио · <интервалы>».
   // Мета-строка кардио = сводка интервалов custom-пресета, НЕ «N упражнений».
-  await expect(tplRow.getByText("Свой · 6×30/60с")).toBeVisible();
+  await expect(tplRow.getByText("Кардио · Свой · 6×30/60с")).toBeVisible();
 
   // «Начать» стартует кардио из пресета → активный сеанс /cardio/<id> с тем же
   // именем шаблона. one-off /cardio/new остаётся (столп 4) — здесь не трогаем.

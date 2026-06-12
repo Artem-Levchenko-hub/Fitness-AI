@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { mergeTemplateList } from "./template-list";
+import {
+  formatTemplateMeta,
+  mergeTemplateList,
+  type UnifiedTemplateItem,
+} from "./template-list";
 
 const d = (iso: string) => new Date(iso);
 
@@ -151,5 +155,54 @@ describe("mergeTemplateList", () => {
       ["cd", "cardio"],
       ["s", "strength"],
     ]);
+  });
+});
+
+describe("formatTemplateMeta", () => {
+  const strength = (exerciseCount: number): UnifiedTemplateItem => ({
+    id: "s",
+    name: "Грудь",
+    description: null,
+    exerciseCount,
+    updatedAt: new Date("2026-06-12T00:00:00Z"),
+    format: "strength",
+  });
+
+  it("leads with the format label as text (R-41 — not only color)", () => {
+    expect(formatTemplateMeta(strength(6))).toBe("Силовая · 6 упражнений");
+  });
+
+  it("pluralizes упражнение by Russian rules", () => {
+    expect(formatTemplateMeta(strength(1))).toBe("Силовая · 1 упражнение");
+    expect(formatTemplateMeta(strength(3))).toBe("Силовая · 3 упражнения");
+    expect(formatTemplateMeta(strength(5))).toBe("Силовая · 5 упражнений");
+    expect(formatTemplateMeta(strength(11))).toBe("Силовая · 11 упражнений");
+    expect(formatTemplateMeta(strength(21))).toBe("Силовая · 21 упражнение");
+  });
+
+  it("labels a circuit template with its exercise count", () => {
+    expect(
+      formatTemplateMeta({
+        id: "c",
+        name: "Кор-круг",
+        description: null,
+        exerciseCount: 4,
+        updatedAt: new Date("2026-06-12T00:00:00Z"),
+        format: "circuit",
+      }),
+    ).toBe("Круговая · 4 упражнения");
+  });
+
+  it("uses the interval summary for cardio (no exercise count)", () => {
+    expect(
+      formatTemplateMeta({
+        id: "cd",
+        name: "Утренний HIIT",
+        description: null,
+        metaLine: "Свой · 6×30/60с",
+        updatedAt: new Date("2026-06-12T00:00:00Z"),
+        format: "cardio",
+      }),
+    ).toBe("Кардио · Свой · 6×30/60с");
   });
 });

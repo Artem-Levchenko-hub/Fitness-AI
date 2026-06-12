@@ -46,3 +46,33 @@ export function mergeTemplateList(
 
   return tagged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
+
+const FORMAT_LABEL: Record<TemplateFormat, string> = {
+  strength: "Силовая",
+  circuit: "Круговая",
+  cardio: "Кардио",
+};
+
+/** Русская форма слова «упражнение» по числу (1 упражнение, 3 упражнения,
+ *  5 упражнений). */
+function exerciseWord(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "упражнение";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
+    return "упражнения";
+  return "упражнений";
+}
+
+/** Единая мета-строка строки шаблона в стиле «Saved Workouts» (Nike Training
+ *  Club): формат ведёт строку как текст (R-41 — не только цвет), затем — деталь
+ *  формата: счёт упражнений у силовой/круговой, сводка интервалов у кардио
+ *  (у кардио нет упражнений-детей). Пример: «Силовая · 6 упражнений»,
+ *  «Кардио · Свой · 6×30/60с». */
+export function formatTemplateMeta(item: UnifiedTemplateItem): string {
+  const detail =
+    item.format === "cardio"
+      ? item.metaLine
+      : `${item.exerciseCount} ${exerciseWord(item.exerciseCount)}`;
+  return `${FORMAT_LABEL[item.format]} · ${detail}`;
+}

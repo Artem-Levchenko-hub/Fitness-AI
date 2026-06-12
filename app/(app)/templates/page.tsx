@@ -5,8 +5,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import {
+  formatTemplateMeta,
   mergeTemplateList,
-  type TemplateFormat,
   type UnifiedTemplateItem,
 } from "@/lib/domain";
 import { listCardioTemplates } from "@/lib/repos/cardio-templates.repo";
@@ -16,12 +16,6 @@ import { startCardioFromTemplateAction } from "@/server/actions/cardio-templates
 import { startCircuitFromTemplateAction } from "@/server/actions/circuit-templates";
 
 export const metadata: Metadata = { title: "Шаблоны" };
-
-const FORMAT_LABEL: Record<TemplateFormat, string> = {
-  strength: "Силовая",
-  circuit: "Круговая",
-  cardio: "Кардио",
-};
 
 export default async function TemplatesPage() {
   const user = await requireUser();
@@ -39,7 +33,8 @@ export default async function TemplatesPage() {
           Шаблоны
         </h1>
         <Button asChild size="lg">
-          <Link href="/templates/new">
+          {/* Точка выбора формата — после H14.4 создаваемы все 3 формата. */}
+          <Link href="/create">
             <Plus className="size-4" />
             Новый
           </Link>
@@ -94,38 +89,17 @@ export default async function TemplatesPage() {
 }
 
 function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
-  // Кардио не имеет упражнений-детей → мета-строка = сводка интервалов;
-  // силовые/круговые показывают счёт упражнений.
-  const meta =
-    tpl.format === "cardio"
-      ? tpl.metaLine
-      : `${tpl.exerciseCount} упражнен${pluralize(tpl.exerciseCount)}`;
+  // Единая мета-строка (стиль Nike «Saved Workouts»): формат ведёт строку как
+  // текст (R-41 — не только цвет), деталь формата — следом. Без отдельного
+  // пилюли-бейджа: одна поверхность, не вкладки/разделы (столп 3).
   return (
     <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-2">
-        <h2 className="truncate text-sm font-semibold">{tpl.name}</h2>
-        <FormatBadge format={tpl.format} />
-      </div>
+      <h2 className="truncate text-sm font-semibold">{tpl.name}</h2>
       <p className="text-muted-foreground mt-0.5 text-xs">
-        {meta}
+        {formatTemplateMeta(tpl)}
         {tpl.description ? ` · ${tpl.description}` : ""}
       </p>
     </div>
-  );
-}
-
-function FormatBadge({ format }: { format: TemplateFormat }) {
-  // R-41: формат — текстовая метка, не только цвет.
-  const tone =
-    format === "circuit"
-      ? "bg-primary/10 text-primary"
-      : "bg-muted text-muted-foreground";
-  return (
-    <span
-      className={`${tone} shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase`}
-    >
-      {FORMAT_LABEL[format]}
-    </span>
   );
 }
 
@@ -138,22 +112,14 @@ function EmptyState() {
       <div>
         <h2 className="text-base font-semibold">Шаблонов пока нет</h2>
         <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-          Шаблон — это план тренировки: упорядоченный список упражнений с
-          целевыми подходами, повторениями и весом. Круговую можно сохранить как
-          шаблон прямо из конструктора.
+          Шаблон — это сохранённый план тренировки для повторного запуска.
+          Сохранить как шаблон можно любой формат: силовую, круговую или кардио —
+          прямо из его конструктора.
         </p>
       </div>
       <Button asChild size="xl" className="w-full">
-        <Link href="/templates/new">Создать первый шаблон</Link>
+        <Link href="/create">Создать первый шаблон</Link>
       </Button>
     </div>
   );
-}
-
-function pluralize(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "ие";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "ия";
-  return "ий";
 }
