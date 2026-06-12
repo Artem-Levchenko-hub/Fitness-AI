@@ -493,6 +493,37 @@ export async function getLatestTrainerResult(
   return row ?? null;
 }
 
+/** H5.7 «совет→следующая сессия»: последний разбор ПРЕДЫДУЩЕЙ тренировки этого
+ *  шаблона (любой завершённой — наличие ai_analysis уже означает завершение).
+ *  Возвращает сырую строку; извлечение nextSessionFocus делает вызывающий через
+ *  extractPastAdvice (R-7: repo не знает про формат AI-JSON). null, если по этому
+ *  шаблону ещё не было ни одного разобранного прогона. */
+export async function getLastTemplateAnalysis(
+  userId: string,
+  templateId: string,
+): Promise<{ id: string; resultJson: unknown; createdAt: Date } | null> {
+  const [row] = await db
+    .select({
+      id: schema.aiAnalyses.id,
+      resultJson: schema.aiAnalyses.resultJson,
+      createdAt: schema.aiAnalyses.createdAt,
+    })
+    .from(schema.aiAnalyses)
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.aiAnalyses.workoutId),
+    )
+    .where(
+      and(
+        eq(schema.aiAnalyses.userId, userId),
+        eq(schema.workouts.templateId, templateId),
+      ),
+    )
+    .orderBy(desc(schema.aiAnalyses.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 /** Включить публичный шеринг разбора. R-7: правит только СВОЙ разбор
  *  (фильтр по userId). Идемпотентно — повторный вызов возвращает тот же
  *  токен (не перевыпускаем, чтобы старая ссылка не протухла). Возвращает

@@ -4,9 +4,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
+import { TemplateFocusHint } from "@/components/templates/TemplateFocusHint";
 import { Button } from "@/components/ui/button";
+import { extractPastAdvice } from "@/lib/ai/trainer-memory";
 import { requireUser } from "@/lib/auth/require-user";
 import { getTemplateWithItems } from "@/lib/repos/templates.repo";
+import { getLastTemplateAnalysis } from "@/lib/repos/workouts.repo";
 import { deleteTemplateAction } from "@/server/actions/templates";
 import { startWorkoutFromTemplateAction } from "@/server/actions/workouts";
 
@@ -19,6 +22,9 @@ export default async function TemplateDetailPage({ params }: Props) {
   const user = await requireUser();
   const tpl = await getTemplateWithItems(user.id, id);
   if (!tpl) notFound();
+
+  const lastAnalysis = await getLastTemplateAnalysis(user.id, id);
+  const lastFocus = lastAnalysis ? extractPastAdvice(lastAnalysis).focus : null;
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -37,6 +43,10 @@ export default async function TemplateDetailPage({ params }: Props) {
           <p className="text-muted-foreground mt-2 text-sm">{tpl.description}</p>
         ) : null}
       </header>
+
+      {lastFocus && lastAnalysis ? (
+        <TemplateFocusHint focus={lastFocus} analysisId={lastAnalysis.id} />
+      ) : null}
 
       <form action={startWorkoutFromTemplateAction} className="mb-6">
         <input type="hidden" name="templateId" value={tpl.id} />
