@@ -21,6 +21,10 @@ export type AvatarMuscleDatum = {
   sets: number;
   /** Готовый ярлык «последняя тренировка» (напр. «3 дня назад», «давно»). */
   lastTrainedLabel: string;
+  /** Полные недели без нагрузки, если группа «забыта» (≥FORGOTTEN_WEEKS недель);
+   *  иначе null. Управляет отдельной отметкой на аватаре (не только цвет — R-41)
+   *  и бейджем срока в панели (H6.4). */
+  forgottenWeeks: number | null;
   /** Топ-3 упражнения по вкладу за 7 дней. */
   top3: Array<{ exerciseId: string; name: string; volume: number }>;
   /** All-time PR-рекорды группы: топ упражнений по 1ПМ с рекордным подходом

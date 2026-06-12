@@ -1,9 +1,11 @@
 "use client";
 
+import { Snowflake } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState, useSyncExternalStore } from "react";
 
 import { MUSCLE_MODEL_URL } from "@/lib/avatar/model-config";
+import { forgottenLabel } from "@/lib/domain/avatar/forgotten";
 
 import { MuscleLegend } from "./MuscleLegend";
 import { CYCLE_LEN, MuscleInfoPanel } from "./MuscleInfoPanel";
@@ -131,7 +133,19 @@ function MuscleListFallback({
               aria-hidden="true"
             />
             <span className="flex-1">{d.label}</span>
-            <span className="text-muted-foreground text-xs">{d.levelLabel}</span>
+            {d.forgottenWeeks != null ? (
+              <span
+                className="text-muted-foreground inline-flex items-center gap-1 text-xs"
+                title={forgottenLabel(d.forgottenWeeks)}
+              >
+                <Snowflake className="size-3.5 shrink-0" aria-hidden="true" />
+                {forgottenLabel(d.forgottenWeeks)}
+              </span>
+            ) : (
+              <span className="text-muted-foreground text-xs">
+                {d.levelLabel}
+              </span>
+            )}
           </button>
         </li>
       ))}

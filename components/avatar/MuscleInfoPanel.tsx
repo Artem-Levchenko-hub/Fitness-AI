@@ -1,7 +1,9 @@
 "use client";
 
-import { ChevronRight, Dumbbell, Trophy, X } from "lucide-react";
+import { ChevronRight, Dumbbell, Snowflake, Trophy, X } from "lucide-react";
 import Link from "next/link";
+
+import { forgottenLabel } from "@/lib/domain/avatar/forgotten";
 
 import type { AvatarMuscleDatum } from "./types";
 
@@ -56,6 +58,12 @@ export function MuscleInfoPanel({
               {datum.label}
             </h3>
             <p className="text-muted-foreground text-xs">{datum.levelLabel}</p>
+            {datum.forgottenWeeks != null ? (
+              <p className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs font-medium">
+                <Snowflake className="size-3.5 shrink-0" aria-hidden="true" />
+                {forgottenLabel(datum.forgottenWeeks)}
+              </p>
+            ) : null}
           </div>
         </div>
         <button

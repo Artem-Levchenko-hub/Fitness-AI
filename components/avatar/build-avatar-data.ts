@@ -1,4 +1,5 @@
 import { muscleLabel } from "@/components/app/MuscleBadges";
+import { forgottenWeeks } from "@/lib/domain/avatar/forgotten";
 import { heatColorStop, heatFromSets, heatLabel } from "@/lib/domain/avatar/heat";
 import type { MuscleHeat } from "@/lib/repos/stats.repo";
 
@@ -15,6 +16,9 @@ export function buildAvatarData(
     string,
     Array<{ exerciseId: string; name: string; weightKg: number; reps: number }>
   >,
+  /** Всевременная дата последней нагрузки на группу (muscleLastTrained). Только
+   *  свой /profile передаёт её — у друга «забытость» не показываем. */
+  lastTrained?: Map<string, Date>,
 ): AvatarMuscleDatum[] {
   return heat.map((m) => {
     const h = heatFromSets(m.weeklySets);
@@ -28,6 +32,7 @@ export function buildAvatarData(
       volume7d: m.volume7d,
       sets: m.sets,
       lastTrainedLabel: formatLastTrained(m.lastTrainedAt, now),
+      forgottenWeeks: forgottenWeeks(lastTrained?.get(m.muscleKey) ?? null, now),
       top3: m.top3,
       records: records?.get(m.muscleKey) ?? [],
     };

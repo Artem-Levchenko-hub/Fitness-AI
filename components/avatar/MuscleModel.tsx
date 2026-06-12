@@ -86,6 +86,9 @@ export function MuscleModel({ url, data, selected, onSelect }: Props) {
       const t = datum?.t ?? 0;
       const isSelected = key != null && key === selected;
       const mat = obj.material as MeshStandardMaterial;
+      // «Забытая» группа (≥2 недель без нагрузки) — каркасом, а не сплошной
+      // заливкой: отличима не только цветом (R-41), читается как «полая/забытая».
+      mat.wireframe = (datum?.forgottenWeeks ?? null) != null;
       const col = new Color(hex);
       const emi = new Color(hex);
       let intensity: number;

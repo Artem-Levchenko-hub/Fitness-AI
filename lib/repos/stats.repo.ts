@@ -735,6 +735,85 @@ export async function muscleHeatProfile(
   });
 }
 
+/** Всевременная дата последней нагрузки на каждую группу мышц (H6.4 «забытые
+ *  мышцы»). Нужна отдельно от `muscleHeatProfile` (та смотрит только окно 7
+ *  дней → не отличает «2 недели назад» от «никогда»). Берёт максимум даты по
+ *  силовым working-подходам И круговым логам (completed), агрегирует в SQL
+ *  (max + groupBy), сливает два источника по максимуму в JS. Группы без истории
+ *  в Map отсутствуют. */
+export async function muscleLastTrained(
+  userId: string,
+): Promise<Map<string, Date>> {
+  const strength = await db
+    .select({
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      at: sql<Date>`max(${schema.workouts.startedAt})`.as("at"),
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.workoutExercises.exerciseId,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+      ),
+    )
+    .groupBy(schema.exerciseMuscleGroups.muscleGroupKey);
+
+  const circuit = await db
+    .select({
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      at: sql<Date>`max(${schema.circuitRoundLogs.completedAt})`.as("at"),
+    })
+    .from(schema.circuitRoundLogs)
+    .innerJoin(
+      schema.circuitExercises,
+      eq(schema.circuitExercises.id, schema.circuitRoundLogs.circuitExerciseId),
+    )
+    .innerJoin(
+      schema.circuitWorkouts,
+      eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.circuitExercises.exerciseId,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "completed"),
+        eq(schema.circuitRoundLogs.skipped, false),
+      ),
+    )
+    .groupBy(schema.exerciseMuscleGroups.muscleGroupKey);
+
+  const map = new Map<string, Date>();
+  for (const r of [...strength, ...circuit]) {
+    if (!r.at) continue;
+    const d = r.at instanceof Date ? r.at : new Date(r.at);
+    const cur = map.get(r.muscle);
+    if (!cur || d > cur) map.set(r.muscle, d);
+  }
+  return map;
+}
+
 /** All-time PR-рекорды по группам мышц для дрилл-дауна аватара (H6.1).
  *  Для каждой группы — топ упражнений по оценочному 1ПМ с их рекордным
  *  подходом (вес × повторы). Только primary-роль: рекорд приписывается группе,
