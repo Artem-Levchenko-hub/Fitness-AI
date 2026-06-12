@@ -126,6 +126,24 @@ test("H14.1 — /circuits/new несёт «Сохранить как шабло�
   ).toBeVisible();
 });
 
+test("H14.3 — /cardio/new несёт «Сохранить как шаблон» на каждой форме", async ({
+  page,
+}) => {
+  // H14.3 — кардио тоже сохраняется как переиспользуемый пресет (столп 3+4),
+  // не только стартует one-off. Все 4 формы билдера (tabata/norwegian/emom/custom)
+  // несут вторичную кнопку «Сохранить как шаблон» рядом со стартом «Начать»
+  // (formAction переключает старт на сохранение, тот же FormData). Read-only:
+  // обе кнопки видимы, есть хотя бы один старт и четыре сохранения.
+  await page.goto("/cardio/new");
+  await expect(page).toHaveURL(/\/cardio\/new/);
+  await expect(
+    page.getByRole("button", { name: "Начать" }).first(),
+  ).toBeVisible();
+  const saveButtons = page.getByRole("button", { name: "Сохранить как шаблон" });
+  await expect(saveButtons.first()).toBeVisible();
+  expect(await saveButtons.count()).toBeGreaterThanOrEqual(4);
+});
+
 test("H14.2 — /templates показывает круговой шаблон бейджем и стартует его", async ({
   page,
 }) => {
