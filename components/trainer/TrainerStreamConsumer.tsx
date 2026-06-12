@@ -22,12 +22,15 @@ export function TrainerStreamConsumer({
   workoutId,
   exerciseLinks,
   linkLifeFactors,
+  pastAdviceHref,
 }: {
   workoutId: string;
   /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
   exerciseLinks?: Record<string, string>;
   /** H13.2 — на своём разборе заголовки факторов жизни кликабельны. */
   linkLifeFactors?: boolean;
+  /** H13.5 — ссылка из «Прошлый совет» на прошлый разбор (см. TrainerResultCard). */
+  pastAdviceHref?: string | null;
 }) {
   const [phase, setPhase] = useState<Phase>("streaming");
   const [result, setResult] = useState<TrainerResultData | null>(null);
@@ -148,6 +151,7 @@ export function TrainerStreamConsumer({
         data={result}
         exerciseLinks={exerciseLinks}
         linkLifeFactors={linkLifeFactors}
+        pastAdviceHref={pastAdviceHref}
       />
     );
   }

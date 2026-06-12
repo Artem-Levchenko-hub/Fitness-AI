@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -491,6 +491,44 @@ export async function getLatestTrainerResult(
     .orderBy(desc(schema.aiAnalyses.createdAt))
     .limit(1);
   return row ?? null;
+}
+
+/** H13.5 — ref на свежайший ПРОШЛЫЙ разбор атлета ТОГО ЖЕ формата (тот же ряд,
+ *  что кормит «# Память тренера» H5.5) для ссылки из блока «Прошлый совет».
+ *  Зеркалит format-фильтр `loadTrainerMemoryBlock` (силовая = workoutId есть &
+ *  circuit null; круговая = circuitWorkoutId есть; digest = оба null), исключает
+ *  текущую тренировку и берёт ТОП по createdAt — ту же запись, что тренер
+ *  цитирует в pastAdviceFollowUp. R-7 — явный userId. fail-soft (R-10): любой
+ *  сбой → null, заголовок «Прошлый совет» остаётся статичным (R-37). */
+export async function getPreviousAnalysisRef(
+  userId: string,
+  format: "strength" | "circuit" | "digest",
+  exclude: { workoutId?: string | null; circuitWorkoutId?: string | null },
+): Promise<{ workoutId: string | null; circuitWorkoutId: string | null } | null> {
+  try {
+    const a = schema.aiAnalyses;
+    const formatFilter =
+      format === "circuit"
+        ? isNotNull(a.circuitWorkoutId)
+        : format === "digest"
+          ? and(isNull(a.workoutId), isNull(a.circuitWorkoutId))
+          : and(isNotNull(a.workoutId), isNull(a.circuitWorkoutId));
+
+    const conditions = [eq(a.userId, userId), formatFilter];
+    if (exclude.workoutId) conditions.push(ne(a.workoutId, exclude.workoutId));
+    if (exclude.circuitWorkoutId)
+      conditions.push(ne(a.circuitWorkoutId, exclude.circuitWorkoutId));
+
+    const [row] = await db
+      .select({ workoutId: a.workoutId, circuitWorkoutId: a.circuitWorkoutId })
+      .from(a)
+      .where(and(...conditions))
+      .orderBy(desc(a.createdAt))
+      .limit(1);
+    return row ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** H8.2c — последний авто-сгенерированный недельный разбор (kind='weekly_review')

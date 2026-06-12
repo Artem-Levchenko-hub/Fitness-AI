@@ -45,6 +45,7 @@ export function TrainerResultCard({
   className,
   exerciseLinks,
   linkLifeFactors,
+  pastAdviceHref,
 }: {
   data: TrainerResultData;
   className?: string;
@@ -63,6 +64,13 @@ export function TrainerResultCard({
    * передают (ссылка увела бы смотрящего в ЕГО экран, не в данные автора).
    */
   linkLifeFactors?: boolean;
+  /**
+   * H13.5 — на СВОЁМ разборе заголовок секции «Прошлый совет» ведёт в сам тот
+   * прошлый разбор (свежайший предшественник того же ряда, что кормит «Память
+   * тренера»). Резолвится на сервере (own-view page); share/друг НЕ передают →
+   * статичный заголовок. `null`/undefined → статика (R-37 — некуда вести).
+   */
+  pastAdviceHref?: string | null;
 }) {
   return (
     <div
@@ -137,7 +145,13 @@ export function TrainerResultCard({
       {data.pastAdviceFollowUp?.trim() ? (
         <section className="bg-primary/5 border-primary/30 rounded-xl border p-4">
           <h3 className="text-primary text-xs font-semibold tracking-tight uppercase">
-            Прошлый совет
+            {pastAdviceHref ? (
+              <AnalysisLink href={pastAdviceHref} className="text-primary">
+                Прошлый совет
+              </AnalysisLink>
+            ) : (
+              "Прошлый совет"
+            )}
           </h3>
           <p className="text-foreground mt-1 text-sm leading-relaxed">
             {data.pastAdviceFollowUp}

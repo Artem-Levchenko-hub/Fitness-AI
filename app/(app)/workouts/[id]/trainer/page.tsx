@@ -13,6 +13,7 @@ import { TrainerStreamConsumer } from "@/components/trainer/TrainerStreamConsume
 import { ShareAnalysisButton } from "@/components/trainer/ShareAnalysisButton";
 import { AskTrainerPanel } from "@/components/trainer/AskTrainerPanel";
 import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
+import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { renderTrainerMarkdown, trainerSchema } from "@/lib/ai/trainer-parse";
 import { db } from "@/db/client";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -22,6 +23,7 @@ import { totalVolume } from "@/lib/domain";
 import {
   getActiveWorkoutForUser,
   getLatestTrainerResult,
+  getPreviousAnalysisRef,
 } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "AI-тренер" };
@@ -78,6 +80,14 @@ export default async function TrainerPage({ params }: Props) {
       )
     : null;
 
+  // H13.5 — заголовок «Прошлый совет» ведёт в сам тот прошлый разбор: свежайший
+  // предшественник того же (силового) формата, исключая текущую тренировку — та
+  // же запись, что кормит «Память тренера». Своя сессия (own-view); share/друг
+  // эту страницу не рендерят. Нет предшественника (первый разбор) → null → статика.
+  const pastAdviceHref = resolvePastAdviceHref(
+    await getPreviousAnalysisRef(user.id, "strength", { workoutId: id }),
+  );
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -125,6 +135,7 @@ export default async function TrainerPage({ params }: Props) {
             data={savedAnalysis.resultJson as TrainerResultData}
             exerciseLinks={buildExerciseLinkMap(workout.exercises)}
             linkLifeFactors
+            pastAdviceHref={pastAdviceHref}
           />
           <ShareAnalysisButton
             analysisId={savedAnalysis.id}
@@ -141,6 +152,7 @@ export default async function TrainerPage({ params }: Props) {
           jobId={latestJob.id}
           exerciseLinks={buildExerciseLinkMap(workout.exercises)}
           linkLifeFactors
+          pastAdviceHref={pastAdviceHref}
         />
       ) : (
         // Свежий on_demand — генерируем live прямо в запросе (F8-B run-2).
@@ -148,6 +160,7 @@ export default async function TrainerPage({ params }: Props) {
           workoutId={id}
           exerciseLinks={buildExerciseLinkMap(workout.exercises)}
           linkLifeFactors
+          pastAdviceHref={pastAdviceHref}
         />
       )}
 

@@ -35,6 +35,7 @@ export function TrainerJobPoller({
   onRetry,
   exerciseLinks,
   linkLifeFactors,
+  pastAdviceHref,
 }: {
   jobId: string;
   onRetry?: () => Promise<{ jobId: string }>;
@@ -42,6 +43,8 @@ export function TrainerJobPoller({
   exerciseLinks?: Record<string, string>;
   /** H13.2 — на своём разборе заголовки факторов жизни кликабельны. */
   linkLifeFactors?: boolean;
+  /** H13.5 — ссылка из «Прошлый совет» на прошлый разбор (см. TrainerResultCard). */
+  pastAdviceHref?: string | null;
 }) {
   const [currentJobId, setCurrentJobId] = useState(jobId);
   const [job, setJob] = useState<JobResponse | null>(null);
@@ -142,6 +145,7 @@ export function TrainerJobPoller({
       data={job.analysis.resultJson}
       exerciseLinks={exerciseLinks}
       linkLifeFactors={linkLifeFactors}
+      pastAdviceHref={pastAdviceHref}
     />
   );
 }

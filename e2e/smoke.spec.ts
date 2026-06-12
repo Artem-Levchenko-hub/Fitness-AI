@@ -12,6 +12,7 @@ import { test, expect } from "@playwright/test";
  */
 
 const trainerWorkoutId = process.env.E2E_TRAINER_WORKOUT_ID;
+const prevWorkoutId = process.env.E2E_PREV_WORKOUT_ID;
 const exerciseId = process.env.E2E_EXERCISE_ID;
 const friendId = process.env.E2E_FRIEND_ID;
 const circuitId = process.env.E2E_CIRCUIT_ID;
@@ -149,6 +150,34 @@ test("разбор завершённой тренировки виден (Train
     await exLink.click();
     await expect(page).toHaveURL(new RegExp(`/exercises/${exerciseId}`));
   }
+});
+
+test("H13.5 — заголовок «Прошлый совет» ведёт в сам тот прошлый разбор", async ({
+  page,
+}) => {
+  test.skip(
+    !trainerWorkoutId || !prevWorkoutId,
+    "E2E_TRAINER_WORKOUT_ID/E2E_PREV_WORKOUT_ID не заданы — засеять через scripts/e2e-seed.mjs",
+  );
+  // H13.5 — текущий разбор цитирует прошлую рекомендацию (resultJson сида несёт
+  // pastAdviceFollowUp) → секция «Прошлый совет» рендерится, и её заголовок —
+  // ссылка на свежайший прошлый разбор того же формата (prevWorkoutId), тот же
+  // ряд, что кормит «Память тренера». Структурный якорь, не парсинг прозы.
+  await page.goto(`/workouts/${trainerWorkoutId}/trainer`);
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
+
+  const pastAdviceLink = page.locator(
+    `a[href="/workouts/${prevWorkoutId}/trainer"]`,
+  );
+  await expect(pastAdviceLink).toBeVisible();
+  await expect(pastAdviceLink).toContainText("Прошлый совет");
+
+  // Тап реально ведёт в тот прошлый разбор (его карточка рендерится).
+  await pastAdviceLink.click();
+  await expect(page).toHaveURL(
+    new RegExp(`/workouts/${prevWorkoutId}/trainer`),
+  );
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
 });
 
 test("H13.4 — разбор на детали /workouts/[id] кликабелен идентично /trainer", async ({

@@ -35,6 +35,8 @@ import { encode } from "next-auth/jwt";
 const VERIFY_EMAIL = "claude-verify@local.test";
 const FRIEND_EMAIL = "claude-friend@local.test";
 const WORKOUT_MARKER = "E2E Smoke — Жим";
+// H13.5 — прошлая силовая (предшественник для блока «Прошлый совет»).
+const PREV_WORKOUT_MARKER = "E2E Smoke — Жим (прошлый)";
 // H7.4 — маркеры круговой и кардио для фида трёх форматов в одном списке.
 const CIRCUIT_MARKER = "E2E Smoke — Круг";
 const CARDIO_MARKER = "E2E Smoke — Кардио";
@@ -151,7 +153,51 @@ try {
       motivation: "Прогресс есть — вес вырос с 80 до 82.5 кг.",
       whatWorked: "Вес рабочего подхода вырос на 2.5 кг при тех же 5 повторах.",
       followUpQuestion: "Как ощущались плечи на последнем подходе?",
+      // H13.5: тренер цитирует прошлую рекомендацию → секция «Прошлый совет»
+      // рендерится, и её заголовок становится ссылкой на прошлый разбор
+      // (prevWorkoutId ниже) — свежайший предшественник того же формата.
+      pastAdviceFollowUp:
+        "В прошлый раз я советовал выйти на 82.5×5 — выполнил, отличная работа.",
     };
+
+    // H13.5 — ПРОШЛАЯ силовая с сохранённым разбором: свежайший предшественник
+    // того же (силового) формата. getPreviousAnalysisRef(strength, exclude=current)
+    // вернёт именно его workout_id → заголовок «Прошлый совет» ведёт сюда.
+    await sql`
+      delete from workouts where user_id = ${verifyId} and name = ${PREV_WORKOUT_MARKER}`;
+    const prevStarted = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000); // 3 дня назад
+    const prevFinished = new Date(prevStarted.getTime() + 30 * 60 * 1000);
+    const prevWorkoutId = randomUUID();
+    await sql`
+      insert into workouts (id, user_id, name, status, started_at, finished_at,
+                            total_duration_seconds)
+      values (${prevWorkoutId}, ${verifyId}, ${PREV_WORKOUT_MARKER}, 'completed',
+              ${prevStarted}, ${prevFinished}, 1800)`;
+    const prevWeId = randomUUID();
+    await sql`
+      insert into workout_exercises (id, workout_id, exercise_id, position)
+      values (${prevWeId}, ${prevWorkoutId}, ${exerciseId}, 0)`;
+    await sql`
+      insert into workout_sets (id, workout_exercise_id, set_index, set_type,
+                                weight_kg, reps, rpe, completed_at)
+      values (${randomUUID()}, ${prevWeId}, 0, 'working', 80, 5, 8, ${prevFinished})`;
+    const prevResultJson = {
+      overallScore: 70,
+      trainingQuality: { score: 72, comment: "Ровная база перед прогрессией." },
+      recoveryContext: { score: 70, comment: "Сон стабильный." },
+      nutritionContext: { score: 64, comment: "Дефицит держится." },
+      exerciseComparisons: [],
+      recommendations: ["Выйди на 82.5×5 на следующей сессии."],
+      nextSessionFocus: "82.5×5 при RPE 8",
+      missingDataAdvice: null,
+      motivation: "База готова — пора добавлять вес.",
+    };
+    await sql`
+      insert into ai_analyses (id, user_id, workout_id, content, result_json,
+                               model_version, created_at)
+      values (${randomUUID()}, ${verifyId}, ${prevWorkoutId},
+              '# Разбор тренировки (70/100)\n\nБаза готова — пора добавлять вес.',
+              ${sql.json(prevResultJson)}, 'seed-e2e', ${prevFinished})`;
 
     await sql`
       insert into ai_analyses (id, user_id, workout_id, content, result_json,
@@ -249,6 +295,7 @@ try {
     console.log("USER_ID=" + verifyId);
     console.log("FRIEND_ID=" + friendId);
     console.log("WORKOUT_ID=" + workoutId);
+    console.log("PREV_WORKOUT_ID=" + prevWorkoutId);
     console.log("EXERCISE_ID=" + exerciseId);
     console.log("CIRCUIT_ID=" + circuitId);
     console.log("CARDIO_ID=" + cardioId);
