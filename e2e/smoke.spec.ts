@@ -19,6 +19,7 @@ const circuitId = process.env.E2E_CIRCUIT_ID;
 const prevCircuitId = process.env.E2E_PREV_CIRCUIT_ID;
 const cardioId = process.env.E2E_CARDIO_ID;
 const circuitTemplateId = process.env.E2E_CIRCUIT_TEMPLATE_ID;
+const cardioTemplateId = process.env.E2E_CARDIO_TEMPLATE_ID;
 
 test("/stats открывается с контентом, а не error-boundary", async ({ page }) => {
   await page.goto("/stats");
@@ -169,6 +170,37 @@ test("H14.2 — /templates показывает круговой шаблон б
   await expect(page).toHaveURL(/\/circuits\/[0-9a-f-]{36}/);
   await expect(
     page.getByRole("heading", { name: "E2E Smoke — Круг-шаблон", level: 1 }),
+  ).toBeVisible();
+});
+
+test("H14.4 — /templates показывает кардио-шаблон бейджем и стартует его", async ({
+  page,
+}) => {
+  test.skip(
+    !cardioTemplateId,
+    "E2E_CARDIO_TEMPLATE_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H14.4 — единая поверхность шаблонов: кардио-пресет виден на /templates с
+  // текстовым бейджем «Кардио» (R-41 — не только цвет) и сводкой интервалов
+  // (нет упражнений-детей), стартует одним кликом «Начать» через
+  // startCardioFromTemplate (ноль дубля логики старта).
+  await page.goto("/templates");
+  await expect(page).toHaveURL(/\/templates/);
+
+  const tplRow = page
+    .locator("li", { hasText: "E2E Smoke — Кардио-шаблон" })
+    .first();
+  await expect(tplRow).toBeVisible();
+  await expect(tplRow.getByText("Кардио", { exact: true })).toBeVisible();
+  // Мета-строка кардио = сводка интервалов custom-пресета, НЕ «N упражнений».
+  await expect(tplRow.getByText("Свой · 6×30/60с")).toBeVisible();
+
+  // «Начать» стартует кардио из пресета → активный сеанс /cardio/<id> с тем же
+  // именем шаблона. one-off /cardio/new остаётся (столп 4) — здесь не трогаем.
+  await tplRow.getByRole("button", { name: /Начать/ }).click();
+  await expect(page).toHaveURL(/\/cardio\/[0-9a-f-]{36}/);
+  await expect(
+    page.getByRole("heading", { name: "E2E Smoke — Кардио-шаблон", level: 1 }),
   ).toBeVisible();
 });
 

@@ -45,6 +45,9 @@ const CARDIO_MARKER = "E2E Smoke — Кардио";
 // H14.2 — круговой ШАБЛОН (пресет) для /templates: показывается бейджем
 // «Круговая» и стартует одним кликом.
 const CIRCUIT_TEMPLATE_MARKER = "E2E Smoke — Круг-шаблон";
+// H14.4 — кардио ШАБЛОН (пресет) для /templates: показывается бейджем
+// «Кардио» и стартует одним кликом (startCardioFromTemplate).
+const CARDIO_TEMPLATE_MARKER = "E2E Smoke — Кардио-шаблон";
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
@@ -349,6 +352,18 @@ try {
                                               order_idx, kind, target_reps)
       values (${randomUUID()}, ${circuitTemplateId}, ${exerciseId}, 0, 'reps', 12)`;
 
+    // H14.4 — кардио-шаблон: одна детерминированная строка cardio_templates
+    // (custom-пресет, нет упражнений-детей). /templates показывает её с бейджем
+    // «Кардио»; «Начать» стартует кардио из пресета (startCardioFromTemplate).
+    // Идемпотентно: снос по маркеру.
+    await sql`
+      delete from cardio_templates where user_id = ${verifyId} and name = ${CARDIO_TEMPLATE_MARKER}`;
+    const cardioTemplateId = randomUUID();
+    await sql`
+      insert into cardio_templates (id, user_id, name, preset, plan_json)
+      values (${cardioTemplateId}, ${verifyId}, ${CARDIO_TEMPLATE_MARKER}, 'custom',
+              ${sql.json({ rounds: 6, workSec: 30, restSec: 60 })})`;
+
     const refresh = await encode({
       token: { uid: verifyId },
       secret: process.env.AUTH_SECRET,
@@ -357,6 +372,7 @@ try {
     });
 
     console.log("CIRCUIT_TEMPLATE_ID=" + circuitTemplateId);
+    console.log("CARDIO_TEMPLATE_ID=" + cardioTemplateId);
     console.log("USER_ID=" + verifyId);
     console.log("FRIEND_ID=" + friendId);
     console.log("WORKOUT_ID=" + workoutId);
