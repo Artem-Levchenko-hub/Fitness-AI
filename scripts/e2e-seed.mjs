@@ -40,6 +40,9 @@ const PREV_WORKOUT_MARKER = "E2E Smoke — Жим (прошлый)";
 // H7.4 — маркеры круговой и кардио для фида трёх форматов в одном списке.
 const CIRCUIT_MARKER = "E2E Smoke — Круг";
 const CARDIO_MARKER = "E2E Smoke — Кардио";
+// H14.2 — круговой ШАБЛОН (пресет) для /templates: показывается бейджем
+// «Круговая» и стартует одним кликом.
+const CIRCUIT_TEMPLATE_MARKER = "E2E Smoke — Круг-шаблон";
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
@@ -285,6 +288,22 @@ try {
                 ${b.planned}, ${b.actual}, ${b.hr}, ${cardioFinished})`;
     }
 
+    // H14.2 — круговой шаблон: одна детерминированная строка circuit_templates
+    // + упражнение. /templates показывает её с бейджем «Круговая»; «Начать»
+    // стартует круговую из пресета (startCircuitFromTemplate). Идемпотентно:
+    // снос по маркеру (cascade → template_exercises).
+    await sql`
+      delete from circuit_templates where user_id = ${verifyId} and name = ${CIRCUIT_TEMPLATE_MARKER}`;
+    const circuitTemplateId = randomUUID();
+    await sql`
+      insert into circuit_templates (id, user_id, name, total_rounds,
+                                     rest_between_rounds_sec, rest_between_exercises_sec)
+      values (${circuitTemplateId}, ${verifyId}, ${CIRCUIT_TEMPLATE_MARKER}, 4, 60, 15)`;
+    await sql`
+      insert into circuit_template_exercises (id, circuit_template_id, exercise_id,
+                                              order_idx, kind, target_reps)
+      values (${randomUUID()}, ${circuitTemplateId}, ${exerciseId}, 0, 'reps', 12)`;
+
     const refresh = await encode({
       token: { uid: verifyId },
       secret: process.env.AUTH_SECRET,
@@ -292,6 +311,7 @@ try {
       maxAge: 60 * 60 * 24 * 365,
     });
 
+    console.log("CIRCUIT_TEMPLATE_ID=" + circuitTemplateId);
     console.log("USER_ID=" + verifyId);
     console.log("FRIEND_ID=" + friendId);
     console.log("WORKOUT_ID=" + workoutId);

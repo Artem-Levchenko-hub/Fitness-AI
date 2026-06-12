@@ -1,6 +1,93 @@
+import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
+
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import type { CircuitTemplatePreset } from "@/lib/domain";
+import { startCircuit } from "@/lib/repos/circuits.repo";
+
+export type CircuitTemplateListItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  exerciseCount: number;
+  updatedAt: Date;
+};
+
+/** H14.2 — список круговых шаблонов пользователя для /templates (R-7: userId
+ *  явный). Зеркалит listTemplates силовых: счёт упражнений, не-архивные,
+ *  свежие сверху. Питает единую поверхность через mergeTemplateList. */
+export async function listCircuitTemplates(
+  userId: string,
+): Promise<CircuitTemplateListItem[]> {
+  const rows = await db
+    .select({
+      id: schema.circuitTemplates.id,
+      name: schema.circuitTemplates.name,
+      description: schema.circuitTemplates.description,
+      updatedAt: schema.circuitTemplates.updatedAt,
+      exerciseCount: count(schema.circuitTemplateExercises.id),
+    })
+    .from(schema.circuitTemplates)
+    .leftJoin(
+      schema.circuitTemplateExercises,
+      eq(
+        schema.circuitTemplateExercises.circuitTemplateId,
+        schema.circuitTemplates.id,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.circuitTemplates.userId, userId),
+        isNull(schema.circuitTemplates.archivedAt),
+      ),
+    )
+    .groupBy(schema.circuitTemplates.id)
+    .orderBy(desc(schema.circuitTemplates.updatedAt));
+
+  return rows;
+}
+
+/** H14.2 — старт круговой из шаблона: читает пресет (R-7: фильтр по userId,
+ *  чужой/несуществующий → ошибка), делегирует в startCircuit (ноль дубля
+ *  логики старта — тот же G2-инвариант: отменяет прошлую active-круговую).
+ *  Зеркало cloneCircuit, но источник — circuit_templates, а не прошлый сеанс. */
+export async function startCircuitFromTemplate(
+  userId: string,
+  templateId: string,
+): Promise<{ id: string }> {
+  const [tpl] = await db
+    .select()
+    .from(schema.circuitTemplates)
+    .where(
+      and(
+        eq(schema.circuitTemplates.id, templateId),
+        eq(schema.circuitTemplates.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!tpl) throw new Error("Круговой шаблон не найден или не твой");
+
+  const exercises = await db
+    .select()
+    .from(schema.circuitTemplateExercises)
+    .where(eq(schema.circuitTemplateExercises.circuitTemplateId, templateId))
+    .orderBy(asc(schema.circuitTemplateExercises.orderIdx));
+
+  return startCircuit(userId, {
+    name: tpl.name,
+    totalRounds: tpl.totalRounds,
+    restBetweenRoundsSec: tpl.restBetweenRoundsSec,
+    restBetweenExercisesSec: tpl.restBetweenExercisesSec,
+    exercises: exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      kind: e.kind,
+      targetReps: e.targetReps,
+      targetDurationSec: e.targetDurationSec,
+      targetWeightKg: e.targetWeightKg,
+      notes: e.notes,
+    })),
+  });
+}
 
 /** H14.1 — создаёт круговой шаблон + его упражнения одной транзакцией.
  *  R-7: userId явный, шаблон принадлежит вызывающему. Пресет уже нормализован

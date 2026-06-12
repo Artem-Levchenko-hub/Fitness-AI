@@ -1,16 +1,28 @@
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Play, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
+import { mergeTemplateList, type TemplateFormat } from "@/lib/domain";
+import { listCircuitTemplates } from "@/lib/repos/circuit-templates.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
+import { startCircuitFromTemplateAction } from "@/server/actions/circuit-templates";
 
 export const metadata: Metadata = { title: "Шаблоны" };
 
+const FORMAT_LABEL: Record<TemplateFormat, string> = {
+  strength: "Силовая",
+  circuit: "Круговая",
+};
+
 export default async function TemplatesPage() {
   const user = await requireUser();
-  const templates = await listTemplates(user.id);
+  const [strength, circuit] = await Promise.all([
+    listTemplates(user.id),
+    listCircuitTemplates(user.id),
+  ]);
+  const templates = mergeTemplateList(strength, circuit);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -30,27 +42,73 @@ export default async function TemplatesPage() {
         <EmptyState />
       ) : (
         <ul className="space-y-2">
-          {templates.map((tpl) => (
-            <li key={tpl.id}>
-              <Link
-                href={`/templates/${tpl.id}`}
-                className="bg-card hover:bg-accent border-border flex items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
-              >
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-sm font-semibold">{tpl.name}</h2>
-                  <p className="text-muted-foreground mt-0.5 text-xs">
-                    {tpl.exerciseCount} упражнен
-                    {pluralize(tpl.exerciseCount)}
-                    {tpl.description ? ` · ${tpl.description}` : ""}
-                  </p>
-                </div>
-                <ChevronRight className="text-muted-foreground size-5 shrink-0" />
-              </Link>
-            </li>
-          ))}
+          {templates.map((tpl) =>
+            tpl.format === "circuit" ? (
+              <li key={`circuit-${tpl.id}`}>
+                <form action={startCircuitFromTemplateAction}>
+                  <input type="hidden" name="templateId" value={tpl.id} />
+                  <button
+                    type="submit"
+                    className="bg-card hover:bg-accent border-border flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border p-4 text-left transition-colors"
+                  >
+                    <TemplateMeta tpl={tpl} />
+                    <span className="text-primary flex shrink-0 items-center gap-1 text-xs font-medium">
+                      <Play className="size-4 fill-current" />
+                      Начать
+                    </span>
+                  </button>
+                </form>
+              </li>
+            ) : (
+              <li key={`strength-${tpl.id}`}>
+                <Link
+                  href={`/templates/${tpl.id}`}
+                  className="bg-card hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
+                >
+                  <TemplateMeta tpl={tpl} />
+                  <ChevronRight className="text-muted-foreground size-5 shrink-0" />
+                </Link>
+              </li>
+            ),
+          )}
         </ul>
       )}
     </main>
+  );
+}
+
+function TemplateMeta({
+  tpl,
+}: {
+  tpl: { name: string; description: string | null; exerciseCount: number; format: TemplateFormat };
+}) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2">
+        <h2 className="truncate text-sm font-semibold">{tpl.name}</h2>
+        <FormatBadge format={tpl.format} />
+      </div>
+      <p className="text-muted-foreground mt-0.5 text-xs">
+        {tpl.exerciseCount} упражнен
+        {pluralize(tpl.exerciseCount)}
+        {tpl.description ? ` · ${tpl.description}` : ""}
+      </p>
+    </div>
+  );
+}
+
+function FormatBadge({ format }: { format: TemplateFormat }) {
+  // R-41: формат — текстовая метка, не только цвет.
+  const tone =
+    format === "circuit"
+      ? "bg-primary/10 text-primary"
+      : "bg-muted text-muted-foreground";
+  return (
+    <span
+      className={`${tone} shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase`}
+    >
+      {FORMAT_LABEL[format]}
+    </span>
   );
 }
 
@@ -64,7 +122,8 @@ function EmptyState() {
         <h2 className="text-base font-semibold">Шаблонов пока нет</h2>
         <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
           Шаблон — это план тренировки: упорядоченный список упражнений с
-          целевыми подходами, повторениями и весом.
+          целевыми подходами, повторениями и весом. Круговую можно сохранить как
+          шаблон прямо из конструктора.
         </p>
       </div>
       <Button asChild size="xl" className="w-full">

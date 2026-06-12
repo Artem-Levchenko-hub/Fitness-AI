@@ -17,6 +17,7 @@ const exerciseId = process.env.E2E_EXERCISE_ID;
 const friendId = process.env.E2E_FRIEND_ID;
 const circuitId = process.env.E2E_CIRCUIT_ID;
 const cardioId = process.env.E2E_CARDIO_ID;
+const circuitTemplateId = process.env.E2E_CIRCUIT_TEMPLATE_ID;
 
 test("/stats открывается с контентом, а не error-boundary", async ({ page }) => {
   await page.goto("/stats");
@@ -121,6 +122,34 @@ test("H14.1 — /circuits/new несёт «Сохранить как шабло�
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Сохранить как шаблон" }),
+  ).toBeVisible();
+});
+
+test("H14.2 — /templates показывает круговой шаблон бейджем и стартует его", async ({
+  page,
+}) => {
+  test.skip(
+    !circuitTemplateId,
+    "E2E_CIRCUIT_TEMPLATE_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H14.2 — единая поверхность шаблонов: круговой пресет виден на /templates с
+  // текстовым бейджем «Круговая» (R-41 — не только цвет), и стартует одним
+  // кликом «Начать» через startCircuitFromTemplate (ноль дубля логики старта).
+  await page.goto("/templates");
+  await expect(page).toHaveURL(/\/templates/);
+
+  const tplRow = page
+    .locator("li", { hasText: "E2E Smoke — Круг-шаблон" })
+    .first();
+  await expect(tplRow).toBeVisible();
+  await expect(tplRow.getByText("Круговая", { exact: true })).toBeVisible();
+
+  // «Начать» стартует круговую из пресета → активный сеанс /circuits/<id> с тем
+  // же именем шаблона. one-off /circuits/new остаётся (столп 4) — здесь не трогаем.
+  await tplRow.getByRole("button", { name: /Начать/ }).click();
+  await expect(page).toHaveURL(/\/circuits\/[0-9a-f-]{36}/);
+  await expect(
+    page.getByRole("heading", { name: "E2E Smoke — Круг-шаблон", level: 1 }),
   ).toBeVisible();
 });
 

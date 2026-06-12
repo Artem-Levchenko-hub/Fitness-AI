@@ -6,7 +6,10 @@ import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
 import { buildCircuitTemplatePreset } from "@/lib/domain";
-import { createCircuitTemplate } from "@/lib/repos/circuit-templates.repo";
+import {
+  createCircuitTemplate,
+  startCircuitFromTemplate,
+} from "@/lib/repos/circuit-templates.repo";
 
 const exerciseInputSchema = z.object({
   exerciseId: z.string().uuid(),
@@ -72,4 +75,23 @@ export async function saveCircuitTemplateAction(formData: FormData) {
   revalidatePath("/templates");
   revalidatePath("/dashboard");
   redirect("/templates");
+}
+
+const startSchema = z.object({ templateId: z.string().uuid() });
+
+/** H14.2 — старт круговой из шаблона (одним кликом с /templates). Засевает
+ *  существующий startCircuit пресетом шаблона (ноль дубля логики старта),
+ *  ведёт сразу на активный сеанс. */
+export async function startCircuitFromTemplateAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = startSchema.safeParse({
+    templateId: formData.get("templateId"),
+  });
+  if (!parsed.success) throw new Error("Неверный id кругового шаблона");
+
+  const { id } = await startCircuitFromTemplate(user.id, parsed.data.templateId);
+
+  revalidatePath("/circuits");
+  revalidatePath("/dashboard");
+  redirect(`/circuits/${id}`);
 }
