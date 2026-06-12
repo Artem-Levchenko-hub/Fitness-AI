@@ -7,6 +7,10 @@ import { MuscleBadges, muscleLabel } from "@/components/app/MuscleBadges";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { getExerciseById } from "@/lib/repos/exercises.repo";
+import {
+  exerciseSetHistory,
+  type ExerciseSession,
+} from "@/lib/repos/stats.repo";
 import { deleteCustomExerciseAction } from "@/server/actions/exercises";
 
 export const metadata: Metadata = { title: "Упражнение" };
@@ -18,6 +22,8 @@ export default async function ExerciseDetailPage({ params }: Props) {
   const user = await requireUser();
   const exercise = await getExerciseById(user.id, id);
   if (!exercise) notFound();
+
+  const history = await exerciseSetHistory(user.id, id);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -97,9 +103,90 @@ export default async function ExerciseDetailPage({ params }: Props) {
         </p>
       )}
 
-      <p className="text-muted-foreground/60 mt-8 text-xs">
-        История подходов и заметки появятся в Phase 3 и 4.
-      </p>
+      <section className="mt-8">
+        <h2 className="mb-3 text-sm font-semibold tracking-tight">
+          История подходов
+        </h2>
+        {history.length === 0 ? (
+          <p className="text-muted-foreground rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm">
+            Пока нет выполненных подходов с этим упражнением.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {history.map((session) => (
+              <SessionCard key={session.workoutId} session={session} />
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
+}
+
+function SessionCard({ session }: { session: ExerciseSession }) {
+  return (
+    <li className="bg-card border-border rounded-2xl border p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <Link
+          href={`/workouts/${session.workoutId}`}
+          className="text-sm font-medium tracking-tight hover:underline"
+        >
+          {session.date.toLocaleDateString("ru-RU", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })}
+        </Link>
+        {session.best1rm > 0 ? (
+          <p className="text-muted-foreground tabular text-xs">
+            1RM ≈{" "}
+            <span className="text-foreground font-medium">
+              {Math.round(session.best1rm)} кг
+            </span>
+          </p>
+        ) : null}
+      </div>
+      <ul className="tabular mt-3 space-y-1.5 text-sm">
+        {session.sets.map((s, i) => (
+          <li
+            key={s.id}
+            className="text-foreground flex items-center justify-between gap-3"
+          >
+            <span className="text-muted-foreground bg-muted inline-flex size-6 items-center justify-center rounded-md text-[11px] font-medium">
+              {i + 1}
+            </span>
+            <span className="tabular flex-1">
+              {formatNum(s.weightKg)}{" "}
+              <span className="text-muted-foreground">кг</span> × {s.reps}{" "}
+              <span className="text-muted-foreground text-xs">
+                {s.setType !== "working" ? `· ${labelSetType(s.setType)}` : ""}
+              </span>
+            </span>
+            {s.rpe != null ? (
+              <span className="text-muted-foreground text-xs">
+                RPE {formatNum(s.rpe)}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+function formatNum(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function labelSetType(t: ExerciseSession["sets"][number]["setType"]): string {
+  switch (t) {
+    case "warmup":
+      return "разминка";
+    case "drop":
+      return "drop-set";
+    case "failure":
+      return "до отказа";
+    default:
+      return "";
+  }
 }

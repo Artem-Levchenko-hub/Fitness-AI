@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -7,6 +7,10 @@ import {
   topMuscleRecords,
   type MuscleRecord,
 } from "@/lib/domain/avatar/muscle-records";
+import {
+  groupExerciseSessions,
+  type ExerciseSession,
+} from "@/lib/domain/exercise/set-history";
 import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 
@@ -817,4 +821,47 @@ export async function trainedExercises(
     .orderBy(asc(schema.exercises.nameRu));
 
   return rows;
+}
+
+export type { ExerciseSession };
+
+/** История подходов одного упражнения по сессиям (новые сверху). Только
+ *  completed-тренировки этого юзера; все типы подходов (working/warmup/...)
+ *  показываются, e1RM считается доменом по working. Группировка — чистый
+ *  доменный модуль (groupExerciseSessions, R-7). */
+export async function exerciseSetHistory(
+  userId: string,
+  exerciseId: string,
+  limit = 30,
+): Promise<ExerciseSession[]> {
+  const rows = await db
+    .select({
+      workoutId: schema.workouts.id,
+      startedAt: schema.workouts.startedAt,
+      setId: schema.workoutSets.id,
+      setIndex: schema.workoutSets.setIndex,
+      weightKg: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
+      rpe: schema.workoutSets.rpe,
+      setType: schema.workoutSets.setType,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutExercises.exerciseId, exerciseId),
+      ),
+    )
+    .orderBy(desc(schema.workouts.startedAt), asc(schema.workoutSets.setIndex));
+
+  return groupExerciseSessions(rows, limit);
 }
