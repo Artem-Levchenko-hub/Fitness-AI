@@ -7,7 +7,9 @@ import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
 import { PeriodInsightCard } from "@/components/stats/PeriodInsightCard";
 import { WeeklyReviewButton } from "@/components/stats/WeeklyReviewButton";
+import { parseWeeklyReviewResult } from "@/lib/ai/weekly-review-display";
 import { requireUser } from "@/lib/auth/require-user";
+import { getLatestWeeklyReview } from "@/lib/repos/workouts.repo";
 import {
   summarizeExerciseTrend,
   summarizeVolumeChange,
@@ -67,6 +69,7 @@ export default async function StatsPage({ searchParams }: Props) {
     measurements,
     volumeCompare,
     topMover,
+    weeklyReview,
   ] = await Promise.all([
     topLineKpi(user.id, range),
     granularity === "week"
@@ -79,7 +82,21 @@ export default async function StatsPage({ searchParams }: Props) {
     listMeasurements(user.id, 60),
     periodVolumeComparison(user.id, range),
     topMoverByE1rm(user.id, range),
+    getLatestWeeklyReview(user.id),
   ]);
+
+  // H8.2c — авто-сгенерированный недельный разбор (воркер H8.2). Валидируем
+  // сохранённый resultJson перед рендером (fail-soft R-10: битый → не показываем).
+  const weeklyAuto = weeklyReview
+    ? parseWeeklyReviewResult(weeklyReview.resultJson)
+    : null;
+  const weeklyAutoAt =
+    weeklyAuto && weeklyReview
+      ? new Date(weeklyReview.createdAt).toLocaleDateString("ru-RU", {
+          day: "numeric",
+          month: "long",
+        })
+      : null;
 
   const periodInsight = summarizeVolumeChange(
     volumeCompare.current,
@@ -143,7 +160,7 @@ export default async function StatsPage({ searchParams }: Props) {
 
       <PeriodPills />
 
-      <WeeklyReviewButton />
+      <WeeklyReviewButton initial={weeklyAuto} initialAt={weeklyAutoAt} />
 
       <PeriodInsightCard insight={periodInsight} />
 

@@ -5,32 +5,48 @@ import { useState } from "react";
 
 import { TrainerResultCard } from "@/components/trainer/TrainerResultCard";
 import { Button } from "@/components/ui/button";
-import {
-  requestWeeklyReview,
-  type WeeklyReviewResult,
-} from "@/server/actions/weekly-review";
+import type { TrainerResponse } from "@/lib/ai/trainer-parse";
+import { requestWeeklyReview } from "@/server/actions/weekly-review";
 
-/** H8.1 — кнопка «Разбор недели» на /stats. Синхронно зовёт тренера на итог
- *  ISO-недели (эта vs прошлая) и показывает результат под кнопкой. 4 состояния
- *  (R-37): idle / loading / error / loaded. */
-export function WeeklyReviewButton() {
+/** H8.1 + H8.2c — «Разбор недели» на /stats. По умолчанию показывает
+ *  последний АВТО-сгенерированный недельный разбор (воркер H8.2 ставит его сам
+ *  по закрытии ISO-недели), кнопка пере-запрашивает синхронно (H8.1). 4
+ *  состояния (R-37): idle (нет авто-разбора → CTA) / loading / error / loaded. */
+export function WeeklyReviewButton({
+  initial = null,
+  initialAt = null,
+}: {
+  /** Последний weekly_review из БД (уже провалидирован server-side). */
+  initial?: TrainerResponse | null;
+  /** Дата авто-разбора, отформатированная на сервере (ru). */
+  initialAt?: string | null;
+}) {
   const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<WeeklyReviewResult | null>(null);
+  const [data, setData] = useState<TrainerResponse | null>(initial);
+  const [error, setError] = useState<string | null>(null);
+  // true после ручного «Разобрать заново» — тогда подпись «авто от <дата>»
+  // больше не релевантна (показываем свежий on-demand-разбор).
+  const [regenerated, setRegenerated] = useState(false);
 
   const run = async () => {
     setPending(true);
-    setResult(null);
+    setError(null);
     try {
-      setResult(await requestWeeklyReview());
+      const r = await requestWeeklyReview();
+      if (r.ok) {
+        setData(r.data);
+        setRegenerated(true);
+      } else {
+        setError(r.error);
+      }
     } catch {
-      setResult({
-        ok: false,
-        error: "Не удалось получить разбор недели. Попробуйте ещё раз.",
-      });
+      setError("Не удалось получить разбор недели. Попробуйте ещё раз.");
     } finally {
       setPending(false);
     }
   };
+
+  const showAutoCaption = data && !regenerated && initialAt;
 
   return (
     <section className="bg-card border-border mt-4 rounded-2xl border p-5">
@@ -53,19 +69,30 @@ export function WeeklyReviewButton() {
             className="mt-4"
             size="lg"
           >
-            {pending ? "Разбираю неделю…" : "Разобрать неделю"}
+            {pending
+              ? "Разбираю неделю…"
+              : data
+                ? "Разобрать заново"
+                : "Разобрать неделю"}
           </Button>
         </div>
       </div>
 
-      {result && !result.ok ? (
+      {error ? (
         <p className="text-muted-foreground border-warning/30 bg-warning/5 mt-4 rounded-xl border p-4 text-sm leading-relaxed">
-          {result.error}
+          {error}
         </p>
       ) : null}
 
-      {result && result.ok ? (
-        <TrainerResultCard data={result.data} className="mt-4" />
+      {data ? (
+        <div className="mt-4">
+          {showAutoCaption ? (
+            <p className="text-muted-foreground mb-2 text-xs font-medium tracking-[0.18em] uppercase">
+              Авто-разбор недели · {initialAt}
+            </p>
+          ) : null}
+          <TrainerResultCard data={data} />
+        </div>
       ) : null}
     </section>
   );

@@ -493,6 +493,38 @@ export async function getLatestTrainerResult(
   return row ?? null;
 }
 
+/** H8.2c — последний авто-сгенерированный недельный разбор (kind='weekly_review')
+ *  для показа на /stats. Воркер H8.2 пишет TrainerResponse в ai_analyses
+ *  (workoutId null) и проставляет ai_jobs.analysisId; различаем weekly от
+ *  per-workout/digest через ai_jobs.kind. innerJoin по analysisId + явный
+ *  userId на ai_jobs (R-7 — нет RLS, фильтруем сами). null, если воркер ещё ни
+ *  разу не закрыл неделю этому юзеру. */
+export async function getLatestWeeklyReview(
+  userId: string,
+): Promise<{ id: string; resultJson: unknown; createdAt: Date } | null> {
+  const [row] = await db
+    .select({
+      id: schema.aiAnalyses.id,
+      resultJson: schema.aiAnalyses.resultJson,
+      createdAt: schema.aiAnalyses.createdAt,
+    })
+    .from(schema.aiJobs)
+    .innerJoin(
+      schema.aiAnalyses,
+      eq(schema.aiAnalyses.id, schema.aiJobs.analysisId),
+    )
+    .where(
+      and(
+        eq(schema.aiJobs.userId, userId),
+        eq(schema.aiJobs.kind, "weekly_review"),
+        eq(schema.aiJobs.status, "succeeded"),
+      ),
+    )
+    .orderBy(desc(schema.aiJobs.scheduledAt))
+    .limit(1);
+  return row ?? null;
+}
+
 /** H5.7 «совет→следующая сессия»: последний разбор ПРЕДЫДУЩЕЙ тренировки этого
  *  шаблона (любой завершённой — наличие ai_analysis уже означает завершение).
  *  Возвращает сырую строку; извлечение nextSessionFocus делает вызывающий через
