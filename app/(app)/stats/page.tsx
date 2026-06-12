@@ -6,6 +6,7 @@ import { MuscleVolumeBars } from "@/components/charts/MuscleVolumeChart";
 import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
 import { PeriodInsightCard } from "@/components/stats/PeriodInsightCard";
+import { WeeklyReviewButton } from "@/components/stats/WeeklyReviewButton";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   summarizeExerciseTrend,
@@ -141,6 +142,8 @@ export default async function StatsPage({ searchParams }: Props) {
       </header>
 
       <PeriodPills />
+
+      <WeeklyReviewButton />
 
       <PeriodInsightCard insight={periodInsight} />
 

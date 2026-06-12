@@ -13,6 +13,8 @@ import {
 } from "@/lib/domain/exercise/set-history";
 import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
+import { isoWeekKey } from "@/lib/domain/cycle/iso-week";
+import { addDaysIso, isoWeekStartIso } from "@/lib/datetime/iso-week";
 
 // Тип диапазона и дата-отсечка — чистая доменная политика (R-7), живёт в
 // lib/domain/stats. Импорт выше даёт локальные привязки для запросов ниже;
@@ -944,4 +946,145 @@ export async function exerciseSetHistory(
     .orderBy(desc(schema.workouts.startedAt), asc(schema.workoutSets.setIndex));
 
   return groupExerciseSessions(rows, limit);
+}
+
+/** Агрегаты одной ISO-недели для недельного разбора тренера (H8.1). */
+export type WeeklyAgg = {
+  sessions: number;
+  tonnage: number;
+  sets: number;
+  muscleVolumes: { muscleKey: string; volume: number }[];
+};
+
+export type WeeklyReviewData = {
+  weekStart: string;
+  prevWeekStart: string;
+  current: WeeklyAgg;
+  previous: WeeklyAgg;
+  cycleNote: string | null;
+};
+
+const WEEKLY_REVIEW_SCAN_DAYS = 21;
+
+/** Силовые агрегаты текущей и прошлой ISO-недели + заметка текущей недели —
+ *  вход недельного разбора тренера (H8.1). Только completed + working подходы,
+ *  как /stats. Границы недели бакетятся в TZ юзера (`date_trunc('week', …)` =
+ *  понедельник), что совпадает с `isoWeekStartIso` — выбираем нужные две недели
+ *  по строке-ключу. Loose lower-bound (последние 21 день) ограничивает скан;
+ *  точное распределение по неделям даёт bucket-строка. */
+export async function weeklyReviewData(
+  userId: string,
+  now: Date,
+  timeZone: string,
+): Promise<WeeklyReviewData> {
+  const weekStart = isoWeekStartIso(now, timeZone);
+  const prevWeekStart = addDaysIso(weekStart, -7);
+  const from = new Date(now.getTime() - WEEKLY_REVIEW_SCAN_DAYS * DAY_MS);
+  const weekExpr = sql<string>`to_char(date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`;
+
+  // (A) Объём/сессии/подходы по неделям.
+  const totalsRows = await db
+    .select({
+      week: weekExpr,
+      sessions: sql<number>`COUNT(DISTINCT ${schema.workouts.id})`,
+      tonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
+      sets: sql<number>`COUNT(${schema.workoutSets.id})`,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+        gte(schema.workouts.startedAt, from),
+      ),
+    )
+    .groupBy(sql`1`);
+
+  // (B) Тоннаж по неделе × группе × роли (role-fold в JS, как volumeByMuscle).
+  const muscleRows = await db
+    .select({
+      week: weekExpr,
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      role: schema.exerciseMuscleGroups.role,
+      volume: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.workoutExercises.exerciseId,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+        gte(schema.workouts.startedAt, from),
+      ),
+    )
+    .groupBy(
+      sql`1`,
+      schema.exerciseMuscleGroups.muscleGroupKey,
+      schema.exerciseMuscleGroups.role,
+    );
+
+  const buildAgg = (weekKey: string): WeeklyAgg => {
+    const t = totalsRows.find((r) => r.week === weekKey);
+    const byMuscle = new Map<string, number>();
+    for (const r of muscleRows) {
+      if (r.week !== weekKey) continue;
+      const factor = r.role === "primary" ? 1 : 0.5;
+      byMuscle.set(
+        r.muscle,
+        (byMuscle.get(r.muscle) ?? 0) + Number(r.volume) * factor,
+      );
+    }
+    return {
+      sessions: Number(t?.sessions ?? 0),
+      tonnage: Number(t?.tonnage ?? 0),
+      sets: Number(t?.sets ?? 0),
+      muscleVolumes: Array.from(byMuscle.entries())
+        .map(([muscleKey, volume]) => ({ muscleKey, volume }))
+        .sort((a, b) => b.volume - a.volume),
+    };
+  };
+
+  const [note] = await db
+    .select({ content: schema.cycleNotes.content })
+    .from(schema.cycleNotes)
+    .where(
+      and(
+        eq(schema.cycleNotes.userId, userId),
+        eq(schema.cycleNotes.weekIso, isoWeekKey(now)),
+      ),
+    )
+    .orderBy(desc(schema.cycleNotes.updatedAt))
+    .limit(1);
+
+  return {
+    weekStart,
+    prevWeekStart,
+    current: buildAgg(weekStart),
+    previous: buildAgg(prevWeekStart),
+    cycleNote: note?.content ?? null,
+  };
 }
