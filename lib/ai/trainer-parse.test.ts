@@ -89,6 +89,36 @@ describe("parseTrainerJson", () => {
     expect(result.exerciseComparisons).toEqual([]);
   });
 
+  it("LLM эмитит null в optional-полях H5.4+ → парсится, null→undefined (R-10 hardening)", () => {
+    // DeepSeek нондетерминированно отдаёт `"pastAdviceFollowUp": null` вместо
+    // опускания ключа. До hardening z.string().optional() реджектил ВЕСЬ ответ
+    // → job падал → терялся разбор (столп 1). Теперь null принимается и
+    // нормализуется в undefined (downstream-консьюмеры уже null-safe).
+    const withNullOptionals = {
+      ...VALID,
+      whatWorked: null,
+      followUpQuestion: null,
+      pastAdviceFollowUp: null,
+      muscleBalanceNote: null,
+    };
+    const result = parseTrainerJson(JSON.stringify(withNullOptionals));
+    expect(result.whatWorked).toBeUndefined();
+    expect(result.followUpQuestion).toBeUndefined();
+    expect(result.pastAdviceFollowUp).toBeUndefined();
+    expect(result.muscleBalanceNote).toBeUndefined();
+  });
+
+  it("строковые значения optional-полей H5.4+ сохраняются как есть", () => {
+    const withValues = {
+      ...VALID,
+      whatWorked: "Жим +2.5 kg",
+      muscleBalanceNote: "Грудь перегрета",
+    };
+    const result = parseTrainerJson(JSON.stringify(withValues));
+    expect(result.whatWorked).toBe("Жим +2.5 kg");
+    expect(result.muscleBalanceNote).toBe("Грудь перегрета");
+  });
+
   it("nullable score (нет данных сна/КБЖУ) принимается", () => {
     const withNulls = {
       ...VALID,

@@ -43,6 +43,16 @@ export type TrainerResponse = {
   muscleBalanceNote?: string;
 };
 
+/** Optional-строка, переживающая `null` от LLM. DeepSeek нондетерминированно
+ *  эмитит `"field": null` вместо опускания ключа; `.nullish()` принимает и
+ *  null, и отсутствие, а transform нормализует null→undefined, чтобы выходной
+ *  тип остался `string | undefined` (downstream-консьюмеры уже null-safe).
+ *  Без этого один `null` реджектил ВЕСЬ разбор → падал AI-job (R-10 fail-soft). */
+const llmOptionalString = z
+  .string()
+  .nullish()
+  .transform((v) => v ?? undefined);
+
 export const trainerSchema = z.object({
   overallScore: z.number().int().min(0).max(100),
   trainingQuality: z.object({
@@ -75,10 +85,10 @@ export const trainerSchema = z.object({
   motivation: z.string(),
   // optional — legacy resultJson (до H5.4) их не несёт; знак «?» в
   // followUpQuestion проверяет не схема (fail-soft R-10), а assertCoachTemplate.
-  whatWorked: z.string().optional(),
-  followUpQuestion: z.string().optional(),
-  pastAdviceFollowUp: z.string().optional(),
-  muscleBalanceNote: z.string().optional(),
+  whatWorked: llmOptionalString,
+  followUpQuestion: llmOptionalString,
+  pastAdviceFollowUp: llmOptionalString,
+  muscleBalanceNote: llmOptionalString,
 });
 
 /** Достаёт JSON-объект из ответа: срезает ```-ограждение и reasoning-текст
