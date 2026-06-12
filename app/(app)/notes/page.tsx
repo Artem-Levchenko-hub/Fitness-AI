@@ -1,17 +1,10 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Заметки" };
-
-export default function NotesPage() {
-  return (
-    <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
-      <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-        Заметки
-      </h1>
-      <p className="text-muted-foreground mt-2 text-sm">
-        Связанные markdown-заметки на упражнения, тренировки и микроциклы. AI
-        читает их при анализе. Phase 4.
-      </p>
-    </main>
-  );
+/** Орфан-ретайр (H7.2): отдельной вкладки «Заметки» с плейсхолдером «Phase 4»
+ *  больше нет — у неё было ноль входящих ссылок и ноль живого функционала.
+ *  Markdown-«второй мозг» AI берёт из per-entity заметок (упражнение/тренировка/
+ *  микроцикл), не отсюда. Старый URL редиректит на /workouts (прецедент
+ *  /circuits·/cardio → /workouts), не 404 — нулевая потеря функций. */
+export default async function NotesPage() {
+  redirect("/workouts");
 }
