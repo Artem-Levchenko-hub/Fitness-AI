@@ -28,14 +28,16 @@ const DEDUP_DAYS = 6;
  *  воркер разберёт её как current). Условия: ≥2 завершённых силовых сессии за
  *  неделю И нет недавнего weekly_review job. Идемпотентно.
  *
- *  `?force=1` (только с валидным CRON_SECRET) обходит ОКНО времени для
- *  end-to-end-проверки, сохраняя реальные гейты (≥2 сессии + дедуп). */
+ *  `?force=<userId>` (только с валидным CRON_SECRET) обходит ОКНО времени и
+ *  ограничивает разбор ТОЛЬКО этим юзером — для end-to-end-проверки, сохраняя
+ *  реальные гейты (≥2 сессии + дедуп). Без него прод-cron не трогает реальных
+ *  юзеров вне их воскресного окна. */
 export async function POST(req: Request) {
   if (!authorize(req)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const force = new URL(req.url).searchParams.get("force") === "1";
+  const forceUserId = new URL(req.url).searchParams.get("force");
   const now = new Date();
   const dedupSince = new Date(now.getTime() - DEDUP_DAYS * 24 * 60 * 60 * 1000);
 
@@ -46,7 +48,11 @@ export async function POST(req: Request) {
   const queued: string[] = [];
   for (const u of users) {
     const tz = u.timezone || "Europe/Moscow";
-    if (!force && !isWeeklyReviewWindow(now, tz)) continue;
+    if (forceUserId) {
+      if (u.id !== forceUserId) continue; // forced-режим: только целевой юзер
+    } else if (!isWeeklyReviewWindow(now, tz)) {
+      continue;
+    }
 
     // Дешёвый гейт раньше тяжёлого: уже стоит недельный разбор?
     const [existing] = await db
