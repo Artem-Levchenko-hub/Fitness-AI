@@ -14,6 +14,7 @@ export * from "./nutrition";
 export * from "./sleep";
 export * from "./push";
 export * from "./cardio";
+export * from "./cardio-templates";
 export * from "./knowledge";
 export * from "./schedule";
 export * from "./friends";

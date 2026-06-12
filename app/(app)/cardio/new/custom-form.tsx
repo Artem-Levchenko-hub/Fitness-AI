@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { clampNumber } from "@/lib/utils/numeric";
 import { startCardioAction } from "@/server/actions/cardio";
+import { saveCardioTemplateAction } from "@/server/actions/cardio-templates";
 
 /** "Свой формат" — параметрический preset.
  *  Юзер задаёт: число раундов, работа сек, отдых сек.
@@ -44,11 +45,25 @@ export function CustomPresetForm() {
             <Field label="Отдых, сек" value={restSec} onChange={setRestSec} min={0} max={600} name="restSec" />
           </div>
 
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-muted-foreground tabular text-xs">
               Общее: {formatDuration(total)}
             </p>
-            <Button type="submit">Начать</Button>
+            <div className="flex items-center gap-2">
+              <Button type="submit" className="min-h-11">
+                Начать
+              </Button>
+              {/* H14.3: тот же FormData (preset+name+rounds/workSec/restSec) —
+                  formAction переключает старт на сохранение шаблона. */}
+              <Button
+                type="submit"
+                formAction={saveCardioTemplateAction}
+                variant="outline"
+                className="min-h-11"
+              >
+                Сохранить как шаблон
+              </Button>
+            </div>
           </div>
         </div>
       </div>

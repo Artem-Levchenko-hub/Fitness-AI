@@ -7,6 +7,7 @@ import { NumberField } from "@/components/ui/number-field";
 import { requireUser } from "@/lib/auth/require-user";
 import { PRESET_META } from "@/lib/domain";
 import { startCardioAction } from "@/server/actions/cardio";
+import { saveCardioTemplateAction } from "@/server/actions/cardio-templates";
 
 import { CustomPresetForm } from "./custom-form";
 
@@ -57,28 +58,41 @@ function PresetCard({
 }) {
   const m = PRESET_META[preset];
   return (
-    <form action={startCardioAction}>
+    <form
+      action={startCardioAction}
+      className="bg-card border-border rounded-2xl border p-5"
+    >
       <input type="hidden" name="preset" value={preset} />
       <input type="hidden" name="name" value={m.defaultName} />
-      <button
-        type="submit"
-        className="bg-card hover:bg-accent/40 border-border block w-full rounded-2xl border p-5 text-left transition-colors"
-      >
-        <div className="flex items-start gap-4">
-          <div className="bg-primary/10 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
-            {icon}
-          </div>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold tracking-tight">{m.nameRu}</h3>
-            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-              {m.subtitleRu}
-            </p>
-            <p className="text-muted-foreground tabular mt-2 text-[10px] uppercase tracking-wide">
-              Общее: {formatDuration(m.totalSec)}
-            </p>
+      <div className="flex items-start gap-4">
+        <div className="bg-primary/10 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
+          {icon}
+        </div>
+        <div className="flex-1">
+          <h3 className="text-base font-semibold tracking-tight">{m.nameRu}</h3>
+          <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+            {m.subtitleRu}
+          </p>
+          <p className="text-muted-foreground tabular mt-2 text-[10px] uppercase tracking-wide">
+            Общее: {formatDuration(m.totalSec)}
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <Button type="submit" className="min-h-11">
+              Начать
+            </Button>
+            {/* H14.3: тот же FormData (preset+name) — кнопка лишь переключает
+                formAction на сохранение шаблона вместо старта сессии. */}
+            <Button
+              type="submit"
+              formAction={saveCardioTemplateAction}
+              variant="outline"
+              className="min-h-11"
+            >
+              Сохранить как шаблон
+            </Button>
           </div>
         </div>
-      </button>
+      </div>
     </form>
   );
 }
@@ -112,8 +126,16 @@ function EmomCard() {
                 defaultValue="10"
                 className="tabular h-9 w-16 text-sm"
               />
-              <Button type="submit" size="sm" className="ml-auto">
+              <Button type="submit" className="ml-auto min-h-11">
                 Начать
+              </Button>
+              <Button
+                type="submit"
+                formAction={saveCardioTemplateAction}
+                variant="outline"
+                className="min-h-11"
+              >
+                Сохранить как шаблон
               </Button>
             </div>
           </div>
