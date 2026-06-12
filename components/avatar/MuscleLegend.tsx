@@ -45,9 +45,6 @@ export function MuscleLegend({
                     aria-hidden="true"
                   />
                   <span className="font-medium">{d.label}</span>
-                  <span className="text-muted-foreground tabular text-xs">
-                    {d.sets}
-                  </span>
                 </button>
               </li>
             ))}
