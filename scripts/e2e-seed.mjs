@@ -115,7 +115,10 @@ try {
     const resultJson = {
       overallScore: 78,
       trainingQuality: { score: 80, comment: "Чистая работа в рабочих подходах." },
-      recoveryContext: { score: null, comment: "Сон не записан за последние дни." },
+      // H13.2: recovery score != null → заголовок «Восстановление (сон)» на своём
+      // разборе становится ссылкой на /sleep. nutrition score == null → заголовок
+      // «Питание (КБЖУ)» остаётся статичным (граница R-37: без данных нет ссылки).
+      recoveryContext: { score: 72, comment: "Сон в норме за последние дни." },
       nutritionContext: { score: null, comment: "КБЖУ не записано." },
       exerciseComparisons: [
         {

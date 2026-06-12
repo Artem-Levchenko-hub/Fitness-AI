@@ -21,10 +21,13 @@ type Phase = "streaming" | "loading-result" | "done" | "error";
 export function TrainerStreamConsumer({
   workoutId,
   linkExercises,
+  linkLifeFactors,
 }: {
   workoutId: string;
   /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
   linkExercises?: Record<string, string>;
+  /** H13.2 — на своём разборе заголовки факторов жизни кликабельны. */
+  linkLifeFactors?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>("streaming");
   const [result, setResult] = useState<TrainerResultData | null>(null);
@@ -140,7 +143,13 @@ export function TrainerStreamConsumer({
   }, [workoutId, attempt]);
 
   if (phase === "done" && result) {
-    return <TrainerResultCard data={result} linkExercises={linkExercises} />;
+    return (
+      <TrainerResultCard
+        data={result}
+        linkExercises={linkExercises}
+        linkLifeFactors={linkLifeFactors}
+      />
+    );
   }
 
   if (phase === "error") {

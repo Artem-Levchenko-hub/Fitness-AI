@@ -2,6 +2,7 @@ import { ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import { resolveExerciseHref } from "@/lib/ai/exercise-links";
+import { resolveLifeFactorHref } from "@/lib/ai/life-factor-links";
 import type { TrendStatus } from "@/lib/domain/progression/trend";
 import { TREND_TONE } from "@/lib/ui/trend-tone";
 import { cn } from "@/lib/utils/index";
@@ -43,6 +44,7 @@ export function TrainerResultCard({
   data,
   className,
   linkExercises,
+  linkLifeFactors,
 }: {
   data: TrainerResultData;
   className?: string;
@@ -54,6 +56,13 @@ export function TrainerResultCard({
    * историю — прецедент H6.2b `linkExercises`).
    */
   linkExercises?: Record<string, string>;
+  /**
+   * H13.2/H13.3 — на СВОЁМ разборе заголовки факторов жизни становятся входом
+   * в данные: «Восстановление (сон)» → /sleep, «Питание (КБЖУ)» → /nutrition,
+   * когда фактор учтён (score != null). Default off → статика: share/друг НЕ
+   * передают (ссылка увела бы смотрящего в ЕГО экран, не в данные автора).
+   */
+  linkLifeFactors?: boolean;
 }) {
   return (
     <div
@@ -96,6 +105,11 @@ export function TrainerResultCard({
           title="Восстановление (сон)"
           score={data.recoveryContext.score}
           comment={data.recoveryContext.comment}
+          href={resolveLifeFactorHref(
+            "/sleep",
+            data.recoveryContext.score,
+            linkLifeFactors,
+          )}
         />
         <Aspect
           title="Питание (КБЖУ)"
@@ -238,19 +252,34 @@ function ComparisonRow({
   );
 }
 
+/** H13.2/H13.3: при наличии href заголовок аспекта — ссылка на экран фактора
+ *  (пунктир-подчёркивание + шеврон, тап ≥44px R-41, зеркало ComparisonRow);
+ *  без href — статичный текст. */
 function Aspect({
   title,
   score,
   comment,
+  href,
 }: {
   title: string;
   score: number | null;
   comment: string;
+  href?: string | null;
 }) {
   return (
     <div>
-      <dt className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-semibold tracking-tight">{title}</span>
+      <dt className="flex items-center justify-between gap-2">
+        {href ? (
+          <Link
+            href={href}
+            className="text-foreground hover:text-primary focus-visible:ring-ring -my-1 inline-flex min-h-11 items-center gap-1 rounded-sm text-sm font-semibold tracking-tight underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2"
+          >
+            {title}
+            <ChevronRight className="size-3.5 shrink-0 opacity-60" />
+          </Link>
+        ) : (
+          <span className="text-sm font-semibold tracking-tight">{title}</span>
+        )}
         <span className={cn("tabular text-sm font-medium", scoreColor(score))}>
           {score ?? "—"}
         </span>

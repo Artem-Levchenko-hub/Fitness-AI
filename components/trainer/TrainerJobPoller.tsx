@@ -34,11 +34,14 @@ export function TrainerJobPoller({
   jobId,
   onRetry,
   linkExercises,
+  linkLifeFactors,
 }: {
   jobId: string;
   onRetry?: () => Promise<{ jobId: string }>;
   /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
   linkExercises?: Record<string, string>;
+  /** H13.2 — на своём разборе заголовки факторов жизни кликабельны. */
+  linkLifeFactors?: boolean;
 }) {
   const [currentJobId, setCurrentJobId] = useState(jobId);
   const [job, setJob] = useState<JobResponse | null>(null);
@@ -138,6 +141,7 @@ export function TrainerJobPoller({
     <TrainerResultCard
       data={job.analysis.resultJson}
       linkExercises={linkExercises}
+      linkLifeFactors={linkLifeFactors}
     />
   );
 }
