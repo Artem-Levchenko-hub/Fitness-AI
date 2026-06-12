@@ -3,10 +3,16 @@ import { test, expect } from "@playwright/test";
 /**
  * H7.3 — критические потоки, гейт перед каждым consolidation-слайсом H7.
  *
- * Этот первый под-слайс — ТОЛЬКО read-only экраны (ничего не пишут в прод-БД).
- * Мутирующий поток «создать → завершить → AI-разбор виден» с очисткой
- * throwaway-юзера — отдельный под-слайс H7.3 (требует cleanup-машинерии).
+ * H7.3a — read-only экраны (ничего не пишут в прод-БД).
+ * H7.3b — мутирующие потоки на детерминированной фикстуре: разбор тренировки
+ *   виден + навигация в профиль друга. Фикстуру сидит scripts/e2e-seed.mjs на
+ *   проде (он же чистит её через --cleanup, не оставляя данных). Тесты читают
+ *   id фикстуры из env и пропускаются, когда фикстура не засеяна (как и
+ *   read-only тесты при отсутствии токена) — гейт не краснеет вхолостую.
  */
+
+const trainerWorkoutId = process.env.E2E_TRAINER_WORKOUT_ID;
+const friendId = process.env.E2E_FRIEND_ID;
 
 test("/stats открывается с контентом, а не error-boundary", async ({ page }) => {
   await page.goto("/stats");
@@ -38,4 +44,33 @@ test("/profile: аватар рендерится и его легенда та�
     .first();
   await expect(chip).toBeVisible();
   await expect(chip).toBeEnabled();
+});
+
+test("разбор завершённой тренировки виден (TrainerResultCard)", async ({
+  page,
+}) => {
+  test.skip(
+    !trainerWorkoutId,
+    "E2E_TRAINER_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  await page.goto(`/workouts/${trainerWorkoutId}/trainer`);
+  await expect(page).toHaveURL(new RegExp(`/workouts/${trainerWorkoutId}/trainer`));
+  // «Оценка тренера» — eyebrow карточки разбора (TrainerResultCard), есть только
+  // когда сохранённый resultJson отрендерился, а не поллер/ошибка.
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
+});
+
+test("/friends → переход в профиль друга", async ({ page }) => {
+  test.skip(
+    !friendId,
+    "E2E_FRIEND_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  await page.goto("/friends");
+  // Ссылка на друга в списке «Ваши друзья» (href = /friends/<id>).
+  await page.locator(`a[href="/friends/${friendId}"]`).first().click();
+  await expect(page).toHaveURL(new RegExp(`/friends/${friendId}`));
+  // «Только просмотр» — eyebrow страницы профиля друга (read-only вид).
+  await expect(
+    page.getByText("Только просмотр", { exact: true }),
+  ).toBeVisible();
 });
