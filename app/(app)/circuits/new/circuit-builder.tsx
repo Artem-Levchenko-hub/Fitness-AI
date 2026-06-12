@@ -13,6 +13,7 @@ import { LabeledNumberField } from "@/components/ui/number-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { saveCircuitTemplateAction } from "@/server/actions/circuit-templates";
 import { startCircuitAction } from "@/server/actions/circuits";
 
 type BuilderItem = {
@@ -44,6 +45,7 @@ export function CircuitBuilder({
   const [restBetweenExercisesSec, setRestBetweenExercisesSec] = useState(15);
   const [items, setItems] = useState<BuilderItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function addItem() {
@@ -63,26 +65,25 @@ export function CircuitBuilder({
     );
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-
+  /** Валидирует поля и собирает payload (общий для «начать» и «сохранить как
+   *  шаблон»). При ошибке выставляет error и возвращает null. */
+  function buildPayloadOrError(): FormData | null {
     const validItems = items.filter((i) => i.exerciseId);
     if (validItems.length === 0) {
       setError("Добавь хотя бы одно упражнение с выбранным каталожным позицием.");
-      return;
+      return null;
     }
     for (const it of validItems) {
       if (it.kind === "reps" && (!Number.isFinite(it.targetReps) || it.targetReps <= 0)) {
         setError("Для упражнений с повторениями укажи число повторений > 0.");
-        return;
+        return null;
       }
       if (
         it.kind === "duration" &&
         (!Number.isFinite(it.targetDurationSec) || it.targetDurationSec <= 0)
       ) {
         setError("Для упражнений на время укажи длительность > 0 сек.");
-        return;
+        return null;
       }
     }
 
@@ -103,18 +104,27 @@ export function CircuitBuilder({
 
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
+    return fd;
+  }
+
+  function isRedirect(err: unknown): boolean {
+    // redirect() в server action бросает спец-исключение с digest — не ошибка UX.
+    return Boolean(err && typeof err === "object" && "digest" in err);
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    const fd = buildPayloadOrError();
+    if (!fd) return;
 
     setSubmitting(true);
     startTransition(async () => {
       try {
         await startCircuitAction(fd);
       } catch (err) {
-        // redirect() в server action бросает специальное исключение —
-        // не считаем это ошибкой UX.
-        if (err && typeof err === "object" && "digest" in err) {
-          // NEXT_REDIRECT — нормально, страница уже редиректит.
-          return;
-        }
+        if (isRedirect(err)) return;
         const msg = err instanceof Error ? err.message : "Не удалось создать";
         setError(msg);
         setSubmitting(false);
@@ -122,8 +132,28 @@ export function CircuitBuilder({
     });
   }
 
-  const canSubmit =
-    !submitting && name.trim().length >= 2 && items.some((i) => i.exerciseId);
+  function handleSaveTemplate() {
+    setError(null);
+
+    const fd = buildPayloadOrError();
+    if (!fd) return;
+
+    setSavingTemplate(true);
+    startTransition(async () => {
+      try {
+        await saveCircuitTemplateAction(fd);
+      } catch (err) {
+        if (isRedirect(err)) return;
+        const msg = err instanceof Error ? err.message : "Не удалось сохранить шаблон";
+        setError(msg);
+        setSavingTemplate(false);
+      }
+    });
+  }
+
+  const busy = submitting || savingTemplate;
+  const hasItems = items.some((i) => i.exerciseId);
+  const canSubmit = !busy && name.trim().length >= 2 && hasItems;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -230,6 +260,28 @@ export function CircuitBuilder({
           "Создать и начать круговую"
         )}
       </Button>
+
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        onClick={handleSaveTemplate}
+        disabled={!canSubmit}
+        aria-busy={savingTemplate}
+      >
+        {savingTemplate ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            Сохраняем…
+          </>
+        ) : (
+          "Сохранить как шаблон"
+        )}
+      </Button>
+      <p className="text-muted-foreground -mt-3 text-center text-xs">
+        Шаблон можно переиспользовать позже без повторной сборки.
+      </p>
     </form>
   );
 }

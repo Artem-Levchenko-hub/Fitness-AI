@@ -9,3 +9,4 @@ export * from "./schedule/adherence";
 export * from "./cycle/iso-week";
 export * from "./body/bmi";
 export * from "./cardio/presets";
+export * from "./circuits/circuit-template-preset";

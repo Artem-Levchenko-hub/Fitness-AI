@@ -107,6 +107,23 @@ test("/dashboard: мини-аватар-витрина (H9.2) показывае
   await expect(page).toHaveURL(/\/profile/);
 });
 
+test("H14.1 — /circuits/new несёт «Сохранить как шаблон» рядом со стартом", async ({
+  page,
+}) => {
+  // H14.1 — круговую можно сохранить как переиспользуемый пресет (столп 3+4),
+  // не только стартовать one-off. Билдер несёт вторичную кнопку «Сохранить как
+  // шаблон» рядом с основной «Создать и начать круговую». Read-only проверка
+  // (без записи): обе кнопки видимы.
+  await page.goto("/circuits/new");
+  await expect(page).toHaveURL(/\/circuits\/new/);
+  await expect(
+    page.getByRole("button", { name: "Создать и начать круговую" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Сохранить как шаблон" }),
+  ).toBeVisible();
+});
+
 test("разбор завершённой тренировки виден (TrainerResultCard)", async ({
   page,
 }) => {
