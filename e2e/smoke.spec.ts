@@ -64,6 +64,11 @@ test("/dashboard: tile-входы «Статистика» и «Друзья» �
   await expect(friendsTile).toBeVisible();
   await expect(friendsTile).toContainText("Друзья");
 
+  // H4.1 — tile «Статистика» несёт week-strip-превью (7 дней + тоннаж + дельта),
+  // не статичный hint. Снимок тех же данных, что графики /stats (тяжёлый
+  // Recharts остаётся за тапом).
+  await expect(statsTile.getByTestId("dashboard-week-strip")).toBeVisible();
+
   // Tile реально проваливается в /stats.
   await statsTile.click();
   await expect(page).toHaveURL(/\/stats/);

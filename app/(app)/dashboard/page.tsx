@@ -19,18 +19,26 @@ import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
+import { WeekStripPreview } from "@/components/dashboard/WeekStripPreview";
 import {
   buildHistory,
   HistoryCard,
   LastSessionMini,
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
+import { isoWeekStartIso } from "@/lib/datetime/iso-week";
+import { buildWeekStrip } from "@/lib/domain/stats/week-strip";
+import { getUserProfile } from "@/lib/repos/body.repo";
 import {
   getActiveCardioId,
   listRecentCardio,
 } from "@/lib/repos/cardio.repo";
 import { getActiveCircuitId, listCircuits } from "@/lib/repos/circuits.repo";
-import { muscleHeatProfile } from "@/lib/repos/stats.repo";
+import {
+  dailyVolume,
+  muscleHeatProfile,
+  workoutFrequency,
+} from "@/lib/repos/stats.repo";
 import {
   getActiveWorkoutId,
   listRecentWorkouts,
@@ -44,6 +52,11 @@ export default async function DashboardPage() {
   const name = user.name?.split(" ")[0] ?? user.email.split("@")[0];
   const now = new Date();
 
+  // TZ юзера — границы недели/дня бакетятся РОВНО как на /stats и в истории
+  // /workouts (G1). Фолбэк Europe/Moscow = TZ сервера.
+  const profile = await getUserProfile(user.id);
+  const tz = profile?.timezone ?? "Europe/Moscow";
+
   const [
     recent,
     activeId,
@@ -52,6 +65,8 @@ export default async function DashboardPage() {
     recentCircuits,
     activeCircuitId,
     heat,
+    daily,
+    frequency,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     getActiveWorkoutId(user.id),
@@ -60,7 +75,15 @@ export default async function DashboardPage() {
     listCircuits(user.id, 10),
     getActiveCircuitId(user.id),
     muscleHeatProfile(user.id, now),
+    // Те же источники, что рисуют графики /stats (силовые working-подходы,
+    // бакет по TZ) → tile-превью совпадает со /stats (гейт H4.1). "30d"
+    // покрывает текущую + прошлую ISO-неделю.
+    dailyVolume(user.id, "30d", tz),
+    workoutFrequency(user.id, "30d", tz),
   ]);
+
+  // Снимок «эта неделя» для tile-входа /stats (H4.1): 7 дней + тоннаж + дельта.
+  const weekStrip = buildWeekStrip(daily, frequency, isoWeekStartIso(now, tz));
 
   // Мини-аватар витрины (H9.2): тот же heat-источник, что красит 3D на /profile;
   // здесь нужен только цвет/уровень/подходы по группам (без records/forgotten).
@@ -125,12 +148,9 @@ export default async function DashboardPage() {
           компактных tile-вход, не отдельные секции. Тут же материализуются
           C1 (H4.1 week-strip /stats, H3.1 лента /friends). */}
       <section className="mt-3 grid grid-cols-2 gap-3">
-        <DashboardNavTile
-          href="/stats"
-          label="Статистика"
-          icon={BarChart3}
-          hint="Объём, 1ПМ, рекорды"
-        />
+        <DashboardNavTile href="/stats" label="Статистика" icon={BarChart3}>
+          <WeekStripPreview strip={weekStrip} />
+        </DashboardNavTile>
         <DashboardNavTile
           href="/friends"
           label="Друзья"
