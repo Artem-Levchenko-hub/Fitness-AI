@@ -115,6 +115,11 @@ export function TrainerResultCard({
           title="Питание (КБЖУ)"
           score={data.nutritionContext.score}
           comment={data.nutritionContext.comment}
+          href={resolveLifeFactorHref(
+            "/nutrition",
+            data.nutritionContext.score,
+            linkLifeFactors,
+          )}
         />
       </dl>
 

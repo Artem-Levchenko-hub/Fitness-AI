@@ -119,13 +119,15 @@ test("разбор завершённой тренировки виден (Train
   // когда сохранённый resultJson отрендерился, а не поллер/ошибка.
   await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
 
-  // H13.2 — на своём разборе заголовок учтённого фактора жизни кликабелен:
-  // recovery score != null (сид=72) → «Восстановление (сон)» = ссылка на /sleep.
-  // nutrition score == null (сид) → «Питание (КБЖУ)» остаётся статичным
-  // (граница R-37: без данных нет ссылки). Проверяем ДО клика по строке
-  // упражнения ниже — он уводит со страницы.
+  // H13.2/H13.3 — на своём разборе заголовки учтённых факторов жизни кликабельны:
+  // recovery score != null (сид=72) → «Восстановление (сон)» = ссылка на /sleep;
+  // nutrition score != null (сид=65) → «Питание (КБЖУ)» = ссылка на /nutrition.
+  // Граница «нет данных → статика» (score null) покрыта юнит-тестом
+  // resolveLifeFactorHref. Проверяем ДО клика по строке упражнения ниже — он
+  // уводит со страницы.
   await expect(page.locator('a[href="/sleep"]')).toBeVisible();
-  await expect(page.locator('a[href="/nutrition"]')).toHaveCount(0);
+  const nutritionLink = page.locator('a[href="/nutrition"]');
+  await expect(nutritionLink).toBeVisible();
 
   // H13.1 — строка прогресса упражнения на своём разборе кликабельна: имя
   // упражнения → ссылка на историю /exercises/<id> (резолв по имени из этой
