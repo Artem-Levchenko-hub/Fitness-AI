@@ -11,6 +11,8 @@ import {
 } from "@/components/trainer/TrainerResultCard";
 import { TrainerStreamConsumer } from "@/components/trainer/TrainerStreamConsumer";
 import { ShareAnalysisButton } from "@/components/trainer/ShareAnalysisButton";
+import { AskTrainerPanel } from "@/components/trainer/AskTrainerPanel";
+import { renderTrainerMarkdown, trainerSchema } from "@/lib/ai/trainer-parse";
 import { db } from "@/db/client";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import * as schema from "@/db/schema";
@@ -125,6 +127,10 @@ export default async function TrainerPage({ params }: Props) {
             analysisId={savedAnalysis.id}
             initialToken={savedAnalysis.shareToken}
           />
+          <AskTrainerPanel
+            workoutId={id}
+            analysisMarkdown={analysisToMarkdown(savedAnalysis.resultJson)}
+          />
         </>
       ) : latestJob ? (
         // cron уже обрабатывает (или succeeded-legacy) — поллим как fallback.
@@ -140,5 +146,13 @@ export default async function TrainerPage({ params }: Props) {
       </p>
     </main>
   );
+}
+
+/** Текст разбора для follow-up («Спросить тренера»). Fail-soft (R-10): если
+ *  resultJson не проходит схему (legacy/битый) — пустая строка, панель всё
+ *  равно работает, опираясь на workout-контекст коуч-route. */
+function analysisToMarkdown(resultJson: unknown): string {
+  const parsed = trainerSchema.safeParse(resultJson);
+  return parsed.success ? renderTrainerMarkdown(parsed.data) : "";
 }
 
