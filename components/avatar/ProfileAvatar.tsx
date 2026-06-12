@@ -1,6 +1,6 @@
 "use client";
 
-import { Snowflake } from "lucide-react";
+import { ChevronDown, Snowflake } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useMemo, useState, useSyncExternalStore } from "react";
 
@@ -100,12 +100,26 @@ export function ProfileAvatar({
         linkExercises={linkExercises}
       />
 
-      <MuscleLegend
-        data={data}
-        selected={selected}
-        onSelect={onSelect}
-        pulseKey={pulseKey}
-      />
+      {/* Легенда-чипы по нагреву свёрнута по умолчанию — громоздкий раздел не
+          давит на экран; раскрывается одним тапом (native <details> —
+          keyboard-доступно R-39, ноль доп. состояния R-01). */}
+      <details className="group border-border bg-card/40 rounded-2xl border">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <span>Все группы мышц по нагреву</span>
+          <ChevronDown
+            className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-180"
+            aria-hidden="true"
+          />
+        </summary>
+        <div className="px-4 pb-4">
+          <MuscleLegend
+            data={data}
+            selected={selected}
+            onSelect={onSelect}
+            pulseKey={pulseKey}
+          />
+        </div>
+      </details>
 
       {/* Атрибуция CC BY-SA 4.0 — обязательна при использовании Z-Anatomy. */}
       {MUSCLE_MODEL_URL ? (
