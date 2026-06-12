@@ -5,6 +5,7 @@
  *
  *  - process-ai-jobs: каждую минуту
  *  - daily-trainer:   каждый час (роут сам решит, у кого локально 22:00)
+ *  - weekly-trainer:  каждый час (роут сам решит, у кого локально Вс 20:00)
  *  - push-reminders:  каждый час
  *
  * Запускается через ecosystem.config.cjs как отдельный pm2-app.
@@ -66,6 +67,7 @@ scheduleEveryMinute("/api/cron/process-ai-jobs");
 
 // Hourly:
 scheduleEveryHour("/api/cron/daily-trainer");
+scheduleEveryHour("/api/cron/weekly-trainer");
 scheduleEveryHour("/api/cron/push-reminders");
 
 // Корректное завершение в pm2 (graceful shutdown).
