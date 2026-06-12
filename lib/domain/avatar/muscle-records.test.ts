@@ -76,4 +76,9 @@ describe("topMuscleRecords", () => {
     const out = topMuscleRecords([row("chest", "bench", "Жим лёжа", 100, 5)]);
     expect(out.get("chest")![0].e1rm).toBeGreaterThan(100);
   });
+
+  it("carries exerciseId so the record can link to the exercise page", () => {
+    const out = topMuscleRecords([row("chest", "bench", "Жим лёжа", 100, 5)]);
+    expect(out.get("chest")![0].exerciseId).toBe("bench");
+  });
 });

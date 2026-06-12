@@ -553,7 +553,7 @@ export type MuscleHeat = {
   /** Когда группа в последний раз работала за неделю. null = не на этой неделе. */
   lastTrainedAt: Date | null;
   /** Топ-3 упражнения по вкладу в группу за неделю. */
-  top3: Array<{ name: string; volume: number }>;
+  top3: Array<{ exerciseId: string; name: string; volume: number }>;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -720,7 +720,8 @@ export async function muscleHeatProfile(
     }
     let weeklySets = 0;
     for (const wt of a.setWeights.values()) weeklySets += wt;
-    const top3 = Array.from(a.exVolume.values())
+    const top3 = Array.from(a.exVolume.entries())
+      .map(([exerciseId, v]) => ({ exerciseId, name: v.name, volume: v.volume }))
       .sort((x, y) => y.volume - x.volume)
       .slice(0, 3);
     return {

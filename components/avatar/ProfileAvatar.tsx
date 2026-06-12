@@ -18,7 +18,15 @@ const AvatarCanvas = dynamic(() => import("./AvatarCanvas"), {
   loading: () => <CanvasSkeleton />,
 });
 
-export function ProfileAvatar({ data }: { data: AvatarMuscleDatum[] }) {
+export function ProfileAvatar({
+  data,
+  linkExercises = false,
+}: {
+  data: AvatarMuscleDatum[];
+  /** Делать упражнения в панели мышцы ссылками на их историю /exercises/[id].
+   *  Только свой /profile — профиль друга показал бы историю смотрящего. */
+  linkExercises?: boolean;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
   const [cycle, setCycle] = useState(0);
   // Поддержка WebGL — внешнее (браузерное) состояние, читаем через
@@ -62,6 +70,7 @@ export function ProfileAvatar({ data }: { data: AvatarMuscleDatum[] }) {
         cycle={cycle}
         onAdvance={() => selected && onSelect(selected)}
         onClose={() => onSelect(null)}
+        linkExercises={linkExercises}
       />
 
       {/* Атрибуция CC BY-SA 4.0 — обязательна при использовании Z-Anatomy. */}

@@ -11,7 +11,10 @@ import type { AvatarMuscleDatum } from "./types";
 export function buildAvatarData(
   heat: MuscleHeat[],
   now: Date,
-  records?: Map<string, Array<{ name: string; weightKg: number; reps: number }>>,
+  records?: Map<
+    string,
+    Array<{ exerciseId: string; name: string; weightKg: number; reps: number }>
+  >,
 ): AvatarMuscleDatum[] {
   return heat.map((m) => {
     const h = heatFromSets(m.weeklySets);

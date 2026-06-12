@@ -1,6 +1,7 @@
 "use client";
 
-import { Dumbbell, Trophy, X } from "lucide-react";
+import { ChevronRight, Dumbbell, Trophy, X } from "lucide-react";
+import Link from "next/link";
 
 import type { AvatarMuscleDatum } from "./types";
 
@@ -18,9 +19,19 @@ type Props = {
   cycle: number;
   onAdvance: () => void;
   onClose: () => void;
+  /** Делать упражнения в панели ссылками на /exercises/[id] (история подходов).
+   *  Только на своём /profile — на профиле друга страница показала бы историю
+   *  смотрящего, а не друга, поэтому там ссылок нет (default false). */
+  linkExercises?: boolean;
 };
 
-export function MuscleInfoPanel({ datum, cycle, onAdvance, onClose }: Props) {
+export function MuscleInfoPanel({
+  datum,
+  cycle,
+  onAdvance,
+  onClose,
+  linkExercises = false,
+}: Props) {
   if (!datum) {
     return (
       <div className="border-border bg-card/80 text-muted-foreground supports-[backdrop-filter]:bg-card/60 pointer-events-none rounded-2xl border px-4 py-3 text-center text-sm backdrop-blur-sm">
@@ -57,14 +68,26 @@ export function MuscleInfoPanel({ datum, cycle, onAdvance, onClose }: Props) {
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={onAdvance}
-        className="mt-3 block w-full text-left"
-        aria-label="Показать следующий показатель"
-      >
-        <CycleField datum={datum} step={step} />
-      </button>
+      {step <= 2 ? (
+        <button
+          type="button"
+          onClick={onAdvance}
+          className="mt-3 block w-full text-left"
+          aria-label="Показать следующий показатель"
+        >
+          <CycleField datum={datum} step={step} />
+        </button>
+      ) : (
+        // Списки упражнений (топ-3 / рекорды) — строки могут быть ссылками, а
+        // <a> внутри <button> невалиден, поэтому здесь отдельный блок: ярлык
+        // листает цикл, строки навигируют (см. ExerciseListField).
+        <ExerciseListField
+          datum={datum}
+          step={step}
+          onAdvance={onAdvance}
+          linkExercises={linkExercises}
+        />
+      )}
 
       <div
         className="mt-3 flex items-center justify-center gap-1.5"
@@ -122,71 +145,135 @@ function CycleField({
       </div>
     );
   }
-  if (step === 3) {
-    // топ-3 упражнения по вкладу за неделю
-    return (
-      <div>
-        <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-wide uppercase">
-          Топ упражнения за 7 дней
-        </p>
-        {datum.top3.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Нет данных за неделю.</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {datum.top3.map((ex) => (
-              <li
-                key={ex.name}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <Dumbbell
-                    className="text-muted-foreground size-3.5 shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{ex.name}</span>
-                </span>
-                <span className="text-muted-foreground tabular shrink-0 text-xs">
-                  {Math.round(ex.volume).toLocaleString("ru")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
-  }
-  // step === 4 — личные рекорды (all-time PR) по упражнениям группы
+  // step 0..2 здесь; списки упражнений (3 — топ за неделю, 4 — рекорды)
+  // рендерит ExerciseListField (строки-ссылки на /exercises/[id]).
+  return null;
+}
+
+/** Списки упражнений группы: топ-3 за неделю (step 3) или all-time рекорды
+ *  (step 4). Ярлык листает цикл (button → onAdvance), строки — ссылки на
+ *  историю упражнения, когда `linkExercises` (только свой /profile). */
+function ExerciseListField({
+  datum,
+  step,
+  onAdvance,
+  linkExercises,
+}: {
+  datum: AvatarMuscleDatum;
+  step: number;
+  onAdvance: () => void;
+  linkExercises: boolean;
+}) {
+  const isRecords = step === 4;
+  const label = isRecords ? "Рекорды группы" : "Топ упражнения за 7 дней";
+  const emptyText = isRecords
+    ? "Пока нет силовых рекордов."
+    : "Нет данных за неделю.";
+  const isEmpty = isRecords
+    ? datum.records.length === 0
+    : datum.top3.length === 0;
+
   return (
-    <div>
-      <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-wide uppercase">
-        Рекорды группы
-      </p>
-      {datum.records.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          Пока нет силовых рекордов.
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={onAdvance}
+        aria-label="Показать следующий показатель"
+        className="block w-full text-left"
+      >
+        <p className="text-muted-foreground mb-2 text-[10px] font-medium tracking-wide uppercase">
+          {label}
         </p>
+      </button>
+      {isEmpty ? (
+        <p className="text-muted-foreground text-sm">{emptyText}</p>
       ) : (
-        <ul className="space-y-1.5">
-          {datum.records.map((pr) => (
-            <li
-              key={pr.name}
-              className="flex items-center justify-between gap-3 text-sm"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <Trophy
-                  className="text-muted-foreground size-3.5 shrink-0"
-                  aria-hidden="true"
+        <ul className="space-y-1">
+          {isRecords
+            ? datum.records.map((pr) => (
+                <ExerciseRow
+                  key={pr.exerciseId}
+                  exerciseId={pr.exerciseId}
+                  name={pr.name}
+                  Icon={Trophy}
+                  value={`${formatKg(pr.weightKg)} × ${pr.reps}`}
+                  emphasize
+                  link={linkExercises}
                 />
-                <span className="truncate">{pr.name}</span>
-              </span>
-              <span className="tabular shrink-0 text-xs font-medium">
-                {formatKg(pr.weightKg)} × {pr.reps}
-              </span>
-            </li>
-          ))}
+              ))
+            : datum.top3.map((ex) => (
+                <ExerciseRow
+                  key={ex.exerciseId}
+                  exerciseId={ex.exerciseId}
+                  name={ex.name}
+                  Icon={Dumbbell}
+                  value={Math.round(ex.volume).toLocaleString("ru")}
+                  link={linkExercises}
+                />
+              ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** Одна строка упражнения. `link` → тапабельная ссылка на /exercises/[id]
+ *  (история подходов, тап ≥44px, R-41) с шевроном-аффордансом; иначе — статика
+ *  (профиль друга). */
+function ExerciseRow({
+  exerciseId,
+  name,
+  Icon,
+  value,
+  emphasize = false,
+  link,
+}: {
+  exerciseId: string;
+  name: string;
+  Icon: typeof Dumbbell;
+  value: string;
+  emphasize?: boolean;
+  link: boolean;
+}) {
+  const valueCls = emphasize
+    ? "tabular shrink-0 text-xs font-medium"
+    : "text-muted-foreground tabular shrink-0 text-xs";
+  const nameNode = (
+    <span className="flex min-w-0 items-center gap-2">
+      <Icon
+        className="text-muted-foreground size-3.5 shrink-0"
+        aria-hidden="true"
+      />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+
+  if (!link) {
+    return (
+      <li className="flex items-center justify-between gap-3 text-sm">
+        {nameNode}
+        <span className={valueCls}>{value}</span>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <Link
+        href={`/exercises/${exerciseId}`}
+        aria-label={`История упражнения: ${name}`}
+        className="hover:bg-muted/60 -mx-2 flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 text-sm transition-colors"
+      >
+        {nameNode}
+        <span className="flex shrink-0 items-center gap-1">
+          <span className={valueCls}>{value}</span>
+          <ChevronRight
+            className="text-muted-foreground/60 size-4"
+            aria-hidden="true"
+          />
+        </span>
+      </Link>
+    </li>
   );
 }
 

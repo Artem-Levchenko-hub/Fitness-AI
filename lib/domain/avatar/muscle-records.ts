@@ -14,6 +14,8 @@ export type MuscleRecordRow = {
 /** PR одного упражнения внутри группы: реальный подход-рекорд (вес × повторы)
  *  и его оценочный 1ПМ — для сортировки и подписи. */
 export type MuscleRecord = {
+  /** id упражнения — чтобы рекорд в панели вёл в историю /exercises/[id]. */
+  exerciseId: string;
   name: string;
   weightKg: number;
   reps: number;
@@ -44,6 +46,7 @@ export function topMuscleRecords(
     const prev = exMap.get(r.exerciseId);
     if (!prev || e1rm > prev.e1rm) {
       exMap.set(r.exerciseId, {
+        exerciseId: r.exerciseId,
         name: r.name,
         weightKg: r.weightKg,
         reps: r.reps,

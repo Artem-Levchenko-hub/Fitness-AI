@@ -58,7 +58,7 @@ export default async function ProfilePage() {
         </div>
       ) : null}
 
-      <ProfileAvatar data={data} />
+      <ProfileAvatar data={data} linkExercises />
 
       <BodyMetrics heightCm={heightCm} weightKg={weightKg} />
 
