@@ -130,6 +130,20 @@ try {
           deltaWeightKg: 2.5,
           status: "improved",
         },
+        {
+          // H13.4 (4) — негативный кейс fail-soft (R-10/R-37): LLM упомянул
+          // упражнение, которого НЕТ среди упражнений этой сессии (тут только
+          // жим). resolveExerciseHref не найдёт имя в карте → вернёт null →
+          // строка рендерится статикой (без href, без битой ссылки, без
+          // console-ошибки). e2e #7 утверждает: текст строки виден, но
+          // /exercises-якорь ровно один (только реальный жим).
+          name: "Приседания со штангой",
+          prevTopSet: "100×5",
+          curTopSet: "100×5",
+          deltaReps: 0,
+          deltaWeightKg: 0,
+          status: "stagnant",
+        },
       ],
       recommendations: ["Добавь 1 разминочный подход перед рабочими."],
       nextSessionFocus: "85×5 при RPE 8",
