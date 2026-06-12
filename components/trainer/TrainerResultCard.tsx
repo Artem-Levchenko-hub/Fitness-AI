@@ -213,10 +213,37 @@ export function TrainerResultCard({
   );
 }
 
+/** H13.4 — единый аффорданс кликабельного разбора (Rule-of-Three: строки
+ *  прогресса ComparisonRow + заголовки факторов Aspect делили одну обвязку).
+ *  Пунктир-подчёркивание + шеврон, тап ≥44px (R-41), focus-ring. Вызывающий
+ *  добавляет контекстный className (вес шрифта, flex-усечение). */
+function AnalysisLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "text-foreground hover:text-primary focus-visible:ring-ring -my-1 inline-flex min-h-11 items-center gap-1 rounded-sm underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2",
+        className,
+      )}
+    >
+      {children}
+      <ChevronRight className="size-3.5 shrink-0 opacity-60" />
+    </Link>
+  );
+}
+
 /** Строка сравнения упражнения: рост зелёным, регресс мягко-красным,
  *  стагнация серым. «60×5 → 60×6» с подсветкой текущего сета.
- *  H13.1: при наличии href имя — ссылка на историю упражнения (пунктир-
- *  подчёркивание + шеврон, тап ≥44px R-41); без href — статичный текст. */
+ *  H13.1: при наличии href имя — ссылка на историю упражнения (через
+ *  AnalysisLink — пунктир + шеврон, тап ≥44px R-41); без href — статичный текст. */
 function ComparisonRow({
   c,
   href,
@@ -233,13 +260,9 @@ function ComparisonRow({
       )}
     >
       {href ? (
-        <Link
-          href={href}
-          className="text-foreground hover:text-primary focus-visible:ring-ring -my-1 inline-flex min-h-11 min-w-0 flex-1 items-center gap-1 rounded-sm text-sm font-medium underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2"
-        >
+        <AnalysisLink href={href} className="min-w-0 flex-1 text-sm font-medium">
           <span className="min-w-0 truncate">{c.name}</span>
-          <ChevronRight className="size-3.5 shrink-0 opacity-60" />
-        </Link>
+        </AnalysisLink>
       ) : (
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {c.name}
@@ -275,13 +298,9 @@ function Aspect({
     <div>
       <dt className="flex items-center justify-between gap-2">
         {href ? (
-          <Link
-            href={href}
-            className="text-foreground hover:text-primary focus-visible:ring-ring -my-1 inline-flex min-h-11 items-center gap-1 rounded-sm text-sm font-semibold tracking-tight underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2"
-          >
+          <AnalysisLink href={href} className="text-sm font-semibold tracking-tight">
             {title}
-            <ChevronRight className="size-3.5 shrink-0 opacity-60" />
-          </Link>
+          </AnalysisLink>
         ) : (
           <span className="text-sm font-semibold tracking-tight">{title}</span>
         )}
