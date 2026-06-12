@@ -1,6 +1,6 @@
 # Fitness SaaS — НЕПРЕРЫВНЫЙ САМОУЛУЧШАЮЩИЙСЯ ПЛАН (CONTINUOUS-PLAN)
 
-> **ВЕРСИЯ ПЛАНА: v1.1 — 2026-06-12 (refactor) · exec18 H6.5 (аффорданс «тапни мышцу» + пульс — H6 закрыт)**
+> **ВЕРСИЯ ПЛАНА: v1.1 — 2026-06-12 (refactor) · exec19 H8.1 (недельный разбор «по запросу» на /stats live — H8 стартовал)**
 >
 > Это драйвер-файл самоулучшающегося цикла (две рутины по расписанию):
 > - **EXECUTOR** `fitness-continuous-executor` (каждые 10 мин) — берёт следующую `[ ]` из §5★, делает ОДИН связный слайс до зелёного прод-рантайма.
@@ -107,7 +107,7 @@ HARD-STOP = 2026-06-15 01:26 MSK
 
 ### H8 — «Разбор недели» от тренера (микроцикл) — столп 1
 *Главный жанр живого тренера — итог недели план vs факт; в плане отсутствовал. MicroCycle/CycleNote уже в домене, weekly-агрегаты уже считаются для аватара.*
-- [ ] H8.1 По запросу: кнопка на /stats → DeepSeek получает агрегаты ISO-недели (объём по группам из heat-домена, PR, число сессий, CycleNote) + ту же неделю −1 для сравнения; ответ в жанре «итог недели от тренера: что выросло, что просело, фокус на следующую». Гейт на проде: нажать → разбор со сравнением с прошлой неделей и конкретным фокусом.
+- [x] H8.1 По запросу: кнопка на /stats → DeepSeek получает агрегаты ISO-недели (объём по группам из heat-домена, PR, число сессий, CycleNote) + ту же неделю −1 для сравнения; ответ в жанре «итог недели от тренера: что выросло, что просело, фокус на следующую». **ЗАКРЫТ** (см. §7 v1.1-exec19): кнопка «Разобрать неделю» на /stats → СИНХРОННЫЙ server action `requestWeeklyReview` (не ai_jobs/enum — матчит «по запросу», 0 миграций; weekly_review job kind отложен в H8.2) собирает агрегаты этой и прошлой ISO-недели (сессии/тоннаж/role-взвешенный объём по группам + CycleNote) через `weeklyReviewData` (tz-aware bucket двух недель), чистая `formatWeeklyReviewBlock` ([weekly-review.ts](lib/ai/weekly-review.ts), 7 тестов) строит промпт, DeepSeek через СУЩЕСТВУЮЩИЙ structured-путь (`generateTrainerResponse`) в circuit breaker + 45s timeout (R-32/33), reuse `trainerSchema`+`TrainerResultCard`. Live-проде: засидил this-week 1600 vs prev-week 1050 тоннаж → ответ «Тоннаж вырос на 52% (1600 vs 1050 кг·повт)» (точные числа обеих недель → сравнение реально дошло), muscleBalanceNote «грудь 1600 нагружена / спина·ноги 0 недогружены», фокус «Добавить 1 сессию на ноги и спину: присед 3×10…». 0 console-ошибок.
 - [ ] H8.2 (после PASS H8.1) Авто-генерация по закрытии ISO-недели через ai_jobs + node-cron worker (R-31), показ на /stats или /dashboard. Гейт на проде: после завершения недели с ≥2 тренировками обзор появляется сам и ссылается минимум на одно сравнение с прошлой неделей и один фактор жизни.
 - [ ] H8.3 (когда на проде накопится ≥2 недель данных сна) Паттерн-инсайт сон/питание→результат: дневные пары «сон/калории ↔ тоннаж/качество сессии» в сопоставимом табличном виде в контексте недельного обзора. Гейт: обзор содержит хотя бы одно утверждение вида «в дни после X наблюдается Y» с числами атлета.
 
@@ -139,7 +139,8 @@ HARD-STOP = 2026-06-15 01:26 MSK
 
 ## §6. ПРОГРЕСС (IN-FLIGHT трекер)
 
-- IN-FLIGHT: нет. **NEXT: H8.1** — «Разбор недели» от тренера по запросу: кнопка на /stats → DeepSeek получает агрегаты ISO-недели (объём по группам из heat-домена, PR, число сессий, CycleNote) + ту же неделю −1 для сравнения; ответ в жанре «итог недели от тренера». (H6 закрыт целиком.)
+- IN-FLIGHT: нет. **NEXT: H8.2** — авто-генерация недельного обзора по закрытии ISO-недели через ai_jobs + node-cron (R-31): нужен новый `weekly_review` aiJobKind (enum-миграция — pg_dump перед migrate), enqueue-cron по закрытии недели, переиспользовать `weeklyReviewData`+`formatWeeklyReviewBlock`+`WEEKLY_SYSTEM_PROMPT` (всё из H8.1) в processJob, показ на /stats или /dashboard. Гейт: после недели с ≥2 тренировками обзор появляется сам со сравнением с прошлой неделей.
+- Закрыто: **H8.1** (недельный разбор «по запросу»: кнопка «Разобрать неделю» на /stats → синхронный server action собирает агрегаты этой+прошлой ISO-недели через `weeklyReviewData`, чистая `formatWeeklyReviewBlock` 7 тестов, DeepSeek через существующий structured-путь в circuit breaker+45s, reuse trainerSchema/TrainerResultCard; live — ответ назвал точные «1600 vs 1050 кг·повт +52%» обеих недель + фокус на след. неделю, 0 ошибок, 2026-06-12). 0 миграций — weekly_review kind отложен в H8.2.
 - Закрыто: **H6.5** (аффорданс интерактивности: одноразовая подсказка «тапни мышцу» + микро-пульс самой горячей группы до первого тапа; persist в localStorage, prefers-reduced-motion через motion-safe; пульс на легенд-чипе DOM, не 3D-emissive; чистая `hottestMuscleKey` 7 тестов; live-доказано — fresh→подсказка+пульс «Грудь», тап→исчезла, reload→не воскресла, 2026-06-12). **H6 ЗАКРЫТ ЦЕЛИКОМ.**
 - Закрыто: **H6.4** (забытые мышцы: новый all-time `muscleLastTrained` отличает «2 недели» от «никогда»; чистая `forgottenWeeks`/`forgottenLabel`; 3D-каркас (wireframe) + снежинка-бейдж «N недель без нагрузки» в панели+fallback, R-41 не только цвет; live-доказано — квадрицепс 20д→«2 недели», грудь сегодня→без бейджа, икры никогда→без бейджа, 2026-06-12).
 - Закрыто: **H6.3** (легенда-чипы под аватаром по нагреву: 3 корзины перегруз/в работе/недогрет; чип = тот же дрилл, что тап по 3D-мышце, тап-зона 56px R-41; подпись-политика «heat = силовые+круговые, кардио вне»; live-доказано — тап чипа «Квадрицепс» → панель квадрицепса, 2026-06-12).
@@ -152,6 +153,31 @@ HARD-STOP = 2026-06-15 01:26 MSK
 ---
 
 ## §7. ЛОГ (append-only — НИКОГДА не переписывать/не удалять прошлое; новое сверху)
+
+### v1.1-exec19 — 2026-06-12 05:38 MSK — H8.1 «Разбор недели» по запросу на /stats → **ЗЕЛЁНО live** (H8.1 ЗАКРЫТ)
+Девятнадцатый executor-тик. Первая задача H8 (столп 1 — главный жанр живого тренера: итог недели). TDD, минимальный диф (4 new + 3 edit), **без миграции БД**, существующий per-workout/digest-путь не тронут (столп 4).
+
+**РЕШЕНИЕ (зафиксировано — синхронный action, не ai_jobs):** H8.1 = «по запросу». Реализовано как СИНХРОННЫЙ server action `requestWeeklyReview` (как H5.8 follow-up через /api/ai/coach), а НЕ через ai_jobs+enum. Почему: (1) добавить `weekly_review` в pgEnum `ai_job_kind` = DB-миграция (ALTER TYPE ADD VALUE) на проде — оправдана для H8.2 (авто-генерация по cron), но для «нажал-получил» это YAGNI (R-05); (2) синхронный путь даёт мгновенный результат без поллинга, обёрнут в тот же `withCircuitBreaker("weekly-llm")` + `AbortSignal.timeout(45_000)` (R-32/33). weekly_review aiJobKind + enum-миграция СОЗНАТЕЛЬНО отложены в H8.2, где они реально нужны.
+
+**Переиспользование (R-04, 0 нового LLM-контракта):** `generateTrainerResponse` (тот же structured-путь, что post_workout) + `trainerSchema` + `TrainerResultCard` — без новой схемы/карточки. Поля репрофилированы под недельный жанр промптом `WEEKLY_SYSTEM_PROMPT`: overallScore=оценка недели, whatWorked=«что выросло», nextSessionFocus=фокус на след. неделю, recommendations=недельный план, muscleBalanceNote=самая нагруженная/недогруженная группа недели, recovery/nutrition.score=null (сон/КБЖУ в этот разбор не подаются — промпт велит null), exerciseComparisons=[] (недельный обзор не разбирает отдельные подходы).
+
+**Что сделано (4 new + 3 edit):**
+- NEW [weekly-review.ts](lib/ai/weekly-review.ts) — чистая (R-7, импорт только `muscleLabelRu`) `formatWeeklyReviewBlock(WeeklyReviewInput)` → markdown «# Итог недели» (эта vs прошлая: сессии/тоннаж +дельта% с guard деления-на-0/NaN, тоннаж по группам обеих недель top-8, заметка недели). + [weekly-review.test.ts](lib/ai/weekly-review.test.ts) (7 тестов: дельта, нулевая прошлая→фолбэк без NaN, нулевая текущая→разгрузка, заметка вкл/выкл, бюджет групп). **Импорт относительный** (`../domain/...`) — vitest без `@/`-alias (поймал на RED).
+- NEW [weekly-review.ts](server/actions/weekly-review.ts) (action) — requireUser+tz→`weeklyReviewData`→`formatWeeklyReviewBlock`→circuit breaker+timeout→`{ok,data}`; fail-soft (R-10): CircuitOpen/Timeout/любая ошибка→`{ok:false,error}`; guard `isAiConfigured` + «нет сессий за 2 недели».
+- NEW [WeeklyReviewButton.tsx](components/stats/WeeklyReviewButton.tsx) — client, 4 состояния (R-37): idle/loading/error/loaded(TrainerResultCard).
+- EDIT [stats.repo.ts](lib/repos/stats.repo.ts) `weeklyReviewData(userId, now, tz)` — 2 grouped query (totals + muscle×role) bucket по tz-week (reuse паттерн weeklyVolume), выбор weekStart/prevWeekStart по строке-ключу, loose 21д lower-bound; cycleNote по `isoWeekKey(now)`. EDIT [prompts.ts](lib/ai/prompts.ts) `WEEKLY_SYSTEM_PROMPT`. EDIT [stats/page.tsx](app/(app)/stats/page.tsx) монтаж кнопки под PeriodPills.
+
+**ГЕЙТ:** TDD RED (модуль/alias) → GREEN. typecheck ✓ / lint ✓ / test 467 pass ✓ (было 460, +7) / build EXIT=0. Push `0ae5a2a..7896d91 → master`, lefthook (typecheck+lint) зелёный. Deploy: prod tree чист → reset+build+pm2 reload (fitness-saas + cron) ✓. repo-e2e/integration skipped (no docker) → опора на live-прод.
+
+**РАНТАЙМ-ВЕРИФИКАЦИЯ (live, https://app.lead-generator.ru, прод-БД, реальный SSR /stats + playwright restore):** issue-session + throwaway seed (scp `_seed-h81.mjs`, динамически берёт chest-primary упр «Жим лёжа со штангой») засидил тест-юзеру ДВЕ completed-силовые: this-week 4×(80×5)=**1600** тоннаж, prev-week (−9д) 3×(70×5)=**1050** тоннаж → реальная this-vs-prev дельта. Шаги как реальный юзер:
+1. /stats → кнопка «Разобрать неделю» + заголовок «Разбор недели от тренера» видны (buttonFound+headingFound).
+2. Клик → ~15с синхронный DeepSeek → `TrainerResultCard` отрендерилась («Оценка тренера 35/100»). **Сравнение с прошлой неделей:** «Тоннаж вырос на 52% (**1600 vs 1050** кг·повт)» — ОБА засиженных числа в ответе → двунедельная агрегация + formatWeeklyReviewBlock реально дошли до промпта, не генерик. whatWorked «грудь выросла с 1050 до 1600». muscleBalanceNote «грудь 1600 нагружена; спина·ноги·задние дельты 0 недогружены». **Конкретный фокус на след. неделю:** «Добавить 1 сессию на ноги и спину: присед 3×10 и тяга штанги в наклоне 3×8». recovery/nutrition = «нет данных» (null, как промпт велит). **Гейт H8.1 (сравнение с прошлой неделей + конкретный фокус) пройден.**
+3. Desktop + mobile (375×667) скрины сняты. 0 console-ошибок (1 INFO про PWA-баннер). Браузер закрыт (`browser_close`).
+Тест-юзер очищен (`issue-session.mjs --cleanup` → FK cascade снёс 2 тренировки+подходы), seed-скрипт удалён с прода и локально. Cyrillic-trap ловился многократно на Edit/Read (Портфolio←Latin) — исправлял по ошибке tool (память `fitness-cyrillic-path-write-trap`). Коммит через `-F` temp-файл (память `fitness-ps-commit-heredoc-trap`).
+
+**Заметка context7:** слайс не вводит нового API библиотек — reuse `generateText`-обёртки (`generateTrainerResponse`), Drizzle `date_trunc`/`AT TIME ZONE`-идиом (как weeklyVolume), `withCircuitBreaker`, React `useState`, стандартный `AbortSignal.timeout`. Опора на рабочие примеры репо (SKILL fallback).
+
+**NEXT:** H8.2 — авто-генерация по закрытии ISO-недели через ai_jobs + node-cron (R-31): новый `weekly_review` aiJobKind (enum-миграция, pg_dump перед migrate), enqueue-cron, reuse `weeklyReviewData`+`formatWeeklyReviewBlock`+`WEEKLY_SYSTEM_PROMPT` в processJob, показ на /stats или /dashboard. Гейт: после недели с ≥2 тренировками обзор появляется сам со сравнением с прошлой неделей.
 
 ### v1.1-exec18 — 2026-06-12 05:18 MSK — H6.5 аффорданс «тапни мышцу» + микро-пульс горячей группы → **ЗЕЛЁНО live** (H6.5 ЗАКРЫТ; H6 ЗАКРЫТ ЦЕЛИКОМ)
 Восемнадцатый executor-тик. Последняя задача H6 (столп 2 — делает 3D-интерактив заметным новичку; столп 3 — очевидное следующее действие). TDD, минимальный диф (2 new + 2 edit), без миграции БД, selection/heat/wireframe (40c7da1, H6.4) не тронуты (столп 4).
