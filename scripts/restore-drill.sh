@@ -7,60 +7,68 @@
 # scratch-БД на ТОМ ЖЕ Postgres, сверяет COUNT(*) ключевых таблиц со снимком
 # прода и ВСЕГДА дропает scratch (trap EXIT). Exit 0 = counts совпали.
 #
-# Ничего на проде не меняет: читает прод только SELECT COUNT(*), пишет лишь в
-# отдельную fitness_restore_check. Запускать вручную (НЕ в cron) на прод-боксе:
-#   bash /opt/fitness-saas/scripts/restore-drill.sh
+# ── ТРЕБУЕТ SUPERUSER ───────────────────────────────────────────────────────
+# Дамп содержит `CREATE EXTENSION vector` (pgvector) + vector-колонки, а pgvector
+# НЕ trusted → его создание требует superuser. Плюс роль приложения `fitness` не
+# имеет CREATEDB. Поэтому верный (и единственный рабочий) способ — запуск ОТ
+# суперюзера postgres через peer-auth (без паролей/URL):
+#
+#     sudo -u postgres bash /opt/fitness-saas/scripts/restore-drill.sh [DUMP.gz]
+#
+# Прод не меняется: читаем прод (fitness_saas) только SELECT COUNT(*); пишем лишь
+# в отдельную fitness_restore_check, которая всегда дропается. Запускать вручную
+# (НЕ в cron).
+#
+# Дамп лежит в домашней папке app-юзера (~/backups у i48ptgvnis); postgres-юзер
+# обычно НЕ имеет туда доступа на чтение. Если дефолтный путь не читается —
+# скопируйте дамп в общедоступное место и передайте путём аргументом:
+#     cp ~/backups/fitness-2026-06-12.sql.gz /tmp/ && \
+#     sudo -u postgres bash scripts/restore-drill.sh /tmp/fitness-2026-06-12.sql.gz
 #
 set -euo pipefail
 
-ENV_FILE="${ENV_FILE:-/opt/fitness-saas/.env.production}"
-BACKUP_DIR="${BACKUP_DIR:-$HOME/backups}"
+PROD_DB="${PROD_DB:-fitness_saas}"
 SCRATCH_DB="fitness_restore_check"
+BACKUP_DIR="${BACKUP_DIR:-/home/i48ptgvnis/backups}"
 TABLES=(users workouts workout_sets exercise_notes)
 
 fail() { echo "restore-drill: $1" >&2; exit 1; }
 
-# --- DATABASE_URL из .env.production (снимаем кавычки/возможный CR) ----------
-[ -f "$ENV_FILE" ] || fail "env not found: $ENV_FILE"
-DATABASE_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
-DATABASE_URL="${DATABASE_URL%$'\r'}"
-DATABASE_URL="${DATABASE_URL%\"}"; DATABASE_URL="${DATABASE_URL#\"}"
-DATABASE_URL="${DATABASE_URL%\'}"; DATABASE_URL="${DATABASE_URL#\'}"
-[ -n "$DATABASE_URL" ] || fail "DATABASE_URL empty in $ENV_FILE"
+# Все привилегированные операции — через peer-auth от текущего OS-юзера.
+# При запуске `sudo -u postgres …` это суперюзер postgres (createdb + extension).
+command -v psql   >/dev/null 2>&1 || fail "psql not found in PATH"
+command -v gunzip >/dev/null 2>&1 || fail "gunzip not found in PATH"
 
-# --- последний дамп ---------------------------------------------------------
-LATEST="$(ls -1 "$BACKUP_DIR"/fitness-*.sql.gz 2>/dev/null | sort | tail -1)"
-[ -n "$LATEST" ] || fail "no backup in $BACKUP_DIR (run /api/cron/backup-db first)"
+# --- выбор дампа: аргумент $1, иначе последний в BACKUP_DIR -------------------
+if [ "${1:-}" != "" ]; then
+  LATEST="$1"
+else
+  LATEST="$(ls -1 "$BACKUP_DIR"/fitness-*.sql.gz 2>/dev/null | sort | tail -1 || true)"
+fi
+[ -n "${LATEST:-}" ] || fail "no backup found (pass DUMP path as arg, or set BACKUP_DIR; run /api/cron/backup-db first)"
+[ -r "$LATEST" ] || fail "dump not readable by $(id -un): $LATEST — copy it somewhere world-readable (e.g. /tmp) and pass that path"
 echo "restore-drill: latest dump = $LATEST"
-
-# --- ADMIN_URL (db→postgres) + SCRATCH_URL (db→scratch), сохранив ?query -----
-url_noq="${DATABASE_URL%%\?*}"
-qs=""
-[ "$url_noq" != "$DATABASE_URL" ] && qs="?${DATABASE_URL#*\?}"
-BASE="${url_noq%/*}"            # postgres://user:pass@host:port
-ADMIN_URL="${BASE}/postgres${qs}"
-SCRATCH_URL="${BASE}/${SCRATCH_DB}${qs}"
 
 # --- scratch дропается ВСЕГДА (даже при падении restore) ---------------------
 cleanup() {
-  psql "$ADMIN_URL" -v ON_ERROR_STOP=0 \
+  psql -d postgres -v ON_ERROR_STOP=0 \
     -c "DROP DATABASE IF EXISTS ${SCRATCH_DB};" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 echo "restore-drill: (re)creating scratch DB ${SCRATCH_DB}"
-psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q -c "DROP DATABASE IF EXISTS ${SCRATCH_DB};"
-psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE ${SCRATCH_DB};"
+psql -d postgres -v ON_ERROR_STOP=1 -q -c "DROP DATABASE IF EXISTS ${SCRATCH_DB};"
+psql -d postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE ${SCRATCH_DB};"
 
 echo "restore-drill: restoring dump into scratch…"
-gunzip -c "$LATEST" | psql "$SCRATCH_URL" -v ON_ERROR_STOP=1 -q >/dev/null
+gunzip -c "$LATEST" | psql -d "$SCRATCH_DB" -v ON_ERROR_STOP=1 -q >/dev/null
 
 # --- сверка COUNT(*) prod vs scratch ----------------------------------------
 echo "restore-drill: comparing row counts (prod vs restored)…"
 mismatch=0
 for t in "${TABLES[@]}"; do
-  prod="$(psql "$DATABASE_URL" -tAc "SELECT COUNT(*) FROM \"$t\";")"
-  scratch="$(psql "$SCRATCH_URL" -tAc "SELECT COUNT(*) FROM \"$t\";")"
+  prod="$(psql -d "$PROD_DB" -tAc "SELECT COUNT(*) FROM \"$t\";")"
+  scratch="$(psql -d "$SCRATCH_DB" -tAc "SELECT COUNT(*) FROM \"$t\";")"
   if [ "$prod" = "$scratch" ]; then
     printf '  OK   %-16s prod=%s scratch=%s\n' "$t" "$prod" "$scratch"
   else
