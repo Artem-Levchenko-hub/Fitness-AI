@@ -33,9 +33,12 @@ type JobResponse = {
 export function TrainerJobPoller({
   jobId,
   onRetry,
+  linkExercises,
 }: {
   jobId: string;
   onRetry?: () => Promise<{ jobId: string }>;
+  /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
+  linkExercises?: Record<string, string>;
 }) {
   const [currentJobId, setCurrentJobId] = useState(jobId);
   const [job, setJob] = useState<JobResponse | null>(null);
@@ -131,7 +134,12 @@ export function TrainerJobPoller({
     );
   }
 
-  return <TrainerResultCard data={job.analysis.resultJson} />;
+  return (
+    <TrainerResultCard
+      data={job.analysis.resultJson}
+      linkExercises={linkExercises}
+    />
+  );
 }
 
 function LoadingState({ text }: { text: string }) {

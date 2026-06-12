@@ -12,6 +12,7 @@ import { test, expect } from "@playwright/test";
  */
 
 const trainerWorkoutId = process.env.E2E_TRAINER_WORKOUT_ID;
+const exerciseId = process.env.E2E_EXERCISE_ID;
 const friendId = process.env.E2E_FRIEND_ID;
 const circuitId = process.env.E2E_CIRCUIT_ID;
 const cardioId = process.env.E2E_CARDIO_ID;
@@ -117,6 +118,16 @@ test("разбор завершённой тренировки виден (Train
   // «Оценка тренера» — eyebrow карточки разбора (TrainerResultCard), есть только
   // когда сохранённый resultJson отрендерился, а не поллер/ошибка.
   await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
+
+  // H13.1 — строка прогресса упражнения на своём разборе кликабельна: имя
+  // упражнения → ссылка на историю /exercises/<id> (резолв по имени из этой
+  // тренировки). Тап ведёт на историю подходов («что тогда было»).
+  if (exerciseId) {
+    const exLink = page.locator(`a[href="/exercises/${exerciseId}"]`).first();
+    await expect(exLink).toBeVisible();
+    await exLink.click();
+    await expect(page).toHaveURL(new RegExp(`/exercises/${exerciseId}`));
+  }
 });
 
 test("/workouts: три формата (силовая+круговая+кардио) вперемешку, каждый открывается в свой detail", async ({

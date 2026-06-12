@@ -12,6 +12,7 @@ import {
 import { TrainerStreamConsumer } from "@/components/trainer/TrainerStreamConsumer";
 import { ShareAnalysisButton } from "@/components/trainer/ShareAnalysisButton";
 import { AskTrainerPanel } from "@/components/trainer/AskTrainerPanel";
+import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { renderTrainerMarkdown, trainerSchema } from "@/lib/ai/trainer-parse";
 import { db } from "@/db/client";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -122,6 +123,7 @@ export default async function TrainerPage({ params }: Props) {
         <>
           <TrainerResultCard
             data={savedAnalysis.resultJson as TrainerResultData}
+            linkExercises={buildExerciseLinkMap(workout.exercises)}
           />
           <ShareAnalysisButton
             analysisId={savedAnalysis.id}
@@ -134,10 +136,16 @@ export default async function TrainerPage({ params }: Props) {
         </>
       ) : latestJob ? (
         // cron уже обрабатывает (или succeeded-legacy) — поллим как fallback.
-        <TrainerJobPoller jobId={latestJob.id} />
+        <TrainerJobPoller
+          jobId={latestJob.id}
+          linkExercises={buildExerciseLinkMap(workout.exercises)}
+        />
       ) : (
         // Свежий on_demand — генерируем live прямо в запросе (F8-B run-2).
-        <TrainerStreamConsumer workoutId={id} />
+        <TrainerStreamConsumer
+          workoutId={id}
+          linkExercises={buildExerciseLinkMap(workout.exercises)}
+        />
       )}
 
       <p className="text-muted-foreground/70 mt-6 px-1 text-xs">

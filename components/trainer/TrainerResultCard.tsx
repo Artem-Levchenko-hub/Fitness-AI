@@ -1,5 +1,7 @@
-import { Sparkles } from "lucide-react";
+import { ChevronRight, Sparkles } from "lucide-react";
+import Link from "next/link";
 
+import { resolveExerciseHref } from "@/lib/ai/exercise-links";
 import type { TrendStatus } from "@/lib/domain/progression/trend";
 import { TREND_TONE } from "@/lib/ui/trend-tone";
 import { cn } from "@/lib/utils/index";
@@ -40,9 +42,18 @@ function scoreColor(score: number | null): string {
 export function TrainerResultCard({
   data,
   className,
+  linkExercises,
 }: {
   data: TrainerResultData;
   className?: string;
+  /**
+   * H13.1 — карта «имя упражнения → exerciseId» из РАЗБИРАЕМОЙ тренировки.
+   * Когда задана, строки прогресса становятся ссылками на историю упражнения
+   * (своя тренировка). Default off (undefined) → строки статичны: share-view
+   * `/a/[token]` и разбор друга НЕ передают карту (ссылка увела бы в чужую
+   * историю — прецедент H6.2b `linkExercises`).
+   */
+  linkExercises?: Record<string, string>;
 }) {
   return (
     <div
@@ -133,7 +144,11 @@ export function TrainerResultCard({
           </h3>
           <ul className="mt-3 space-y-1.5">
             {data.exerciseComparisons.map((c, i) => (
-              <ComparisonRow key={i} c={c} />
+              <ComparisonRow
+                key={i}
+                c={c}
+                href={resolveExerciseHref(c.name, linkExercises)}
+              />
             ))}
           </ul>
         </section>
@@ -180,8 +195,16 @@ export function TrainerResultCard({
 }
 
 /** Строка сравнения упражнения: рост зелёным, регресс мягко-красным,
- *  стагнация серым. «60×5 → 60×6» с подсветкой текущего сета. */
-function ComparisonRow({ c }: { c: ExerciseComparison }) {
+ *  стагнация серым. «60×5 → 60×6» с подсветкой текущего сета.
+ *  H13.1: при наличии href имя — ссылка на историю упражнения (пунктир-
+ *  подчёркивание + шеврон, тап ≥44px R-41); без href — статичный текст. */
+function ComparisonRow({
+  c,
+  href,
+}: {
+  c: ExerciseComparison;
+  href: string | null;
+}) {
   const tone = TREND_TONE[c.status];
   return (
     <li
@@ -190,9 +213,19 @@ function ComparisonRow({ c }: { c: ExerciseComparison }) {
         tone.bg,
       )}
     >
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">
-        {c.name}
-      </span>
+      {href ? (
+        <Link
+          href={href}
+          className="text-foreground hover:text-primary focus-visible:ring-ring -my-1 inline-flex min-h-11 min-w-0 flex-1 items-center gap-1 rounded-sm text-sm font-medium underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2"
+        >
+          <span className="min-w-0 truncate">{c.name}</span>
+          <ChevronRight className="size-3.5 shrink-0 opacity-60" />
+        </Link>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {c.name}
+        </span>
+      )}
       <span className="tabular flex shrink-0 items-center gap-1.5 text-sm">
         {c.prevTopSet ? (
           <span className="text-muted-foreground">{c.prevTopSet} →</span>

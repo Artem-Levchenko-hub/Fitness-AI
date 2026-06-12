@@ -18,7 +18,14 @@ type Phase = "streaming" | "loading-result" | "done" | "error";
  *  модели) — НЕ рендерим его как текст, только индикатор прогресса по факту
  *  поступления байт. По завершении — перечитываем сохранённый structured
  *  разбор (GET /api/ai/trainer/latest) и показываем цветные дельты F4. */
-export function TrainerStreamConsumer({ workoutId }: { workoutId: string }) {
+export function TrainerStreamConsumer({
+  workoutId,
+  linkExercises,
+}: {
+  workoutId: string;
+  /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
+  linkExercises?: Record<string, string>;
+}) {
   const [phase, setPhase] = useState<Phase>("streaming");
   const [result, setResult] = useState<TrainerResultData | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -133,7 +140,7 @@ export function TrainerStreamConsumer({ workoutId }: { workoutId: string }) {
   }, [workoutId, attempt]);
 
   if (phase === "done" && result) {
-    return <TrainerResultCard data={result} />;
+    return <TrainerResultCard data={result} linkExercises={linkExercises} />;
   }
 
   if (phase === "error") {

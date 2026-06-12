@@ -68,12 +68,15 @@ try {
 
     // Системное упражнение (owner_user_id IS NULL) для строки тренировки.
     const exRows = await sql`
-      select id from exercises
+      select id, name_ru from exercises
       where owner_user_id is null
       order by (slug = 'barbell-bench-press') desc
       limit 1`;
     if (!exRows[0]) throw new Error("нет системных упражнений на проде");
     const exerciseId = exRows[0].id;
+    // H13.1: имя строки разбора ДОЛЖНО совпадать с nameRu упражнения, иначе
+    // ссылка «строка → /exercises/[id]» не зарезолвится (резолв по имени).
+    const exerciseNameRu = exRows[0].name_ru;
 
     // Идемпотентность: снести прошлую фикстуру по маркеру (cascade → sets+analysis).
     await sql`
@@ -116,7 +119,7 @@ try {
       nutritionContext: { score: null, comment: "КБЖУ не записано." },
       exerciseComparisons: [
         {
-          name: "Жим лёжа",
+          name: exerciseNameRu,
           prevTopSet: "80×5",
           curTopSet: "82.5×5",
           deltaReps: 0,
@@ -203,6 +206,7 @@ try {
     console.log("USER_ID=" + verifyId);
     console.log("FRIEND_ID=" + friendId);
     console.log("WORKOUT_ID=" + workoutId);
+    console.log("EXERCISE_ID=" + exerciseId);
     console.log("CIRCUIT_ID=" + circuitId);
     console.log("CARDIO_ID=" + cardioId);
     console.log("REFRESH_TOKEN=" + refresh);
