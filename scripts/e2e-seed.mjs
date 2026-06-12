@@ -173,6 +173,31 @@ try {
                 ${circuitFinished}, false)`;
     }
 
+    // H13.4 — сохранённый structured-разбор круговой (форма TrainerResponse,
+    // проходит trainerSchema). recovery/nutrition score != null → на своём
+    // разборе круговой заголовки факторов жизни кликабельны (/sleep, /nutrition),
+    // как на /workouts/<id>. exerciseComparisons=[] — реальность круговой
+    // (prompts.ts:78). FK circuit_workout_id cascade → перезасев чист.
+    const circuitResultJson = {
+      overallScore: 74,
+      trainingQuality: { score: 76, comment: "Плотный темп, паузы выдержаны." },
+      recoveryContext: { score: 72, comment: "Сон в норме за последние дни." },
+      nutritionContext: { score: 65, comment: "Белок в норме, дефицит калорий." },
+      exerciseComparisons: [],
+      recommendations: ["Добавь раунд при том же отдыхе на следующей."],
+      nextSessionFocus: "4 раунда вместо 3",
+      missingDataAdvice: "Записывай пульс — разбор станет точнее.",
+      motivation: "Все раунды без пропусков — хорошая выносливость.",
+      whatWorked: "Темп держался ровным от первого до последнего раунда.",
+      followUpQuestion: "Как чувствовалось дыхание к третьему раунду?",
+    };
+    await sql`
+      insert into ai_analyses (id, user_id, circuit_workout_id, content,
+                               result_json, model_version)
+      values (${randomUUID()}, ${verifyId}, ${circuitId},
+              '# Разбор круговой (74/100)\n\nВсе раунды без пропусков.',
+              ${sql.json(circuitResultJson)}, 'seed-e2e')`;
+
     // H7.4 — кардио (третий формат) ПОЗЖЕ силовой → desc-фид: кардио, силовая,
     // круговая — три формата в одном хронологическом списке.
     await sql`

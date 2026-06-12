@@ -175,7 +175,19 @@ function AnalysisCard({
     // resultJson → markdown-фолбэк.
     const parsed = trainerSchema.safeParse(analysis.resultJson);
     if (parsed.success) {
-      return <TrainerResultCard data={parsed.data as TrainerResultData} />;
+      // H13.4 — на своём разборе круговой заголовки учтённых факторов жизни
+      // кликабельны (recovery → /sleep, nutrition → /nutrition): circuit-контекст
+      // подаёт сон+КБЖУ (context-builder, circuit_post_workout), граница
+      // «score null → статика» (R-37) держится в resolveLifeFactorHref.
+      // exerciseComparisons у круговой всегда [] (prompts.ts:78 «пусто если не
+      // силовая») → строк-ссылок упражнений нет, linkExercises не нужен (R-05).
+      // own-data (getCircuitForUser фильтрует userId); share /a/[token] статика.
+      return (
+        <TrainerResultCard
+          data={parsed.data as TrainerResultData}
+          linkLifeFactors
+        />
+      );
     }
     return (
       <section className="bg-card border-border rounded-2xl border p-5">

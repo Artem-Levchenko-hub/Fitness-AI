@@ -163,6 +163,25 @@ test("H13.4 — разбор на детали /workouts/[id] кликабеле
   }
 });
 
+test("H13.4 — разбор круговой /circuits/[id] линкует факторы жизни (parity)", async ({
+  page,
+}) => {
+  test.skip(
+    !circuitId,
+    "E2E_CIRCUIT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H13.4 — сохранённый разбор круговой на /circuits/<id> кликабелен идентично
+  // силовой: recovery score 72 → «Восстановление (сон)» = /sleep, nutrition 65
+  // → «Питание (КБЖУ)» = /nutrition. exerciseComparisons=[] (реальность
+  // круговой) → строк упражнений нет, граница «нет данных → статика» держится
+  // юнит-тестом resolveLifeFactorHref. own-data; share /a/[token] статика.
+  await page.goto(`/circuits/${circuitId}`);
+  await expect(page).toHaveURL(new RegExp(`/circuits/${circuitId}`));
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
+  await expect(page.locator('a[href="/sleep"]')).toBeVisible();
+  await expect(page.locator('a[href="/nutrition"]')).toBeVisible();
+});
+
 test("/workouts: три формата (силовая+круговая+кардио) вперемешку, каждый открывается в свой detail", async ({
   page,
 }) => {
