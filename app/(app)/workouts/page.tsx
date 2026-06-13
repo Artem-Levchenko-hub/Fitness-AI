@@ -2,8 +2,6 @@ import { Activity, Dumbbell } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { buildResumes } from "@/components/dashboard/active-resumes";
-import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { Button } from "@/components/ui/button";
 import {
   buildHistory,
@@ -13,32 +11,18 @@ import {
 import { requireUser } from "@/lib/auth/require-user";
 import { addDaysIso, isoWeekStartIso } from "@/lib/datetime/iso-week";
 import { getUserProfile } from "@/lib/repos/body.repo";
-import { getActiveCardioId, listRecentCardio } from "@/lib/repos/cardio.repo";
-import { getActiveCircuitId, listCircuits } from "@/lib/repos/circuits.repo";
-import {
-  getActiveWorkoutId,
-  listRecentWorkouts,
-} from "@/lib/repos/workouts.repo";
+import { listRecentCardio } from "@/lib/repos/cardio.repo";
+import { listCircuits } from "@/lib/repos/circuits.repo";
+import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "Тренировки" };
 
 export default async function WorkoutsPage() {
   const user = await requireUser();
-  const [
-    strength,
-    circuits,
-    cardio,
-    activeId,
-    activeCircuitId,
-    activeCardioId,
-    profile,
-  ] = await Promise.all([
+  const [strength, circuits, cardio, profile] = await Promise.all([
     listRecentWorkouts(user.id, 60),
     listCircuits(user.id, 60),
     listRecentCardio(user.id, 60),
-    getActiveWorkoutId(user.id),
-    getActiveCircuitId(user.id),
-    getActiveCardioId(user.id),
     getUserProfile(user.id),
   ]);
 
@@ -48,10 +32,8 @@ export default async function WorkoutsPage() {
   const items = buildHistory(strength, circuits, cardio);
   const groups = groupByWeek(items, tz);
 
-  // Единый поток: активная сессия любого формата (силовая/круговая/кардио) —
-  // один общий ResumeBanner, как на дашборде. /workouts — единственный экран
-  // истории; отдельных вкладок /circuits·/cardio больше нет (редирект сюда).
-  const resumes = buildResumes({ activeId, activeCircuitId, activeCardioId });
+  // Возобновление активной сессии — теперь ГЛОБАЛЬНАЯ полоса (GlobalResumeBar
+  // в (app)/layout, H12.4), видна с любого экрана; page-level ResumeBanner убран.
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -63,19 +45,6 @@ export default async function WorkoutsPage() {
           Тренировки
         </h1>
       </header>
-
-      {resumes.length > 0 ? (
-        <div className="mb-6 space-y-3">
-          {resumes.map((r) => (
-            <ResumeBanner
-              key={r.href}
-              href={r.href}
-              label={r.label}
-              cancel={r.cancel}
-            />
-          ))}
-        </div>
-      ) : null}
 
       {items.length === 0 ? (
         <EmptyState />

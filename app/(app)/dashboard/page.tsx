@@ -11,11 +11,9 @@ import Link from "next/link";
 
 import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
-import { buildResumes } from "@/components/dashboard/active-resumes";
 import { DashboardAvatarTile } from "@/components/dashboard/DashboardAvatarTile";
 import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
-import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
@@ -32,18 +30,14 @@ import { isoWeekStartIso } from "@/lib/datetime/iso-week";
 import { buildTrainerVoice } from "@/lib/ai/trainer-voice";
 import { buildWeekStrip } from "@/lib/domain/stats/week-strip";
 import { getUserProfile } from "@/lib/repos/body.repo";
-import {
-  getActiveCardioId,
-  listRecentCardio,
-} from "@/lib/repos/cardio.repo";
-import { getActiveCircuitId, listCircuits } from "@/lib/repos/circuits.repo";
+import { listRecentCardio } from "@/lib/repos/cardio.repo";
+import { listCircuits } from "@/lib/repos/circuits.repo";
 import {
   dailyVolume,
   muscleHeatProfile,
   workoutFrequency,
 } from "@/lib/repos/stats.repo";
 import {
-  getActiveWorkoutId,
   getLatestPerWorkoutAnalysis,
   getLatestWeeklyReview,
   listRecentWorkouts,
@@ -67,11 +61,8 @@ export default async function DashboardPage() {
 
   const [
     recent,
-    activeId,
     recentCardio,
-    activeCardioId,
     recentCircuits,
-    activeCircuitId,
     heat,
     daily,
     frequency,
@@ -79,11 +70,8 @@ export default async function DashboardPage() {
     weeklyReview,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
-    getActiveWorkoutId(user.id),
     listRecentCardio(user.id, 10),
-    getActiveCardioId(user.id),
     listCircuits(user.id, 10),
-    getActiveCircuitId(user.id),
     muscleHeatProfile(user.id, now),
     // Те же источники, что рисуют графики /stats (силовые working-подходы,
     // бакет по TZ) → tile-превью совпадает со /stats (гейт H4.1). "30d"
@@ -124,9 +112,9 @@ export default async function DashboardPage() {
   const latestSession = history[0] ?? null;
 
   // Единый вход: один CTA «Начать тренировку» → /create (пикер формата) вместо
-  // трёх формат-тайлов. Активные сессии любого формата — общий ResumeBanner.
-  const resumes = buildResumes({ activeId, activeCircuitId, activeCardioId });
-
+  // трёх формат-тайлов. Возобновление активной сессии любого формата — теперь
+  // ГЛОБАЛЬНАЯ полоса (GlobalResumeBar в (app)/layout), видна с любого экрана
+  // (H12.4): один носитель вместо page-level баннеров на /dashboard и /workouts.
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <header className="mb-8">
@@ -137,19 +125,6 @@ export default async function DashboardPage() {
           Привет, {name}
         </h1>
       </header>
-
-      {resumes.length > 0 ? (
-        <div className="mb-6 space-y-3">
-          {resumes.map((r) => (
-            <ResumeBanner
-              key={r.href}
-              href={r.href}
-              label={r.label}
-              cancel={r.cancel}
-            />
-          ))}
-        </div>
-      ) : null}
 
       {trainerVoice ? (
         <TrainerVoiceBanner
