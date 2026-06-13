@@ -132,3 +132,27 @@ ultracode
 8. [ ] Утром читай §7 ЛОГ + CHANGELOG — видно, что нарасло за ночь.
 
 Готово. Цикл сам докручивает проект к твоей путеводной звезде, маленькими проверенными шагами, и сам себя останавливает, если ты его забросишь.
+
+---
+
+## 8. Приложение: кросс-платформенный single-instance lock (против pile-up)
+
+Готовый OS-лок: держится, пока жив процесс-владелец; **ОС снимает его сразу при смерти процесса** — ноль протухших локов, ноль чистки по timestamp. Файл: [scripts/single_instance_lock.py](../scripts/single_instance_lock.py) (тест: `scripts/test_single_instance_lock.py`, зелёный).
+
+**Где это ТО, что нужно:** python-скрипты/хуки, которые дёргаются часто и могут стакаться (after-response hook → flush/compile каждый ход + шедулеры). Лок = ровно один инстанс крутится, остальные мгновенно выходят (`LK_NBLCK`/`LOCK_NB` — не ждут). Безопасно скипать, т.к. прогоны идемпотентны (добирают следующим запуском).
+
+```python
+from single_instance_lock import acquire_single_instance_lock
+def main():
+    lock = acquire_single_instance_lock("flush")   # имя уникально на скрипт
+    if lock is None:
+        print("already running; skip"); return 0
+    # ... работай; держи `lock` в переменной до конца main (GC закроет -> лок снимется рано)
+```
+
+⚠ **Грабля переноса:** оригинал POSIX-only (`fcntl`). На **Windows** `fcntl` нет → этот util использует `msvcrt.locking` (реальный лок, не no-op). Кросс-платформенно из коробки.
+
+**Где это НЕ тот инструмент:** Claude scheduled-СЕССИИ (executor/refactor). Там pile-up не от python-процессов, а от наложения сессий + MCP-флота — глушится lock-файлом (`routine.lock`) + native reaper + разнесением cadence (см. §6). Held-fd flock не подходит: сессию держит не долгоживущий python-процесс.
+
+**Мост для session-gating (опц.):** запусти util как holder перед сессией —
+`python single_instance_lock.py <имя> --hold --max-seconds 2100` → печатает `ACQUIRED`/`BUSY` (exit 1). Держит лок, пока жив; `--max-seconds` — orphan-backstop (Windows не убивает сирот авто), чтоб лок не залип навсегда, если gated-процесс умер.
