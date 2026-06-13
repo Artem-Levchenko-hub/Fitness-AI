@@ -5,8 +5,6 @@ import {
   eq,
   gte,
   inArray,
-  isNotNull,
-  isNull,
   ne,
   sql,
 } from "drizzle-orm";
@@ -36,6 +34,7 @@ import {
   extractPastAdvice,
   formatTrainerMemoryBlock,
 } from "./trainer-memory";
+import { buildTrainerMemoryFilter } from "./trainer-memory-filter";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
 
@@ -637,14 +636,10 @@ async function loadTrainerMemoryBlock(
 ): Promise<string> {
   try {
     const a = schema.aiAnalyses;
-    const formatFilter =
-      kind === "circuit_post_workout"
-        ? isNotNull(a.circuitWorkoutId)
-        : kind === "daily_digest"
-          ? and(isNull(a.workoutId), isNull(a.circuitWorkoutId))
-          : and(isNotNull(a.workoutId), isNull(a.circuitWorkoutId));
-
-    const conditions = [eq(a.userId, userId), formatFilter];
+    // H11.1b (2-й под-слайс): digest-ветка исключает weekly_review через
+    // коррелированный NOT EXISTS — иначе недельные разборы (workoutId и
+    // circuitWorkoutId оба null, как digest — H8.2a) текли бы в память дайджеста.
+    const conditions = [eq(a.userId, userId), buildTrainerMemoryFilter(kind)];
     if (excludeWorkoutId) conditions.push(ne(a.workoutId, excludeWorkoutId));
     if (excludeCircuitId) conditions.push(ne(a.circuitWorkoutId, excludeCircuitId));
 
