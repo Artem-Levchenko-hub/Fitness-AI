@@ -1,10 +1,11 @@
-import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Pencil, Trash2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { MuscleBadges, muscleLabel } from "@/components/app/MuscleBadges";
 import { Button } from "@/components/ui/button";
+import { detectStagnation } from "@/lib/domain/progression/stagnation";
 import { requireUser } from "@/lib/auth/require-user";
 import { getExerciseById } from "@/lib/repos/exercises.repo";
 import {
@@ -25,6 +26,16 @@ export default async function ExerciseDetailPage({ params }: Props) {
 
   const history = await exerciseSetHistory(user.id, id);
 
+  // H11.4 — застой e1RM: серия лучших рабочих 1RM по сессиям в хронологическом
+  // порядке (history — новые сверху, поэтому реверс; сессии без working-сетов
+  // best1rm=0 исключаем, чтобы разминочные дни не давали ложный регресс).
+  // epsilon 0.5 кг поглощает float-шум формулы e1RM. Ноль нового запроса.
+  const e1rmSeries = history
+    .filter((s) => s.best1rm > 0)
+    .map((s) => s.best1rm)
+    .reverse();
+  const stagnation = detectStagnation(e1rmSeries, 3, { epsilon: 0.5 });
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -35,9 +46,17 @@ export default async function ExerciseDetailPage({ params }: Props) {
       </Button>
 
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          {exercise.nameRu}
-        </h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            {exercise.nameRu}
+          </h1>
+          {stagnation.stale ? (
+            <span className="bg-warning/15 text-warning inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium">
+              <AlertTriangle className="size-3.5" />
+              Застой {stagnation.streak} {pluralSessions(stagnation.streak)}
+            </span>
+          ) : null}
+        </div>
         <p className="text-muted-foreground mt-1 text-sm">{exercise.nameEn}</p>
       </header>
 
@@ -176,6 +195,15 @@ function SessionCard({ session }: { session: ExerciseSession }) {
 
 function formatNum(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/** Русская плюрализация «сессия/сессии/сессий» для бейджа застоя. */
+function pluralSessions(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "сессия";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "сессии";
+  return "сессий";
 }
 
 function labelSetType(t: ExerciseSession["sets"][number]["setType"]): string {
