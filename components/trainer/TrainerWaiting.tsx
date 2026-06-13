@@ -1,8 +1,7 @@
-import { Loader2 } from "lucide-react";
-
 import { cn } from "@/lib/utils/index";
 
 import { InsightCards } from "./InsightCards";
+import { TrainerStages } from "./TrainerStages";
 
 /** H16.2 — ЕДИНЫЙ носитель состояния ожидания разбора (урок H4.3: один
  *  носитель паттерна, не два). Встраивается в loading-стейт обоих trainer-
@@ -32,7 +31,8 @@ export function TrainerWaiting({
 /** Скелетон в форме будущей карточки разбора. Стрим не отдаёт Content-Length
  *  (streamText), поэтому честный индикатор — не прогресс-бар по процентам, а
  *  каркас того, что вот-вот появится: оценка, заметка, аспекты, сравнения,
- *  рекомендации. Реальный статус-текст сверху меняется по факту прогресса. */
+ *  рекомендации. H16.3 — над каркасом «живые» стадии (Ahead-паттерн), которые
+ *  видимо движутся; реальный статус-текст уходит в подпись под ними. */
 export function TrainerSkeleton({ text }: { text: string }) {
   return (
     <div
@@ -41,10 +41,10 @@ export function TrainerSkeleton({ text }: { text: string }) {
       aria-live="polite"
       className="bg-card border-border space-y-6 rounded-2xl border p-6"
     >
-      <p className="text-muted-foreground flex items-center gap-2 text-sm leading-relaxed">
-        <Loader2 className="text-primary size-4 shrink-0 animate-spin" />
-        {text}
-      </p>
+      <div className="space-y-2">
+        <TrainerStages />
+        <p className="text-muted-foreground text-xs leading-relaxed">{text}</p>
+      </div>
 
       <div
         aria-hidden="true"
