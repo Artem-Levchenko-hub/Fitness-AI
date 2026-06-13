@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCardioTemplateRows,
+  buildCircuitTemplateRows,
   buildStrengthTemplateRows,
   formatExerciseCount,
   formatTemplateMeta,
   mergeTemplateList,
+  type CardioTemplateListSource,
   type TemplateListSource,
   type UnifiedTemplateItem,
 } from "./template-list";
@@ -254,6 +257,76 @@ describe("buildStrengthTemplateRows", () => {
 
   it("preserves input order (repo already sorts by freshness)", () => {
     const rows = buildStrengthTemplateRows([
+      tpl({ id: "a", name: "A" }),
+      tpl({ id: "b", name: "B" }),
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("buildCircuitTemplateRows", () => {
+  const tpl = (over: Partial<TemplateListSource> = {}): TemplateListSource => ({
+    id: "c1",
+    name: "Кор-круг",
+    description: null,
+    exerciseCount: 4,
+    updatedAt: new Date("2026-06-12T00:00:00Z"),
+    ...over,
+  });
+
+  it("returns [] for no templates (R-37 empty → builder, not phantom list)", () => {
+    expect(buildCircuitTemplateRows([])).toEqual([]);
+  });
+
+  it("maps id, name and pluralized exercise meta WITHOUT href (started via action)", () => {
+    expect(buildCircuitTemplateRows([tpl()])).toEqual([
+      { id: "c1", name: "Кор-круг", meta: "4 упражнения" },
+    ]);
+  });
+
+  it("omits href — circuit starts via POST action, not a /templates/[id] link", () => {
+    const [row] = buildCircuitTemplateRows([tpl()]);
+    expect(row.href).toBeUndefined();
+  });
+
+  it("preserves input order (repo already sorts by freshness)", () => {
+    const rows = buildCircuitTemplateRows([
+      tpl({ id: "a", name: "A" }),
+      tpl({ id: "b", name: "B" }),
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("buildCardioTemplateRows", () => {
+  const tpl = (
+    over: Partial<CardioTemplateListSource> = {},
+  ): CardioTemplateListSource => ({
+    id: "cd1",
+    name: "Утренний HIIT",
+    description: null,
+    metaLine: "Свой · 6×30/60с",
+    updatedAt: new Date("2026-06-12T00:00:00Z"),
+    ...over,
+  });
+
+  it("returns [] for no templates (R-37 empty → builder, not phantom list)", () => {
+    expect(buildCardioTemplateRows([])).toEqual([]);
+  });
+
+  it("maps id, name and interval meta WITHOUT href (started via action)", () => {
+    expect(buildCardioTemplateRows([tpl()])).toEqual([
+      { id: "cd1", name: "Утренний HIIT", meta: "Свой · 6×30/60с" },
+    ]);
+  });
+
+  it("omits href — cardio starts via POST action, not a /templates/[id] link", () => {
+    const [row] = buildCardioTemplateRows([tpl()]);
+    expect(row.href).toBeUndefined();
+  });
+
+  it("preserves input order (repo already sorts by freshness)", () => {
+    const rows = buildCardioTemplateRows([
       tpl({ id: "a", name: "A" }),
       tpl({ id: "b", name: "B" }),
     ]);

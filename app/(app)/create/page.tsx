@@ -1,26 +1,49 @@
-import { ChevronLeft, ChevronRight, Dumbbell, Plus, Repeat, Zap } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Dumbbell,
+  Play,
+  Plus,
+  Repeat,
+  Zap,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import {
+  buildCardioTemplateRows,
+  buildCircuitTemplateRows,
   buildStrengthTemplateRows,
-  type StrengthTemplateRow,
+  type TemplateCardRow,
 } from "@/lib/domain";
+import { listCardioTemplates } from "@/lib/repos/cardio-templates.repo";
+import { listCircuitTemplates } from "@/lib/repos/circuit-templates.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
+import { startCardioFromTemplateAction } from "@/server/actions/cardio-templates";
+import { startCircuitFromTemplateAction } from "@/server/actions/circuit-templates";
 
 export const metadata: Metadata = { title: "Создать тренировку" };
 
 /** Единая точка входа «создать тренировку» — пикер формата с короткими
- *  пояснениями. Силовая (H12.2): при ≥1 шаблоне карточка раскрывает список
- *  шаблонов юзера (тап → экран старта `/templates/[id]`, где живут совет и
- *  кнопка старта — повтор за ≤2 тапа от дашборда) + строку «Создать новый
- *  шаблон»; при 0 шаблонов — сразу конструктор (как раньше). Круговая/кардио —
- *  прямой вход в свои билдеры. EMOM/Tabata/Norwegian — пресеты внутри кардио. */
+ *  пояснениями. При ≥1 шаблоне формата карточка раскрывает список шаблонов
+ *  юзера — повтор за ≤2 тапа от дашборда (H12.2): силовая → тап в экран старта
+ *  `/templates/[id]`; круговая/кардио → форма-кнопка «Начать» (старт серверным
+ *  экшеном по id — у них нет экрана старта); + строка «Создать новый» внизу
+ *  (ad-hoc «с нуля» не теряется — столп 4). При 0 шаблонов формата — прямой вход
+ *  в его конструктор (как раньше). EMOM/Tabata/Norwegian — пресеты внутри
+ *  кардио. Один носитель раскрытия для всех форматов (урок H4.3). */
 export default async function CreateWorkoutPage() {
   const user = await requireUser();
-  const strengthRows = buildStrengthTemplateRows(await listTemplates(user.id));
+  const [strength, circuit, cardio] = await Promise.all([
+    listTemplates(user.id),
+    listCircuitTemplates(user.id),
+    listCardioTemplates(user.id),
+  ]);
+  const strengthRows = buildStrengthTemplateRows(strength);
+  const circuitRows = buildCircuitTemplateRows(circuit);
+  const cardioRows = buildCardioTemplateRows(cardio);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -57,9 +80,36 @@ export default async function CreateWorkoutPage() {
         ) : (
           <FormatCard {...STRENGTH_BUILDER} />
         )}
-        {OTHER_FORMATS.map((f) => (
-          <FormatCard key={f.href} {...f} />
-        ))}
+
+        {circuitRows.length > 0 ? (
+          <FormatTemplateCard
+            icon={Repeat}
+            eyebrow="Круговая"
+            title="Круг (circuit)"
+            desc="Повтори свой круг или собери новый."
+            rows={circuitRows}
+            startAction={startCircuitFromTemplateAction}
+            createHref="/circuits/new"
+            createLabel="Создать новую круговую"
+          />
+        ) : (
+          <FormatCard {...CIRCUIT_BUILDER} />
+        )}
+
+        {cardioRows.length > 0 ? (
+          <FormatTemplateCard
+            icon={Zap}
+            eyebrow="Кардио · HIIT"
+            title="Интервалы и кардио"
+            desc="Повтори свой интервал или собери новый."
+            rows={cardioRows}
+            startAction={startCardioFromTemplateAction}
+            createHref="/cardio/new"
+            createLabel="Создать новое кардио"
+          />
+        ) : (
+          <FormatCard {...CARDIO_BUILDER} />
+        )}
       </section>
     </main>
   );
@@ -74,34 +124,37 @@ const STRENGTH_BUILDER = {
   desc: "Классика: упражнения по очереди, подходы, вес × повторы, отдых между подходами.",
 } as const;
 
-const OTHER_FORMATS = [
-  {
-    href: "/circuits/new",
-    icon: Repeat,
-    eyebrow: "Круговая",
-    title: "Круг (circuit)",
-    desc: "Несколько упражнений подряд по кругу с минимальным отдыхом. Несколько раундов.",
-  },
-  {
-    href: "/cardio/new",
-    icon: Zap,
-    eyebrow: "Кардио · HIIT",
-    title: "Интервалы и кардио",
-    desc: "Tabata · EMOM · Norwegian 4×4 · свой интервал. Работа/отдых по таймеру.",
-  },
-] as const;
+const CIRCUIT_BUILDER = {
+  href: "/circuits/new",
+  icon: Repeat,
+  eyebrow: "Круговая",
+  title: "Круг (circuit)",
+  desc: "Несколько упражнений подряд по кругу с минимальным отдыхом. Несколько раундов.",
+} as const;
+
+const CARDIO_BUILDER = {
+  href: "/cardio/new",
+  icon: Zap,
+  eyebrow: "Кардио · HIIT",
+  title: "Интервалы и кардио",
+  desc: "Tabata · EMOM · Norwegian 4×4 · свой интервал. Работа/отдых по таймеру.",
+} as const;
 
 /** Карточка формата с раскрытым списком существующих шаблонов. Общий носитель
- *  раскрытия (тап-строка ≥56px, R-41): шапка-заголовок неинтерактивна, ниже —
- *  строки шаблонов (Link → href) и одна строка «создать новый». Спроектирован
- *  generic над list-строками, чтобы круговая/кардио позже раскрылись тем же
- *  компонентом (H12.2-хвост) — один паттерн, не три расходящихся (урок H4.3). */
+ *  раскрытия для ВСЕХ трёх форматов (урок H4.3 — один паттерн, не три): шапка
+ *  неинтерактивна, ниже — строки шаблонов и одна строка «создать новый» (тап
+ *  ≥56px, R-41). Силовая (без `startAction`) — строки-Link на экран старта
+ *  `/templates/[id]`. Круговая/кардио (`startAction` задан) — у них нет экрана
+ *  старта, поэтому строка = форма-кнопка «Начать» (POST-экшен по id, зеркало
+ *  /templates). /create — поверхность ПОВТОРА; редактирование шаблона живёт на
+ *  /templates («управление»), поэтому здесь строки старт-only. */
 function FormatTemplateCard({
   icon: Icon,
   eyebrow,
   title,
   desc,
   rows,
+  startAction,
   createHref,
   createLabel,
 }: {
@@ -109,7 +162,8 @@ function FormatTemplateCard({
   eyebrow: string;
   title: string;
   desc: string;
-  rows: StrengthTemplateRow[];
+  rows: TemplateCardRow[];
+  startAction?: (formData: FormData) => void | Promise<void>;
   createHref: string;
   createLabel: string;
 }) {
@@ -135,18 +189,29 @@ function FormatTemplateCard({
       <ul className="border-border mt-4 space-y-2 border-t pt-4">
         {rows.map((row) => (
           <li key={row.id}>
-            <Link
-              href={row.href}
-              className="bg-background hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{row.name}</p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  {row.meta}
-                </p>
-              </div>
-              <ChevronRight className="text-muted-foreground size-5 shrink-0" />
-            </Link>
+            {startAction ? (
+              <form action={startAction}>
+                <input type="hidden" name="templateId" value={row.id} />
+                <button
+                  type="submit"
+                  className="bg-background hover:bg-accent border-border flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border p-4 text-left transition-colors"
+                >
+                  <TemplateRowMeta name={row.name} meta={row.meta} />
+                  <span className="text-primary flex shrink-0 items-center gap-1 text-xs font-medium">
+                    <Play className="size-4 fill-current" aria-hidden="true" />
+                    Начать
+                  </span>
+                </button>
+              </form>
+            ) : (
+              <Link
+                href={row.href ?? createHref}
+                className="bg-background hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
+              >
+                <TemplateRowMeta name={row.name} meta={row.meta} />
+                <ChevronRight className="text-muted-foreground size-5 shrink-0" />
+              </Link>
+            )}
           </li>
         ))}
         <li>
@@ -159,6 +224,15 @@ function FormatTemplateCard({
           </Link>
         </li>
       </ul>
+    </div>
+  );
+}
+
+function TemplateRowMeta({ name, meta }: { name: string; meta: string }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <p className="truncate text-sm font-semibold">{name}</p>
+      <p className="text-muted-foreground mt-0.5 text-xs">{meta}</p>
     </div>
   );
 }

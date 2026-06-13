@@ -87,12 +87,20 @@ export function formatTemplateMeta(item: UnifiedTemplateItem): string {
  *  живут строка-совет H5.7 и кнопка старта), а НЕ в конструктор нового
  *  `/templates/new` — повтор шаблона за ≤2 тапа от дашборда. Формат уже задан
  *  шапкой карточки → мета без ведущего «Силовая ·». */
-export type StrengthTemplateRow = {
+/** Строка раскрытого списка шаблонов на карточке формата (/create). Общий тип
+ *  для всех трёх форматов — один носитель раскрытия (урок H4.3). `href` несёт
+ *  только силовая (тап → экран старта `/templates/[id]`); у круговой/кардио
+ *  экрана старта нет — они стартуют POST-экшеном по `id`, поэтому href опущен. */
+export type TemplateCardRow = {
   id: string;
   name: string;
-  href: string;
   meta: string;
+  href?: string;
 };
+
+/** Силовая: href ведёт в экран старта существующего шаблона (повтор за ≤2 тапа),
+ *  а не в конструктор. href обязателен — без формы-экшена. */
+export type StrengthTemplateRow = TemplateCardRow & { href: string };
 
 export function buildStrengthTemplateRows(
   templates: TemplateListSource[],
@@ -102,5 +110,31 @@ export function buildStrengthTemplateRows(
     name: t.name,
     href: `/templates/${t.id}`,
     meta: formatExerciseCount(t.exerciseCount),
+  }));
+}
+
+/** Круговая (H12.2-хвост): строки без href — старт идёт серверным экшеном
+ *  `startCircuitFromTemplateAction` по id (зеркало /templates). Мета = счёт
+ *  упражнений (формат задан шапкой карточки). Пусто → [] (R-37 → билдер). */
+export function buildCircuitTemplateRows(
+  templates: TemplateListSource[],
+): TemplateCardRow[] {
+  return templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    meta: formatExerciseCount(t.exerciseCount),
+  }));
+}
+
+/** Кардио (H12.2-хвост): строки без href — старт через
+ *  `startCardioFromTemplateAction`. Мета = готовая сводка интервалов (у кардио
+ *  нет упражнений-детей). Пусто → [] (R-37 → билдер). */
+export function buildCardioTemplateRows(
+  templates: CardioTemplateListSource[],
+): TemplateCardRow[] {
+  return templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    meta: t.metaLine,
   }));
 }
