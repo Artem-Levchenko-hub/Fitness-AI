@@ -1,6 +1,7 @@
 "use server";
 
 import { isAiConfigured } from "@/lib/ai/deepseek";
+import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { type TrainerResponse } from "@/lib/ai/trainer-structured";
 import {
   generateWeeklyReview,
@@ -11,7 +12,13 @@ import { getUserProfile } from "@/lib/repos/body.repo";
 import { CircuitOpenError } from "@/lib/safety/circuit-breaker";
 
 export type WeeklyReviewResult =
-  | { ok: true; data: TrainerResponse }
+  | {
+      ok: true;
+      data: TrainerResponse;
+      /** H11.1c/H13: карта «имя движения → exerciseId» (топ-движения недели)
+       *  для кликабельных строк exerciseComparisons на /stats. */
+      exerciseLinks: Record<string, string>;
+    }
   | { ok: false; error: string };
 
 /** H8.1 — синхронный недельный разбор «по запросу» с /stats. Делегирует сбор
@@ -29,8 +36,15 @@ export async function requestWeeklyReview(): Promise<WeeklyReviewResult> {
   try {
     const profile = await getUserProfile(user.id);
     const tz = profile?.timezone ?? "Europe/Moscow";
-    const { result } = await generateWeeklyReview(user.id, tz, new Date());
-    return { ok: true, data: result.json };
+    const { data, result } = await generateWeeklyReview(user.id, tz, new Date());
+    const exerciseLinks = buildExerciseLinkMap(
+      data.keyMovements.map((m) => ({
+        exerciseId: m.exerciseId,
+        exerciseNameRu: m.nameRu,
+        exerciseNameEn: m.nameEn,
+      })),
+    );
+    return { ok: true, data: result.json, exerciseLinks };
   } catch (err) {
     if (err instanceof NoWeeklyDataError) {
       return { ok: false, error: err.message };

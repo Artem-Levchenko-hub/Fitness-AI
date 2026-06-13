@@ -15,14 +15,20 @@ import { requestWeeklyReview } from "@/server/actions/weekly-review";
 export function WeeklyReviewButton({
   initial = null,
   initialAt = null,
+  initialExerciseLinks = {},
 }: {
   /** Последний weekly_review из БД (уже провалидирован server-side). */
   initial?: TrainerResponse | null;
   /** Дата авто-разбора, отформатированная на сервере (ru). */
   initialAt?: string | null;
+  /** H11.1c/H13: карта «имя движения → exerciseId» для кликабельных строк
+   *  разбора (source-agnostic — упражнения атлета; нет матча → строка статична). */
+  initialExerciseLinks?: Record<string, string>;
 }) {
   const [pending, setPending] = useState(false);
   const [data, setData] = useState<TrainerResponse | null>(initial);
+  const [exerciseLinks, setExerciseLinks] =
+    useState<Record<string, string>>(initialExerciseLinks);
   const [error, setError] = useState<string | null>(null);
   // true после ручного «Разобрать заново» — тогда подпись «авто от <дата>»
   // больше не релевантна (показываем свежий on-demand-разбор).
@@ -35,6 +41,7 @@ export function WeeklyReviewButton({
       const r = await requestWeeklyReview();
       if (r.ok) {
         setData(r.data);
+        setExerciseLinks(r.exerciseLinks);
         setRegenerated(true);
       } else {
         setError(r.error);
@@ -91,7 +98,7 @@ export function WeeklyReviewButton({
               Авто-разбор недели · {initialAt}
             </p>
           ) : null}
-          <TrainerResultCard data={data} />
+          <TrainerResultCard data={data} exerciseLinks={exerciseLinks} />
         </div>
       ) : null}
     </section>

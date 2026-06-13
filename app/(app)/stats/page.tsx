@@ -7,6 +7,7 @@ import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
 import { PeriodInsightCard } from "@/components/stats/PeriodInsightCard";
 import { WeeklyReviewButton } from "@/components/stats/WeeklyReviewButton";
+import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { parseWeeklyReviewResult } from "@/lib/ai/weekly-review-display";
 import { requireUser } from "@/lib/auth/require-user";
 import { getLatestWeeklyReview } from "@/lib/repos/workouts.repo";
@@ -98,6 +99,18 @@ export default async function StatsPage({ searchParams }: Props) {
         })
       : null;
 
+  // H11.1c/H13: source-agnostic карта «имя движения → exerciseId» из упражнений
+  // атлета (nameRu; nameEn недоступен в trainedExercises — buildExerciseLinkMap
+  // пропускает пустой ключ). Покрывает любое движение, названное в авто-разборе;
+  // нет матча → строка остаётся статичной (fail-soft R-10).
+  const weeklyExerciseLinks = buildExerciseLinkMap(
+    exercises.map((e) => ({
+      exerciseId: e.id,
+      exerciseNameRu: e.nameRu,
+      exerciseNameEn: "",
+    })),
+  );
+
   const periodInsight = summarizeVolumeChange(
     volumeCompare.current,
     volumeCompare.previous,
@@ -160,7 +173,11 @@ export default async function StatsPage({ searchParams }: Props) {
 
       <PeriodPills />
 
-      <WeeklyReviewButton initial={weeklyAuto} initialAt={weeklyAutoAt} />
+      <WeeklyReviewButton
+        initial={weeklyAuto}
+        initialAt={weeklyAutoAt}
+        initialExerciseLinks={weeklyExerciseLinks}
+      />
 
       <PeriodInsightCard insight={periodInsight} />
 

@@ -11,6 +11,10 @@ import {
   groupExerciseSessions,
   type ExerciseSession,
 } from "@/lib/domain/exercise/set-history";
+import {
+  selectKeyMovements,
+  type WeeklyKeyMovement,
+} from "@/lib/ai/weekly-review";
 import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 import { isoWeekKey } from "@/lib/domain/cycle/iso-week";
@@ -948,6 +952,95 @@ export async function exerciseSetHistory(
   return groupExerciseSessions(rows, limit);
 }
 
+/** Лучший рабочий сет упражнения в окне (по e1RM) + e1RM. */
+type BestSet = { weightKg: number; reps: number; e1rm: number };
+
+/** H11.1c — «ключевые движения недели»: топ-3 упражнения этой ISO-недели по
+ *  |Δe1RM| против их лучшего за всю историю ДО неё (+ флаг недельного PR).
+ *  Один скан рабочих сетов completed-сессий: bucket недели (TZ-корректный
+ *  date_trunc, как weeklyReviewData) делит «эта неделя» (==weekStart) и «всё до»
+ *  (bucket < weekStart — YYYY-MM-DD понедельники сравнимы лексикографически).
+ *  Только working-сеты с весом и повторами >0 (тоннаж-семантика /stats; bodyweight
+ *  без добавки не попадает в e1RM-сравнение). Отбор топ-3 — чистый
+ *  `selectKeyMovements` (R-7). Пусто (нет силовых этой недели) → []. */
+export async function weeklyKeyMovements(
+  userId: string,
+  now: Date,
+  timeZone: string,
+): Promise<WeeklyKeyMovement[]> {
+  const weekStart = isoWeekStartIso(now, timeZone);
+  const weekExpr = sql<string>`to_char(date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`;
+
+  const rows = await db
+    .select({
+      exerciseId: schema.workoutExercises.exerciseId,
+      nameRu: schema.exercises.nameRu,
+      nameEn: schema.exercises.nameEn,
+      weight: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
+      week: weekExpr,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.workoutExercises.exerciseId),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+      ),
+    );
+
+  type Names = { nameRu: string; nameEn: string };
+  const names = new Map<string, Names>();
+  const curBest = new Map<string, BestSet>();
+  const priorBest = new Map<string, BestSet>();
+
+  for (const r of rows) {
+    const weight = Number(r.weight);
+    const reps = Number(r.reps);
+    if (!(weight > 0) || !(reps > 0)) continue;
+    const e1rm = estimatedOneRepMax(weight, reps);
+    if (e1rm <= 0) continue;
+    names.set(r.exerciseId, { nameRu: r.nameRu, nameEn: r.nameEn });
+    const bucket = r.week === weekStart ? curBest : r.week < weekStart ? priorBest : null;
+    if (!bucket) continue; // будущая неделя (TZ-граница) — игнор
+    const cur = bucket.get(r.exerciseId);
+    if (!cur || e1rm > cur.e1rm) {
+      bucket.set(r.exerciseId, { weightKg: weight, reps, e1rm });
+    }
+  }
+
+  const candidates: WeeklyKeyMovement[] = [];
+  for (const [exerciseId, cur] of curBest) {
+    const prev = priorBest.get(exerciseId) ?? null;
+    const name = names.get(exerciseId)!;
+    candidates.push({
+      exerciseId,
+      nameRu: name.nameRu,
+      nameEn: name.nameEn,
+      curTopSet: { weightKg: cur.weightKg, reps: cur.reps },
+      prevTopSet: prev ? { weightKg: prev.weightKg, reps: prev.reps } : null,
+      curE1rm: cur.e1rm,
+      prevE1rm: prev ? prev.e1rm : null,
+      deltaE1rm: prev ? cur.e1rm - prev.e1rm : null,
+      isPr: prev ? cur.e1rm > prev.e1rm : false,
+    });
+  }
+
+  return selectKeyMovements(candidates);
+}
+
 /** Агрегаты одной ISO-недели для недельного разбора тренера (H8.1). */
 export type WeeklyAgg = {
   sessions: number;
@@ -967,6 +1060,9 @@ export type WeeklyReviewData = {
   sleep: { date: string; hours: number; quality: number | null }[];
   /** Дни питания за разбираемую ISO-неделю (ккал + белок). */
   nutrition: { date: string; kcal: number | null; proteinG: number | null }[];
+  /** Топ-3 движения недели по |Δe1RM| (H11.1c) — тренер называет упражнения,
+   *  а не только тоннаж. Пусто → блок опущен, exerciseComparisons=[]. */
+  keyMovements: WeeklyKeyMovement[];
 };
 
 const WEEKLY_REVIEW_SCAN_DAYS = 21;
@@ -1073,6 +1169,8 @@ export async function weeklyReviewData(
     };
   };
 
+  const keyMovements = await weeklyKeyMovements(userId, now, timeZone);
+
   const [note] = await db
     .select({ content: schema.cycleNotes.content })
     .from(schema.cycleNotes)
@@ -1128,5 +1226,6 @@ export async function weeklyReviewData(
     cycleNote: note?.content ?? null,
     sleep: sleepRows,
     nutrition: nutritionRows,
+    keyMovements,
   };
 }

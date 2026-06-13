@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatWeeklyMemoryBlock,
+  formatWeeklyMovementsBlock,
   formatWeeklyReviewBlock,
   hasWeeklyData,
+  selectKeyMovements,
+  type WeeklyKeyMovement,
   type WeeklyReviewInput,
 } from "./weekly-review";
 import type { PastAdvice } from "./trainer-memory";
@@ -32,6 +35,22 @@ function base(): WeeklyReviewInput {
     cycleNote: null,
     sleep: [],
     nutrition: [],
+    keyMovements: [],
+  };
+}
+
+function movement(over: Partial<WeeklyKeyMovement> = {}): WeeklyKeyMovement {
+  return {
+    exerciseId: "ex-1",
+    nameRu: "Жим лёжа",
+    nameEn: "Bench Press",
+    curTopSet: { weightKg: 82.5, reps: 5 },
+    prevTopSet: { weightKg: 80, reps: 5 },
+    curE1rm: 92.8,
+    prevE1rm: 90,
+    deltaE1rm: 2.8,
+    isPr: false,
+    ...over,
   };
 }
 
@@ -195,5 +214,75 @@ describe("formatWeeklyMemoryBlock", () => {
     const out = formatWeeklyMemoryBlock(advice("Спать 7.5+ ч", null), fmt);
     expect(out).toContain("Спать 7.5+ ч");
     expect(out).not.toContain("оценка");
+  });
+});
+
+describe("formatWeeklyMovementsBlock", () => {
+  it("пусто → пустая строка (блок опущен)", () => {
+    expect(formatWeeklyMovementsBlock([])).toBe("");
+  });
+
+  it("выросшее движение: имя, прошлый→текущий сет, e1RM с подписанной дельтой", () => {
+    const out = formatWeeklyMovementsBlock([movement()]);
+    expect(out).toContain("# Ключевые движения недели");
+    expect(out).toContain("Жим лёжа");
+    expect(out).toContain("80×5 → 82.5×5");
+    expect(out).toContain("e1RM 90.0→92.8 кг");
+    expect(out).toContain("+2.8");
+  });
+
+  it("PR недели помечается трофеем", () => {
+    const out = formatWeeklyMovementsBlock([movement({ isPr: true })]);
+    expect(out).toContain("🏆");
+    expect(out.toLowerCase()).toContain("pr недели");
+  });
+
+  it("новое движение: без дельты, помечено «новое»", () => {
+    const out = formatWeeklyMovementsBlock([
+      movement({
+        prevTopSet: null,
+        prevE1rm: null,
+        deltaE1rm: null,
+        isPr: false,
+      }),
+    ]);
+    expect(out).toContain("новое движение");
+    expect(out).toContain("82.5×5");
+    expect(out).not.toContain("→ 82.5×5"); // нет сравнения с прошлым
+  });
+});
+
+describe("selectKeyMovements", () => {
+  it("берёт топ-3 по |Δe1RM| (по убыванию модуля)", () => {
+    const sel = selectKeyMovements([
+      movement({ exerciseId: "a", deltaE1rm: 1 }),
+      movement({ exerciseId: "b", deltaE1rm: -9 }),
+      movement({ exerciseId: "c", deltaE1rm: 5 }),
+      movement({ exerciseId: "d", deltaE1rm: 0.2 }),
+    ]);
+    expect(sel.map((m) => m.exerciseId)).toEqual(["b", "c", "a"]);
+  });
+
+  it("новые движения (нет дельты) тонут ниже движений с дельтой", () => {
+    const sel = selectKeyMovements([
+      movement({ exerciseId: "new", deltaE1rm: null, prevE1rm: null, curE1rm: 200 }),
+      movement({ exerciseId: "small", deltaE1rm: 0.5, curE1rm: 50 }),
+    ]);
+    expect(sel.map((m) => m.exerciseId)).toEqual(["small", "new"]);
+  });
+});
+
+describe("formatWeeklyReviewBlock — ключевые движения", () => {
+  it("включает блок движений, когда они есть", () => {
+    const d = base();
+    d.keyMovements = [movement()];
+    const out = formatWeeklyReviewBlock(d);
+    expect(out).toContain("# Ключевые движения недели");
+    expect(out).toContain("Жим лёжа");
+  });
+
+  it("опускает блок движений, когда их нет", () => {
+    const out = formatWeeklyReviewBlock(base());
+    expect(out).not.toContain("# Ключевые движения недели");
   });
 });

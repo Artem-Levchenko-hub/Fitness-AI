@@ -26,6 +26,27 @@ export type WeeklyNutritionRow = {
   proteinG: number | null;
 };
 
+/** Одно «ключевое движение недели» (H11.1c): лучший рабочий сет упражнения за
+ *  эту ISO-неделю против его лучшего за всю историю ДО неё. Источник для блока
+ *  «# Ключевые движения недели» и — через него — для exerciseComparisons
+ *  недельного разбора (тренер называет движения, а не только тоннаж). */
+export type WeeklyKeyMovement = {
+  exerciseId: string;
+  nameRu: string;
+  nameEn: string;
+  /** Лучший рабочий сет (по e1RM) этой недели. */
+  curTopSet: { weightKg: number; reps: number };
+  /** Лучший рабочий сет ДО этой недели (null = первый раз = новое движение). */
+  prevTopSet: { weightKg: number; reps: number } | null;
+  curE1rm: number;
+  /** Лучший e1RM за всю историю ДО недели (null = новое движение). */
+  prevE1rm: number | null;
+  /** curE1rm − prevE1rm (null для нового движения — сравнивать не с чем). */
+  deltaE1rm: number | null;
+  /** Недельный PR: e1RM этой недели побил личный рекорд до неё. */
+  isPr: boolean;
+};
+
 /** Вход чистого форматтера недельного разбора — НАМЕРЕННО развязан с репо
  *  (R-7: модуль без db/env, юнит-тестируем). Репо `weeklyReviewData` отдаёт
  *  ровно эту форму. */
@@ -43,7 +64,13 @@ export type WeeklyReviewInput = {
   sleep: WeeklySleepRow[];
   /** Дни питания за разбираемую ISO-неделю — тренер оценивает по ним КБЖУ. */
   nutrition: WeeklyNutritionRow[];
+  /** Топ движений недели по |Δe1RM| (уже отобраны репо, до 3). Пусто → неделя
+   *  без силовых данных по упражнениям → блок опущен, exerciseComparisons=[]. */
+  keyMovements: WeeklyKeyMovement[];
 };
+
+/** Сколько движений показать в блоке «ключевые движения недели». */
+const MAX_KEY_MOVEMENTS = 3;
 
 /** Есть ли что разбирать: хотя бы одна силовая сессия на этой ИЛИ прошлой
  *  неделе. Единый источник правила «разбор недели имеет смысл» — и для
@@ -69,6 +96,59 @@ function deltaPct(current: number, previous: number): number | null {
 
 function signedPct(pct: number): string {
   return pct >= 0 ? `+${pct}%` : `${pct}%`;
+}
+
+function signed(n: number): string {
+  const v = Number(n.toFixed(1));
+  return v >= 0 ? `+${v}` : `${v}`;
+}
+
+/** Отбор топ-движений недели: по убыванию |Δe1RM|. Новые движения (нет дельты)
+ *  тонут ниже движений с реальным сравнением, но попадают в хвост, если мест в
+ *  тройке хватает. Тай-брейк — больший e1RM, затем стабильный id. Чистая (R-7),
+ *  юнит-тестируема; репо отдаёт уже отобранный список. */
+export function selectKeyMovements(
+  candidates: WeeklyKeyMovement[],
+): WeeklyKeyMovement[] {
+  const rank = (m: WeeklyKeyMovement) =>
+    m.deltaE1rm == null ? -Infinity : Math.abs(m.deltaE1rm);
+  return [...candidates]
+    .sort(
+      (a, b) =>
+        rank(b) - rank(a) ||
+        b.curE1rm - a.curE1rm ||
+        a.exerciseId.localeCompare(b.exerciseId),
+    )
+    .slice(0, MAX_KEY_MOVEMENTS);
+}
+
+function topSetStr(s: { weightKg: number; reps: number }): string {
+  return `${s.weightKg}×${s.reps}`;
+}
+
+/** Markdown-блок «ключевые движения недели» для промпта тренера. Каждое
+ *  движение = прошлый→текущий топ-сет + дельта e1RM (или пометка «новое»);
+ *  недельный PR помечается трофеем. Пусто → "" (блок опущен, R-37: тренер не
+ *  выдумывает движений). Чистая функция — числа даёт репо. */
+export function formatWeeklyMovementsBlock(
+  movements: WeeklyKeyMovement[],
+): string {
+  if (movements.length === 0) return "";
+  const lines = ["# Ключевые движения недели", ""];
+  for (const m of movements) {
+    if (m.prevTopSet && m.prevE1rm != null && m.deltaE1rm != null) {
+      const pr = m.isPr ? " 🏆 PR недели" : "";
+      lines.push(
+        `- ${m.nameRu}: ${topSetStr(m.prevTopSet)} → ${topSetStr(m.curTopSet)} ` +
+          `(e1RM ${m.prevE1rm.toFixed(1)}→${m.curE1rm.toFixed(1)} кг, ${signed(m.deltaE1rm)})${pr}`,
+      );
+    } else {
+      lines.push(
+        `- ${m.nameRu}: новое движение, ${topSetStr(m.curTopSet)} (e1RM ${m.curE1rm.toFixed(1)} кг)`,
+      );
+    }
+  }
+  return lines.join("\n");
 }
 
 /** Markdown-блок «итог недели» для промпта тренера: эта неделя vs прошлая по
@@ -134,6 +214,11 @@ export function formatWeeklyReviewBlock(
         `- ${muscleLabelRu(r.key)}: ${round(r.cur)} ← ${round(r.prev)} кг·повт`,
       );
     }
+  }
+
+  const movementsBlock = formatWeeklyMovementsBlock(data.keyMovements);
+  if (movementsBlock) {
+    lines.push("", movementsBlock);
   }
 
   if (cycleNote && cycleNote.trim()) {
