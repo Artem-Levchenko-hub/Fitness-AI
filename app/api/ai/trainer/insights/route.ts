@@ -70,6 +70,9 @@ export async function GET(request: Request) {
   );
 
   return Response.json({
+    // Группы мышц сессии (детерминированно из БД) — мини-силуэт подсветки в
+    // карточке ожидания (H16.4, столп 2). Отдаём всегда, даже при пустых chunks.
+    muscleGroups: inputs.muscleGroups,
     chunks: chunks.map((c) => ({
       content: c.content,
       sourceTitle: c.sourceTitle,

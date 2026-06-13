@@ -3,7 +3,9 @@
 import { BookOpen, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { BodySilhouette } from "@/components/avatar/BodySilhouette";
 import { toInsightCard, type InsightChunk } from "@/lib/ai/insight-card";
+import { summarizeSessionMuscles } from "@/lib/domain/avatar/session-muscles";
 import { cn } from "@/lib/utils/index";
 
 /** H16.2 — «книжные факты под сессию» в момент ожидания разбора.
@@ -34,6 +36,7 @@ export function InsightCards({
   circuitWorkoutId?: string;
 }) {
   const [chunks, setChunks] = useState<InsightChunk[]>([]);
+  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
   const [index, setIndex] = useState(0);
   const liveRef = useRef(true);
 
@@ -57,10 +60,13 @@ export function InsightCards({
           { cache: "no-store", signal: controller.signal },
         );
         if (!res.ok) return; // fail-soft: лоадер живёт без карточек
-        const data = (await res.json()) as { chunks?: InsightChunk[] };
-        if (liveRef.current && Array.isArray(data.chunks)) {
-          setChunks(data.chunks);
-        }
+        const data = (await res.json()) as {
+          chunks?: InsightChunk[];
+          muscleGroups?: string[];
+        };
+        if (!liveRef.current) return;
+        if (Array.isArray(data.chunks)) setChunks(data.chunks);
+        if (Array.isArray(data.muscleGroups)) setMuscleGroups(data.muscleGroups);
       } catch {
         // Сеть/abort — карточки просто не появятся, разбор это не блокирует.
       }
@@ -85,12 +91,34 @@ export function InsightCards({
 
   const safeIndex = index % chunks.length;
   const card = toInsightCard(chunks[safeIndex]!);
+  const session = summarizeSessionMuscles(muscleGroups);
+  const activeSet = new Set<string>(session.keys);
 
   return (
     <section
       aria-label="Факт из книги, пока готовится разбор"
       className="border-border bg-accent/40 space-y-3 rounded-2xl border p-5"
     >
+      {/* Мини-силуэт групп сегодняшней сессии (столп 2): «ждёшь разбор — видишь
+          свои нагруженные мышцы + факт книги про них». */}
+      {session.keys.length > 0 ? (
+        <div className="flex items-center gap-3">
+          <BodySilhouette
+            ariaLabel={`Мышцы сессии: ${session.label}`}
+            className="h-16 w-20"
+            shapeFill={(key) => ({
+              className: activeSet.has(key)
+                ? "fill-primary"
+                : "fill-muted-foreground/20",
+            })}
+          />
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Сегодня нагружено:{" "}
+            <span className="text-foreground font-medium">{session.label}</span>
+          </p>
+        </div>
+      ) : null}
+
       <p className="text-muted-foreground flex items-center gap-2 text-[11px] font-medium tracking-[0.14em] uppercase">
         <BookOpen className="text-primary size-3.5 shrink-0" />
         Пока тренер думает — факт из книги
