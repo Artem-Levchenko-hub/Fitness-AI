@@ -48,6 +48,9 @@ const CIRCUIT_TEMPLATE_MARKER = "E2E Smoke — Круг-шаблон";
 // H14.4 — кардио ШАБЛОН (пресет) для /templates: показывается бейджем
 // «Кардио» и стартует одним кликом (startCardioFromTemplate).
 const CARDIO_TEMPLATE_MARKER = "E2E Smoke — Кардио-шаблон";
+// H16.2 — силовая В ОЖИДАНИИ разбора (pending ai_job, без analysis): носитель
+// для проверки «книжных фактов под сессию» в лоадере.
+const WAITING_MARKER = "E2E Smoke — Ожидание";
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
@@ -364,6 +367,40 @@ try {
       values (${cardioTemplateId}, ${verifyId}, ${CARDIO_TEMPLATE_MARKER}, 'custom',
               ${sql.json({ rounds: 6, workSec: 30, restSec: 60 })})`;
 
+    // H16.2 — тренировка В ОЖИДАНИИ разбора: завершённая силовая БЕЗ
+    // ai_analyses + pending ai_job → /workouts/<id>/trainer рендерит
+    // TrainerJobPoller в loading-стейте, где живут «книжные факты под сессию».
+    // scheduled_at в ДАЛЁКОМ будущем → cron-воркер (claim = scheduled_at <= now)
+    // НИКОГДА не подхватит этот job → реального LLM-вызова на проде не будет,
+    // job вечно pending (ровно то, что нужно для детерминированной проверки
+    // лоадера). Грудное упражнение = релевантные RAG-куски (insights проверены
+    // в H16.1, sims ~0.5). Идемпотентно: снос по маркеру (cascade → job+sets).
+    await sql`
+      delete from workouts where user_id = ${verifyId} and name = ${WAITING_MARKER}`;
+    const waitingStarted = new Date(Date.now() - 20 * 60 * 1000); // 20 мин назад
+    const waitingFinished = new Date(Date.now() - 10 * 60 * 1000);
+    const waitingWorkoutId = randomUUID();
+    await sql`
+      insert into workouts (id, user_id, name, status, started_at, finished_at,
+                            total_duration_seconds)
+      values (${waitingWorkoutId}, ${verifyId}, ${WAITING_MARKER}, 'completed',
+              ${waitingStarted}, ${waitingFinished}, 600)`;
+    const waitingWeId = randomUUID();
+    await sql`
+      insert into workout_exercises (id, workout_id, exercise_id, position)
+      values (${waitingWeId}, ${waitingWorkoutId}, ${exerciseId}, 0)`;
+    await sql`
+      insert into workout_sets (id, workout_exercise_id, set_index, set_type,
+                                weight_kg, reps, rpe, completed_at)
+      values (${randomUUID()}, ${waitingWeId}, 0, 'working', 80, 5, 8,
+              ${waitingFinished})`;
+    const waitingJobId = randomUUID();
+    const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    await sql`
+      insert into ai_jobs (id, user_id, workout_id, kind, status, scheduled_at)
+      values (${waitingJobId}, ${verifyId}, ${waitingWorkoutId}, 'post_workout',
+              'pending', ${farFuture})`;
+
     const refresh = await encode({
       token: { uid: verifyId },
       secret: process.env.AUTH_SECRET,
@@ -371,6 +408,7 @@ try {
       maxAge: 60 * 60 * 24 * 365,
     });
 
+    console.log("WAITING_WORKOUT_ID=" + waitingWorkoutId);
     console.log("CIRCUIT_TEMPLATE_ID=" + circuitTemplateId);
     console.log("CARDIO_TEMPLATE_ID=" + cardioTemplateId);
     console.log("USER_ID=" + verifyId);

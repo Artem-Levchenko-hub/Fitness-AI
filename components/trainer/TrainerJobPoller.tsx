@@ -1,6 +1,5 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import {
   TrainerResultCard,
   type TrainerResultData,
 } from "./TrainerResultCard";
+import { TrainerWaiting } from "./TrainerWaiting";
 
 type JobStatus = "pending" | "running" | "succeeded" | "failed";
 
@@ -32,12 +32,15 @@ type JobResponse = {
  *  «Повторить» (создаст новый job через server action callerProvidedRetry). */
 export function TrainerJobPoller({
   jobId,
+  workoutId,
   onRetry,
   exerciseLinks,
   linkLifeFactors,
   pastAdviceHref,
 }: {
   jobId: string;
+  /** H16.2 — id тренировки для «книжных фактов под сессию» в лоадере ожидания. */
+  workoutId?: string;
   onRetry?: () => Promise<{ jobId: string }>;
   /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
   exerciseLinks?: Record<string, string>;
@@ -83,12 +86,15 @@ export function TrainerJobPoller({
   }, [currentJobId]);
 
   if (!job) {
-    return <LoadingState text="Тренер просматривает данные…" />;
+    return (
+      <TrainerWaiting workoutId={workoutId} text="Тренер просматривает данные…" />
+    );
   }
 
   if (job.status === "pending" || job.status === "running") {
     return (
-      <LoadingState
+      <TrainerWaiting
+        workoutId={workoutId}
         text={
           job.status === "running"
             ? "Тренер пишет разбор…"
@@ -147,14 +153,5 @@ export function TrainerJobPoller({
       linkLifeFactors={linkLifeFactors}
       pastAdviceHref={pastAdviceHref}
     />
-  );
-}
-
-function LoadingState({ text }: { text: string }) {
-  return (
-    <div className="bg-card border-border flex items-center gap-3 rounded-2xl border p-6">
-      <Loader2 className="text-primary size-5 animate-spin" />
-      <p className="text-sm leading-relaxed">{text}</p>
-    </div>
   );
 }

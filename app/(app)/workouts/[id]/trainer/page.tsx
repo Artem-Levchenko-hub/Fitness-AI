@@ -150,6 +150,7 @@ export default async function TrainerPage({ params }: Props) {
         // cron уже обрабатывает (или succeeded-legacy) — поллим как fallback.
         <TrainerJobPoller
           jobId={latestJob.id}
+          workoutId={id}
           exerciseLinks={buildExerciseLinkMap(workout.exercises)}
           linkLifeFactors
           pastAdviceHref={pastAdviceHref}
