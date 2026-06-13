@@ -57,3 +57,29 @@ export function buildInsightQuery(input: InsightQueryInput): string {
   const exercises = dedupe(input.exerciseNamesEn);
   return [...muscles, ...exercises, BASE_TRAINING_TERMS].join(" ");
 }
+
+/** Сырая строка из join'а упражнение↔группа-мышц (одно упражнение даёт по
+ *  строке на каждую primary/secondary группу). */
+export type InsightInputRow = {
+  nameEn: string;
+  muscleGroupKey: string | null;
+};
+
+/**
+ * Схлопывает join-строки в уникальные группы мышц + имена упражнений для
+ * `buildInsightQuery`. Общий код для силового (loadWorkoutInsightInputs) и
+ * кругового (loadCircuitInsightInputs) лоадеров — одно знание «как собрать
+ * вход фактов из строк», в одном месте (DRY-знание). null-ключ групп
+ * отбрасывается; порядок первого вхождения сохраняется.
+ */
+export function dedupInsightInputs(rows: InsightInputRow[]): InsightQueryInput {
+  const muscleGroups = [
+    ...new Set(
+      rows
+        .map((r) => r.muscleGroupKey)
+        .filter((k): k is string => k != null),
+    ),
+  ];
+  const exerciseNamesEn = [...new Set(rows.map((r) => r.nameEn))];
+  return { muscleGroups, exerciseNamesEn };
+}

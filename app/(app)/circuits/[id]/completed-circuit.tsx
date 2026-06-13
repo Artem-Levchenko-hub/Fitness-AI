@@ -1,5 +1,6 @@
-import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, Sparkles } from "lucide-react";
 
+import { TrainerJobPoller } from "@/components/trainer/TrainerJobPoller";
 import {
   TrainerResultCard,
   type TrainerResultData,
@@ -15,6 +16,7 @@ export function CompletedCircuit({
   logs,
   analysis,
   jobStatus,
+  jobId,
   pastAdviceHref,
 }: {
   workout: CircuitWorkout;
@@ -27,6 +29,8 @@ export function CompletedCircuit({
     createdAt: Date;
   } | null;
   jobStatus: "pending" | "running" | "succeeded" | "failed" | null;
+  /** H16.3 — id AI-задачи круговой для клиентского поллера лоадера ожидания. */
+  jobId: string | null;
   /** H13.6 — ссылка на прошлый разбор круговой (own-view); null → статика. */
   pastAdviceHref?: string | null;
 }) {
@@ -105,6 +109,8 @@ export function CompletedCircuit({
       <AnalysisCard
         analysis={analysis}
         jobStatus={jobStatus}
+        jobId={jobId}
+        circuitWorkoutId={workout.id}
         pastAdviceHref={pastAdviceHref}
       />
 
@@ -171,10 +177,14 @@ export function CompletedCircuit({
 function AnalysisCard({
   analysis,
   jobStatus,
+  jobId,
+  circuitWorkoutId,
   pastAdviceHref,
 }: {
   analysis: { content: string; resultJson: unknown } | null;
   jobStatus: "pending" | "running" | "succeeded" | "failed" | null;
+  jobId: string | null;
+  circuitWorkoutId: string;
   pastAdviceHref?: string | null;
 }) {
   if (analysis) {
@@ -211,16 +221,19 @@ function AnalysisCard({
       </section>
     );
   }
-  if (jobStatus === "pending" || jobStatus === "running") {
+  if ((jobStatus === "pending" || jobStatus === "running") && jobId) {
+    // H16.3 — де-фриз: вместо статичного «обнови страницу» — общий носитель
+    // ожидания (живые стадии + книжные факты круговой) и клиентский поллер
+    // /api/ai/jobs/[id], который сам подменит лоадер готовым разбором (без
+    // ручного refresh). linkLifeFactors + pastAdviceHref — паритет со
+    // server-путём готового разбора выше (столп 4).
     return (
-      <section className="bg-card border-border rounded-2xl border p-5 text-sm">
-        <div className="flex items-center gap-2">
-          <Loader2 className="text-muted-foreground size-4 animate-spin" />
-          <p className="text-muted-foreground">
-            Тренер разбирает круговую… обнови страницу через 30-60 сек.
-          </p>
-        </div>
-      </section>
+      <TrainerJobPoller
+        jobId={jobId}
+        circuitWorkoutId={circuitWorkoutId}
+        linkLifeFactors
+        pastAdviceHref={pastAdviceHref}
+      />
     );
   }
   if (jobStatus === "failed") {

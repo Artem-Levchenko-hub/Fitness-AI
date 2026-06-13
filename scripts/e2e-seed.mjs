@@ -51,6 +51,9 @@ const CARDIO_TEMPLATE_MARKER = "E2E Smoke — Кардио-шаблон";
 // H16.2 — силовая В ОЖИДАНИИ разбора (pending ai_job, без analysis): носитель
 // для проверки «книжных фактов под сессию» в лоадере.
 const WAITING_MARKER = "E2E Smoke — Ожидание";
+// H16.3 — КРУГОВАЯ В ОЖИДАНИИ разбора (pending circuit ai_job, без analysis):
+// де-фриз /circuits/[id] — живой лоадер вместо «обнови страницу».
+const WAITING_CIRCUIT_MARKER = "E2E Smoke — Круг (ожидание)";
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
@@ -401,6 +404,43 @@ try {
       values (${waitingJobId}, ${verifyId}, ${waitingWorkoutId}, 'post_workout',
               'pending', ${farFuture})`;
 
+    // H16.3 — КРУГОВАЯ В ОЖИДАНИИ разбора: завершённая круговая БЕЗ
+    // ai_analyses + pending circuit_post_workout ai_job (scheduled_at в далёком
+    // будущем → cron-воркер НИКОГДА не подхватит → 0 LLM, job вечно pending).
+    // На /circuits/<id> AnalysisCard рендерит TrainerJobPoller (де-фриз: живой
+    // лоадер + книжные факты круговой), а НЕ статичный «обнови страницу».
+    // Грудное упражнение = релевантные RAG-куски (circuit insights H16.3).
+    // Идемпотентно: снос по маркеру (cascade → exercises+logs+job).
+    await sql`
+      delete from circuit_workouts where user_id = ${verifyId} and name = ${WAITING_CIRCUIT_MARKER}`;
+    const waitingCircuitStarted = new Date(Date.now() - 18 * 60 * 1000); // 18 мин назад
+    const waitingCircuitFinished = new Date(Date.now() - 8 * 60 * 1000);
+    const waitingCircuitId = randomUUID();
+    await sql`
+      insert into circuit_workouts (id, user_id, name, total_rounds,
+                                    rest_between_rounds_sec, rest_between_exercises_sec,
+                                    status, started_at, finished_at)
+      values (${waitingCircuitId}, ${verifyId}, ${WAITING_CIRCUIT_MARKER}, 3, 60, 15,
+              'completed', ${waitingCircuitStarted}, ${waitingCircuitFinished})`;
+    const waitingCircuitExId = randomUUID();
+    await sql`
+      insert into circuit_exercises (id, circuit_workout_id, exercise_id, order_idx,
+                                     kind, target_reps)
+      values (${waitingCircuitExId}, ${waitingCircuitId}, ${exerciseId}, 0, 'reps', 12)`;
+    for (let round = 1; round <= 3; round++) {
+      await sql`
+        insert into circuit_round_logs (id, circuit_workout_id, circuit_exercise_id,
+                                        round_number, actual_reps, rpe, completed_at,
+                                        skipped)
+        values (${randomUUID()}, ${waitingCircuitId}, ${waitingCircuitExId}, ${round},
+                12, 8, ${waitingCircuitFinished}, false)`;
+    }
+    const waitingCircuitJobId = randomUUID();
+    await sql`
+      insert into ai_jobs (id, user_id, circuit_workout_id, kind, status, scheduled_at)
+      values (${waitingCircuitJobId}, ${verifyId}, ${waitingCircuitId},
+              'circuit_post_workout', 'pending', ${farFuture})`;
+
     const refresh = await encode({
       token: { uid: verifyId },
       secret: process.env.AUTH_SECRET,
@@ -409,6 +449,7 @@ try {
     });
 
     console.log("WAITING_WORKOUT_ID=" + waitingWorkoutId);
+    console.log("WAITING_CIRCUIT_ID=" + waitingCircuitId);
     console.log("CIRCUIT_TEMPLATE_ID=" + circuitTemplateId);
     console.log("CARDIO_TEMPLATE_ID=" + cardioTemplateId);
     console.log("USER_ID=" + verifyId);

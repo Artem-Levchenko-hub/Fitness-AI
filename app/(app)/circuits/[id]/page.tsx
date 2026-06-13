@@ -98,6 +98,7 @@ export default async function CircuitPage({ params }: Props) {
           logs={c.logs}
           analysis={analysis ?? null}
           jobStatus={job?.status ?? null}
+          jobId={job?.id ?? null}
           pastAdviceHref={pastAdviceHref}
         />
       )}

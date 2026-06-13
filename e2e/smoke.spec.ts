@@ -20,6 +20,7 @@ const prevCircuitId = process.env.E2E_PREV_CIRCUIT_ID;
 const cardioId = process.env.E2E_CARDIO_ID;
 const circuitTemplateId = process.env.E2E_CIRCUIT_TEMPLATE_ID;
 const cardioTemplateId = process.env.E2E_CARDIO_TEMPLATE_ID;
+const waitingCircuitId = process.env.E2E_WAITING_CIRCUIT_ID;
 
 test("/stats открывается с контентом, а не error-boundary", async ({ page }) => {
   await page.goto("/stats");
@@ -456,6 +457,24 @@ test("H13.4 — разбор круговой /circuits/[id] линкует фа
   await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
   await expect(page.locator('a[href="/sleep"]')).toBeVisible();
   await expect(page.locator('a[href="/nutrition"]')).toBeVisible();
+});
+
+test("H16.3 — круговая в ожидании разбора: живой лоадер, а не «обнови страницу»", async ({
+  page,
+}) => {
+  test.skip(
+    !waitingCircuitId,
+    "E2E_WAITING_CIRCUIT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H16.3 де-фриз: круговая с pending circuit ai_job (far-future → 0 LLM) на
+  // /circuits/<id> рендерит TrainerJobPoller — живые стадии вместо статичного
+  // спиннера. Детерминированные ассерты (без живого embeddings-вызова —
+  // карточки фактов проверяются разово через MCP, не в смоуке): первая стадия
+  // ленты видна И мёртвый текст «обнови страницу» исчез.
+  await page.goto(`/circuits/${waitingCircuitId}`);
+  await expect(page).toHaveURL(new RegExp(`/circuits/${waitingCircuitId}`));
+  await expect(page.getByText("Читаю твои подходы")).toBeVisible();
+  await expect(page.getByText("обнови страницу")).toHaveCount(0);
 });
 
 test("/workouts: три формата (силовая+круговая+кардио) вперемешку, каждый открывается в свой detail", async ({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildInsightQuery } from "./insight-query";
+import { buildInsightQuery, dedupInsightInputs } from "./insight-query";
 
 describe("buildInsightQuery", () => {
   it("включает мышцы, упражнения и базовые EN-термины", () => {
@@ -50,5 +50,41 @@ describe("buildInsightQuery", () => {
       exerciseNamesEn: ["Squat", "  ", "Squat", ""],
     });
     expect(q).toBe("Squat hypertrophy muscle growth training volume rest periods");
+  });
+});
+
+describe("dedupInsightInputs", () => {
+  it("пустые строки → пустые массивы", () => {
+    expect(dedupInsightInputs([])).toEqual({
+      muscleGroups: [],
+      exerciseNamesEn: [],
+    });
+  });
+
+  it("схлопывает дубли групп мышц, сохраняя порядок", () => {
+    const out = dedupInsightInputs([
+      { nameEn: "Bench Press", muscleGroupKey: "chest" },
+      { nameEn: "Bench Press", muscleGroupKey: "triceps" },
+      { nameEn: "Bench Press", muscleGroupKey: "chest" },
+    ]);
+    expect(out.muscleGroups).toEqual(["chest", "triceps"]);
+  });
+
+  it("отбрасывает null muscleGroupKey", () => {
+    const out = dedupInsightInputs([
+      { nameEn: "Plank", muscleGroupKey: null },
+      { nameEn: "Plank", muscleGroupKey: "core" },
+    ]);
+    expect(out.muscleGroups).toEqual(["core"]);
+  });
+
+  it("схлопывает дубли имён упражнений (несколько групп на упражнение)", () => {
+    const out = dedupInsightInputs([
+      { nameEn: "Squat", muscleGroupKey: "quads" },
+      { nameEn: "Squat", muscleGroupKey: "glutes" },
+      { nameEn: "Deadlift", muscleGroupKey: "back_lats" },
+    ]);
+    expect(out.exerciseNamesEn).toEqual(["Squat", "Deadlift"]);
+    expect(out.muscleGroups).toEqual(["quads", "glutes", "back_lats"]);
   });
 });

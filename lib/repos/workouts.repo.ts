@@ -2,6 +2,10 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne } from "drizzle
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import {
+  dedupInsightInputs,
+  type InsightQueryInput,
+} from "@/lib/ai/insight-query";
 import { resumeCutoff } from "@/lib/domain";
 
 type WorkoutStatusLiteral = (typeof schema.workoutStatus.enumValues)[number];
@@ -696,7 +700,7 @@ export async function getActiveWorkoutId(userId: string): Promise<string | null>
 export async function loadWorkoutInsightInputs(
   userId: string,
   workoutId: string,
-): Promise<{ muscleGroups: string[]; exerciseNamesEn: string[] } | null> {
+): Promise<InsightQueryInput | null> {
   const [owned] = await db
     .select({ id: schema.workouts.id })
     .from(schema.workouts)
@@ -725,14 +729,51 @@ export async function loadWorkoutInsightInputs(
     )
     .where(eq(schema.workoutExercises.workoutId, workoutId));
 
-  const muscleGroups = [
-    ...new Set(
-      rows
-        .map((r) => r.muscleGroupKey)
-        .filter((k): k is NonNullable<typeof k> => k != null),
-    ),
-  ];
-  const exerciseNamesEn = [...new Set(rows.map((r) => r.nameEn))];
+  return dedupInsightInputs(rows);
+}
 
-  return { muscleGroups, exerciseNamesEn };
+/**
+ * H16.3 — «книжные факты под сессию» для КРУГОВОЙ (зеркало
+ * loadWorkoutInsightInputs): круговая ожидает разбор на /circuits/[id] и
+ * получает тот же лоадер с фактами. R-7: владелец круговой гейтится по userId
+ * (чужой/нет → null → пустые карточки). Источник мышц/имён — circuit_exercises
+ * → exercises.nameEn + exercise_muscle_groups (у круговой свои упражнения-дети,
+ * не workout_exercises).
+ */
+export async function loadCircuitInsightInputs(
+  userId: string,
+  circuitWorkoutId: string,
+): Promise<InsightQueryInput | null> {
+  const [owned] = await db
+    .select({ id: schema.circuitWorkouts.id })
+    .from(schema.circuitWorkouts)
+    .where(
+      and(
+        eq(schema.circuitWorkouts.id, circuitWorkoutId),
+        eq(schema.circuitWorkouts.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!owned) return null;
+
+  const rows = await db
+    .select({
+      nameEn: schema.exercises.nameEn,
+      muscleGroupKey: schema.exerciseMuscleGroups.muscleGroupKey,
+    })
+    .from(schema.circuitExercises)
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.circuitExercises.exerciseId),
+    )
+    .leftJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.circuitExercises.exerciseId,
+      ),
+    )
+    .where(eq(schema.circuitExercises.circuitWorkoutId, circuitWorkoutId));
+
+  return dedupInsightInputs(rows);
 }

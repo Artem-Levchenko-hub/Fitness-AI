@@ -24,20 +24,36 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-export function InsightCards({ workoutId }: { workoutId: string }) {
+export function InsightCards({
+  workoutId,
+  circuitWorkoutId,
+}: {
+  /** Силовая тренировка — факты по её упражнениям (H16.2). */
+  workoutId?: string;
+  /** Круговая — факты по её упражнениям (H16.3). Передаётся вместо workoutId. */
+  circuitWorkoutId?: string;
+}) {
   const [chunks, setChunks] = useState<InsightChunk[]>([]);
   const [index, setIndex] = useState(0);
   const liveRef = useRef(true);
 
+  // Какой id-параметр кормит /insights (силовая vs круговая). Один из двух.
+  const queryParam = workoutId
+    ? `workoutId=${encodeURIComponent(workoutId)}`
+    : circuitWorkoutId
+      ? `circuitWorkoutId=${encodeURIComponent(circuitWorkoutId)}`
+      : null;
+
   // Тянем факты один раз под эту тренировку. AbortController — чистый cleanup.
   useEffect(() => {
+    if (!queryParam) return;
     liveRef.current = true;
     const controller = new AbortController();
 
     (async () => {
       try {
         const res = await fetch(
-          `/api/ai/trainer/insights?workoutId=${encodeURIComponent(workoutId)}`,
+          `/api/ai/trainer/insights?${queryParam}`,
           { cache: "no-store", signal: controller.signal },
         );
         if (!res.ok) return; // fail-soft: лоадер живёт без карточек
@@ -54,7 +70,7 @@ export function InsightCards({ workoutId }: { workoutId: string }) {
       liveRef.current = false;
       controller.abort();
     };
-  }, [workoutId]);
+  }, [queryParam]);
 
   // Автопрокрутка фактов — только если их больше одного и не reduced-motion.
   useEffect(() => {

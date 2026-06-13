@@ -33,14 +33,17 @@ type JobResponse = {
 export function TrainerJobPoller({
   jobId,
   workoutId,
+  circuitWorkoutId,
   onRetry,
   exerciseLinks,
   linkLifeFactors,
   pastAdviceHref,
 }: {
   jobId: string;
-  /** H16.2 — id тренировки для «книжных фактов под сессию» в лоадере ожидания. */
+  /** H16.2 — id силовой тренировки для «книжных фактов» в лоадере ожидания. */
   workoutId?: string;
+  /** H16.3 — id круговой для «книжных фактов» (передаётся вместо workoutId). */
+  circuitWorkoutId?: string;
   onRetry?: () => Promise<{ jobId: string }>;
   /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
   exerciseLinks?: Record<string, string>;
@@ -87,7 +90,11 @@ export function TrainerJobPoller({
 
   if (!job) {
     return (
-      <TrainerWaiting workoutId={workoutId} text="Тренер просматривает данные…" />
+      <TrainerWaiting
+        workoutId={workoutId}
+        circuitWorkoutId={circuitWorkoutId}
+        text="Тренер просматривает данные…"
+      />
     );
   }
 
@@ -95,6 +102,7 @@ export function TrainerJobPoller({
     return (
       <TrainerWaiting
         workoutId={workoutId}
+        circuitWorkoutId={circuitWorkoutId}
         text={
           job.status === "running"
             ? "Тренер пишет разбор…"

@@ -1,7 +1,10 @@
 import { requireUser } from "@/lib/auth/require-user";
 import { buildInsightQuery } from "@/lib/ai/insight-query";
 import { retrieveRelevant } from "@/lib/ai/rag/retrieve";
-import { loadWorkoutInsightInputs } from "@/lib/repos/workouts.repo";
+import {
+  loadCircuitInsightInputs,
+  loadWorkoutInsightInputs,
+} from "@/lib/repos/workouts.repo";
 
 export const runtime = "nodejs";
 
@@ -12,20 +15,33 @@ export const runtime = "nodejs";
 const INSIGHT_TOP_K = 5;
 const INSIGHT_MIN_SIMILARITY = 0.3;
 
-/** GET /api/ai/trainer/insights?workoutId= — «книжные факты под сессию» для
- *  карточек в момент ожидания разбора (H16.1). R-7: владелец тренировки
- *  гейтится в repo по userId — чужой/несуществующий workoutId → пустые
- *  карточки, не утечка. Fail-soft (R-10): RAG упал / нет релевантных кусков →
- *  `{ chunks: [] }`, НЕ 500 (лоадер всё равно живёт — H16.2). */
+/** GET /api/ai/trainer/insights?workoutId=|circuitWorkoutId= — «книжные факты
+ *  под сессию» для карточек в момент ожидания разбора (H16.1 силовая, H16.3
+ *  круговая). R-7: владелец тренировки гейтится в repo по userId —
+ *  чужой/несуществующий id → пустые карточки, не утечка. Fail-soft (R-10): RAG
+ *  упал / нет релевантных кусков → `{ chunks: [] }`, НЕ 500 (лоадер всё равно
+ *  живёт — H16.2). */
 export async function GET(request: Request) {
   const user = await requireUser();
 
-  const workoutId = new URL(request.url).searchParams.get("workoutId");
-  if (!workoutId) {
+  const params = new URL(request.url).searchParams;
+  const workoutId = params.get("workoutId");
+  const circuitWorkoutId = params.get("circuitWorkoutId");
+
+  // Отдельные FK-пути (R-29): силовая тянет мышцы из workout_exercises,
+  // круговая — из circuit_exercises. workoutId приоритетен, если переданы оба.
+  let inputs;
+  let label: string;
+  if (workoutId) {
+    inputs = await loadWorkoutInsightInputs(user.id, workoutId);
+    label = `workout=${workoutId}`;
+  } else if (circuitWorkoutId) {
+    inputs = await loadCircuitInsightInputs(user.id, circuitWorkoutId);
+    label = `circuit=${circuitWorkoutId}`;
+  } else {
     return Response.json({ error: "workoutId_required" }, { status: 400 });
   }
 
-  const inputs = await loadWorkoutInsightInputs(user.id, workoutId);
   if (!inputs) {
     // Не владелец / нет тренировки — пустые карточки (R-7 не утечка, R-37).
     return Response.json({ chunks: [] });
@@ -47,7 +63,7 @@ export async function GET(request: Request) {
 
   // Лог запаса к порогу — видно, проходят ли короткие EN-запросы minSimilarity.
   console.info(
-    `[trainer-insights] workout=${workoutId} q="${query}" chunks=${chunks.length}` +
+    `[trainer-insights] ${label} q="${query}" chunks=${chunks.length}` +
       (chunks.length > 0
         ? ` sims=[${chunks.map((c) => c.similarity.toFixed(2)).join(", ")}]`
         : ""),

@@ -14,15 +14,21 @@ import { TrainerStages } from "./TrainerStages";
 export function TrainerWaiting({
   text,
   workoutId,
+  circuitWorkoutId,
 }: {
   text: string;
-  /** Без id факты не тянутся — остаётся чистый скелет (безопасно для любого
-   *  вызова). */
+  /** Силовая — факты по её упражнениям. Без id факты не тянутся — остаётся
+   *  чистый скелет (безопасно для любого вызова). */
   workoutId?: string;
+  /** Круговая (H16.3) — факты по её упражнениям; передаётся вместо workoutId. */
+  circuitWorkoutId?: string;
 }) {
+  const hasFacts = Boolean(workoutId || circuitWorkoutId);
   return (
     <div className="space-y-4">
-      {workoutId ? <InsightCards workoutId={workoutId} /> : null}
+      {hasFacts ? (
+        <InsightCards workoutId={workoutId} circuitWorkoutId={circuitWorkoutId} />
+      ) : null}
       <TrainerSkeleton text={text} />
     </div>
   );
