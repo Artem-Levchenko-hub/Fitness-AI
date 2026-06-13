@@ -178,6 +178,32 @@ test("H12.2 — /create «Силовая»: список шаблонов рас
   await expect(page).toHaveURL(new RegExp(`/templates/${strengthTemplateId}`));
 });
 
+test("H12.2 item-c — /dashboard: один канонический вход повтора (/create), второй = управление (/templates)", async ({
+  page,
+}) => {
+  // Консолидация дубль-входов (столп 3): запуск повтора живёт ровно в одном
+  // месте — «Начать тренировку» → /create-пикер (раскрывает шаблоны 3 форматов).
+  // Вторая кнопка StartCard relabel в УПРАВЛЕНИЕ (CRUD) → /templates, чтобы не
+  // плодить второй launch-аффорданс. Без сида — StartCard рендерится всегда.
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  // Канонический вход повтора сохранён (столп 4 анти-регресс).
+  const startLink = page.getByRole("link", { name: "Начать тренировку" });
+  await expect(startLink).toBeVisible();
+  await expect(startLink).toHaveAttribute("href", "/create");
+
+  // Второй вход = управление: новый label + ведёт на /templates.
+  const manageLink = page.getByTestId("dashboard-manage-templates");
+  await expect(manageLink).toBeVisible();
+  await expect(manageLink).toHaveText(/Управление шаблонами/);
+  await expect(manageLink).toHaveAttribute("href", "/templates");
+
+  // Прежний launch-аффорданс «Мои шаблоны» на дашборде больше не существует
+  // (иначе второй путь запуска тихо вернулся бы).
+  await expect(page.getByRole("link", { name: "Мои шаблоны" })).toHaveCount(0);
+});
+
 test("/dashboard: мини-аватар-витрина (H9.2) показывает heat-силуэт и ведёт на /profile", async ({
   page,
 }) => {

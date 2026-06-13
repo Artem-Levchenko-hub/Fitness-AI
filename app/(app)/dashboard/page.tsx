@@ -2,8 +2,8 @@ import {
   ArrowRight,
   BarChart3,
   ChevronRight,
-  Dumbbell,
   Plus,
+  Settings2,
   Users,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -242,6 +242,16 @@ function StartCard() {
         Один вход для всех форматов — силовая, круговая, кардио и интервалы.
       </p>
 
+      {/*
+       * H12.2 item-c — один канонический вход «повторить»: «Начать тренировку»
+       * → /create-пикер раскрывает шаблоны всех 3 форматов одним кликом (повтор
+       * ≤2 тапа, столп 3). Вторая кнопка = УПРАВЛЕНИЕ (CRUD): /templates несёт
+       * редактирование/создание/удаление — не дублирующий «запуск». Прежний
+       * Dumbbell+«Мои шаблоны» читался как launch-аффорданс и плодил третий путь
+       * к шаблонам рядом с /create; Settings2+«Управление шаблонами» развязывает
+       * запуск и управление (столп 4 — запуск из /templates сохранён, но это уже
+       * не входная точка повтора с дашборда).
+       */}
       <div className="mt-5 flex flex-col gap-3">
         <Button asChild size="xl" className="w-full">
           <Link href="/create">
@@ -250,9 +260,9 @@ function StartCard() {
           </Link>
         </Button>
         <Button asChild size="xl" variant="outline" className="w-full">
-          <Link href="/templates">
-            <Dumbbell className="size-5" />
-            Мои шаблоны
+          <Link href="/templates" data-testid="dashboard-manage-templates">
+            <Settings2 className="size-5" />
+            Управление шаблонами
           </Link>
         </Button>
       </div>
