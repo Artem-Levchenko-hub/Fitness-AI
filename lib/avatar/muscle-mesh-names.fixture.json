@@ -1,0 +1,20 @@
+{
+  "generatedFrom": "public/models/muscles.glb",
+  "meshNodeNames": [
+    "back_lats",
+    "back_traps",
+    "biceps",
+    "calves",
+    "chest",
+    "core",
+    "decor",
+    "forearms",
+    "glutes",
+    "hamstrings",
+    "quads",
+    "shoulders_front",
+    "shoulders_rear",
+    "shoulders_side",
+    "triceps"
+  ]
+}
