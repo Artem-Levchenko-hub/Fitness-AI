@@ -687,3 +687,52 @@ export async function getActiveWorkoutId(userId: string): Promise<string | null>
     .limit(1);
   return row?.id ?? null;
 }
+
+/** H16.1 — мышцы + EN-имена упражнений силовой тренировки для построения
+ *  RAG-запроса «книжных фактов под сессию» (buildInsightQuery). R-7: владелец
+ *  тренировки гейтится явным userId — чужой/несуществующий workoutId → null
+ *  (роут отдаёт пустые карточки, не утечку). Возвращает уже дедуплицированные
+ *  ключи групп мышц (primary+secondary) и nameEn упражнений сессии. */
+export async function loadWorkoutInsightInputs(
+  userId: string,
+  workoutId: string,
+): Promise<{ muscleGroups: string[]; exerciseNamesEn: string[] } | null> {
+  const [owned] = await db
+    .select({ id: schema.workouts.id })
+    .from(schema.workouts)
+    .where(
+      and(
+        eq(schema.workouts.id, workoutId),
+        eq(schema.workouts.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!owned) return null;
+
+  const rows = await db
+    .select({
+      nameEn: schema.exercises.nameEn,
+      muscleGroupKey: schema.exerciseMuscleGroups.muscleGroupKey,
+    })
+    .from(schema.workoutExercises)
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.workoutExercises.exerciseId),
+    )
+    .leftJoin(
+      schema.exerciseMuscleGroups,
+      eq(schema.exerciseMuscleGroups.exerciseId, schema.workoutExercises.exerciseId),
+    )
+    .where(eq(schema.workoutExercises.workoutId, workoutId));
+
+  const muscleGroups = [
+    ...new Set(
+      rows
+        .map((r) => r.muscleGroupKey)
+        .filter((k): k is NonNullable<typeof k> => k != null),
+    ),
+  ];
+  const exerciseNamesEn = [...new Set(rows.map((r) => r.nameEn))];
+
+  return { muscleGroups, exerciseNamesEn };
+}
