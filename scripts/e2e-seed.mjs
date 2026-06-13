@@ -48,6 +48,9 @@ const CIRCUIT_TEMPLATE_MARKER = "E2E Smoke — Круг-шаблон";
 // H14.4 — кардио ШАБЛОН (пресет) для /templates: показывается бейджем
 // «Кардио» и стартует одним кликом (startCardioFromTemplate).
 const CARDIO_TEMPLATE_MARKER = "E2E Smoke — Кардио-шаблон";
+// H12.2 — силовой ШАБЛОН (workout_templates + 1 упражнение): на /create карточка
+// «Силовая» раскрывает список со строкой этого шаблона (тап → /templates/[id]).
+const STRENGTH_TEMPLATE_MARKER = "E2E Smoke — Силовой-шаблон";
 // H16.2 — силовая В ОЖИДАНИИ разбора (pending ai_job, без analysis): носитель
 // для проверки «книжных фактов под сессию» в лоадере.
 const WAITING_MARKER = "E2E Smoke — Ожидание";
@@ -394,6 +397,22 @@ try {
       values (${cardioTemplateId}, ${verifyId}, ${CARDIO_TEMPLATE_MARKER}, 'custom',
               ${sql.json({ rounds: 6, workSec: 30, restSec: 60 })})`;
 
+    // H12.2 — силовой шаблон: одна детерминированная строка workout_templates
+    // + одно упражнение. /create показывает раскрытый список «Силовая» с этой
+    // строкой (1 упражнение); тап ведёт на экран старта /templates/<id>.
+    // Идемпотентно: снос по маркеру (cascade → template_exercises).
+    await sql`
+      delete from workout_templates where user_id = ${verifyId} and name = ${STRENGTH_TEMPLATE_MARKER}`;
+    const strengthTemplateId = randomUUID();
+    await sql`
+      insert into workout_templates (id, user_id, name)
+      values (${strengthTemplateId}, ${verifyId}, ${STRENGTH_TEMPLATE_MARKER})`;
+    await sql`
+      insert into template_exercises (id, template_id, exercise_id, position,
+                                      target_sets, target_reps_min, target_reps_max,
+                                      target_rest_seconds)
+      values (${randomUUID()}, ${strengthTemplateId}, ${exerciseId}, 0, 3, 8, 12, 120)`;
+
     // H16.2 — тренировка В ОЖИДАНИИ разбора: завершённая силовая БЕЗ
     // ai_analyses + pending ai_job → /workouts/<id>/trainer рендерит
     // TrainerJobPoller в loading-стейте, где живут «книжные факты под сессию».
@@ -493,6 +512,7 @@ try {
     console.log("WAITING_CIRCUIT_ID=" + waitingCircuitId);
     console.log("CIRCUIT_TEMPLATE_ID=" + circuitTemplateId);
     console.log("CARDIO_TEMPLATE_ID=" + cardioTemplateId);
+    console.log("STRENGTH_TEMPLATE_ID=" + strengthTemplateId);
     console.log("USER_ID=" + verifyId);
     console.log("FRIEND_ID=" + friendId);
     console.log("WORKOUT_ID=" + workoutId);

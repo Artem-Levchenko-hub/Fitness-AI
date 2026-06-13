@@ -20,6 +20,7 @@ const prevCircuitId = process.env.E2E_PREV_CIRCUIT_ID;
 const cardioId = process.env.E2E_CARDIO_ID;
 const circuitTemplateId = process.env.E2E_CIRCUIT_TEMPLATE_ID;
 const cardioTemplateId = process.env.E2E_CARDIO_TEMPLATE_ID;
+const strengthTemplateId = process.env.E2E_STRENGTH_TEMPLATE_ID;
 const waitingCircuitId = process.env.E2E_WAITING_CIRCUIT_ID;
 const waitingWorkoutId = process.env.E2E_WAITING_WORKOUT_ID;
 const activeWorkoutId = process.env.E2E_ACTIVE_WORKOUT_ID;
@@ -147,6 +148,34 @@ test("H12.1 — активная тренировка: «Прошлый раз»
   await expect(prevLine).toContainText("80×5");
   // Префилл первого подхода = вес последнего рабочего подхода прошлой сессии.
   await expect(page.getByLabel("Вес, кг")).toHaveValue("80");
+});
+
+test("H12.2 — /create «Силовая»: список шаблонов раскрыт, тап ведёт на старт (повтор ≤2 тапа)", async ({
+  page,
+}) => {
+  test.skip(
+    !strengthTemplateId,
+    "E2E_STRENGTH_TEMPLATE_ID не задан — засеять через scripts/e2e-seed.mjs",
+  );
+  await page.goto("/create");
+  await expect(page).toHaveURL(/\/create/);
+  // ≥1 силовой шаблон → карточка «Силовая» РАСКРЫТА списком (а не прямой ссылкой
+  // в билдер): строка шаблона ведёт на экран старта /templates/<id>, где живут
+  // совет и кнопка старта.
+  const repeatLink = page.getByRole("link", { name: /Силовой-шаблон/ });
+  await expect(repeatLink).toBeVisible();
+  await expect(repeatLink).toHaveAttribute(
+    "href",
+    `/templates/${strengthTemplateId}`,
+  );
+  // Строка «Создать новый шаблон» сохраняет старый путь в конструктор (столп 4).
+  await expect(
+    page.getByRole("link", { name: "Создать новый шаблон" }),
+  ).toHaveAttribute("href", "/templates/new");
+  // Тап по шаблону → экран старта: повтор существующего шаблона за ≤2 тапа от
+  // дашборда (дашборд → /create → этот тап).
+  await repeatLink.click();
+  await expect(page).toHaveURL(new RegExp(`/templates/${strengthTemplateId}`));
 });
 
 test("/dashboard: мини-аватар-витрина (H9.2) показывает heat-силуэт и ведёт на /profile", async ({

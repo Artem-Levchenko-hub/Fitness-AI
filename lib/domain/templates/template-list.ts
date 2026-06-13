@@ -64,6 +64,13 @@ function exerciseWord(n: number): string {
   return "упражнений";
 }
 
+/** Счёт упражнений с правильной русской формой слова: «6 упражнений»,
+ *  «1 упражнение». Без ведущего лейбла формата — для контекстов, где формат уже
+ *  ясен из шапки (карточка «Силовая» на /create). */
+export function formatExerciseCount(n: number): string {
+  return `${n} ${exerciseWord(n)}`;
+}
+
 /** Единая мета-строка строки шаблона в стиле «Saved Workouts» (Nike Training
  *  Club): формат ведёт строку как текст (R-41 — не только цвет), затем — деталь
  *  формата: счёт упражнений у силовой/круговой, сводка интервалов у кардио
@@ -71,8 +78,29 @@ function exerciseWord(n: number): string {
  *  «Кардио · Свой · 6×30/60с». */
 export function formatTemplateMeta(item: UnifiedTemplateItem): string {
   const detail =
-    item.format === "cardio"
-      ? item.metaLine
-      : `${item.exerciseCount} ${exerciseWord(item.exerciseCount)}`;
+    item.format === "cardio" ? item.metaLine : formatExerciseCount(item.exerciseCount);
   return `${FORMAT_LABEL[item.format]} · ${detail}`;
+}
+
+/** Готовая строка списка силовых шаблонов на карточке «Силовая» (/create H12.2):
+ *  тап ведёт в экран старта существующего шаблона `/templates/[id]` (там уже
+ *  живут строка-совет H5.7 и кнопка старта), а НЕ в конструктор нового
+ *  `/templates/new` — повтор шаблона за ≤2 тапа от дашборда. Формат уже задан
+ *  шапкой карточки → мета без ведущего «Силовая ·». */
+export type StrengthTemplateRow = {
+  id: string;
+  name: string;
+  href: string;
+  meta: string;
+};
+
+export function buildStrengthTemplateRows(
+  templates: TemplateListSource[],
+): StrengthTemplateRow[] {
+  return templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    href: `/templates/${t.id}`,
+    meta: formatExerciseCount(t.exerciseCount),
+  }));
 }

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildStrengthTemplateRows,
+  formatExerciseCount,
   formatTemplateMeta,
   mergeTemplateList,
+  type TemplateListSource,
   type UnifiedTemplateItem,
 } from "./template-list";
 
@@ -204,5 +207,56 @@ describe("formatTemplateMeta", () => {
         format: "cardio",
       }),
     ).toBe("Кардио · Свой · 6×30/60с");
+  });
+});
+
+describe("formatExerciseCount", () => {
+  it("pluralizes упражнение by Russian rules", () => {
+    expect(formatExerciseCount(1)).toBe("1 упражнение");
+    expect(formatExerciseCount(3)).toBe("3 упражнения");
+    expect(formatExerciseCount(5)).toBe("5 упражнений");
+    expect(formatExerciseCount(11)).toBe("11 упражнений");
+    expect(formatExerciseCount(21)).toBe("21 упражнение");
+    expect(formatExerciseCount(0)).toBe("0 упражнений");
+  });
+});
+
+describe("buildStrengthTemplateRows", () => {
+  const tpl = (over: Partial<TemplateListSource> = {}): TemplateListSource => ({
+    id: "t1",
+    name: "Грудь+трицепс",
+    description: null,
+    exerciseCount: 6,
+    updatedAt: new Date("2026-06-12T00:00:00Z"),
+    ...over,
+  });
+
+  it("returns [] for no templates (R-37 empty → builder, not phantom list)", () => {
+    expect(buildStrengthTemplateRows([])).toEqual([]);
+  });
+
+  it("maps id, name, repeat href and pluralized exercise meta", () => {
+    expect(buildStrengthTemplateRows([tpl()])).toEqual([
+      {
+        id: "t1",
+        name: "Грудь+трицепс",
+        href: "/templates/t1",
+        meta: "6 упражнений",
+      },
+    ]);
+  });
+
+  it("href points at the template start screen, not the new-template builder", () => {
+    const [row] = buildStrengthTemplateRows([tpl({ id: "abc-123" })]);
+    expect(row.href).toBe("/templates/abc-123");
+    expect(row.href).not.toBe("/templates/new");
+  });
+
+  it("preserves input order (repo already sorts by freshness)", () => {
+    const rows = buildStrengthTemplateRows([
+      tpl({ id: "a", name: "A" }),
+      tpl({ id: "b", name: "B" }),
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
   });
 });
