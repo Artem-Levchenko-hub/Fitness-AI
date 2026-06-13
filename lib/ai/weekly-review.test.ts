@@ -26,6 +26,8 @@ function base(): WeeklyReviewInput {
       muscleVolumes: [{ muscleKey: "chest", volume: 4000 }],
     },
     cycleNote: null,
+    sleep: [],
+    nutrition: [],
   };
 }
 
@@ -94,6 +96,45 @@ describe("formatWeeklyReviewBlock", () => {
     d.current = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
     d.previous = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
     expect(hasWeeklyData(d)).toBe(false);
+  });
+
+  it("рендерит блок сна за неделю с часами, когда есть ночи", () => {
+    const d = base();
+    d.sleep = [
+      { date: "2026-06-10", hours: 7.5, quality: 4 },
+      { date: "2026-06-11", hours: 6, quality: null },
+    ];
+    const out = formatWeeklyReviewBlock(d);
+    expect(out).toContain("# Сон за неделю");
+    expect(out).toContain("2 ноч");
+    expect(out).toContain("2026-06-10: 7.5 ч · качество 4/5");
+    expect(out).toContain("2026-06-11: 6 ч");
+  });
+
+  it("помечает отсутствие сна за неделю явно (тренер вернёт null)", () => {
+    const out = formatWeeklyReviewBlock(base());
+    expect(out).toContain("# Сон за неделю");
+    expect(out).toContain("нет записей за эту неделю");
+  });
+
+  it("рендерит блок питания за неделю с ккал/белком, когда есть дни", () => {
+    const d = base();
+    d.nutrition = [
+      { date: "2026-06-10", kcal: 2400, proteinG: 160 },
+      { date: "2026-06-11", kcal: null, proteinG: 150 },
+    ];
+    const out = formatWeeklyReviewBlock(d);
+    expect(out).toContain("# Питание за неделю");
+    expect(out).toContain("2026-06-10: 2400 ккал · Б 160");
+    expect(out).toContain("2026-06-11: Б 150");
+  });
+
+  it("помечает отсутствие питания за неделю явно", () => {
+    const out = formatWeeklyReviewBlock(base());
+    expect(out).toContain("# Питание за неделю");
+    expect(out.split("# Питание за неделю")[1]).toContain(
+      "нет записей за эту неделю",
+    );
   });
 
   it("ограничивает число групп мышц бюджетом (<=8 строк)", () => {

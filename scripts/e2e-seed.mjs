@@ -82,6 +82,26 @@ try {
       on conflict (requester_id, addressee_id)
       do update set status = 'accepted', updated_at = now()`;
 
+    // H11.1 — ночи сна за ТЕКУЩУЮ неделю тест-юзеру: недельный тренер обязан
+    // оценить восстановление по реальным строкам (recoveryContext.score != null),
+    // а не врать «нет данных о сне». Сидим ТЕСТ-юзеру, НЕ владельцу (форс weekly
+    // на владельце съел бы его авто-разбор через дедуп). Идемпотентно по (user,date).
+    const sleepNights = [
+      { ago: 0, hours: 7.5, quality: 4 },
+      { ago: 1, hours: 6, quality: 3 },
+      { ago: 2, hours: 8, quality: 5 },
+    ];
+    for (const n of sleepNights) {
+      const d = new Date(Date.now() - n.ago * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      await sql`
+        insert into sleep_logs (id, user_id, date, hours, quality)
+        values (${randomUUID()}, ${verifyId}, ${d}, ${n.hours}, ${n.quality})
+        on conflict (user_id, date)
+        do update set hours = excluded.hours, quality = excluded.quality`;
+    }
+
     // Системное упражнение (owner_user_id IS NULL) для строки тренировки.
     const exRows = await sql`
       select id, name_ru from exercises

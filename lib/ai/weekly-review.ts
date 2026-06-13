@@ -10,6 +10,21 @@ export type WeekAgg = {
   muscleVolumes: { muscleKey: string; volume: number }[];
 };
 
+/** Одна ночь сна за разбираемую неделю. */
+export type WeeklySleepRow = {
+  date: string;
+  hours: number;
+  quality: number | null;
+};
+
+/** Один день питания за разбираемую неделю (для недельного жанра важны ккал
+ *  и белок — фат/углеводы оставляем дневному дайджесту, YAGNI). */
+export type WeeklyNutritionRow = {
+  date: string;
+  kcal: number | null;
+  proteinG: number | null;
+};
+
 /** Вход чистого форматтера недельного разбора — НАМЕРЕННО развязан с репо
  *  (R-7: модуль без db/env, юнит-тестируем). Репо `weeklyReviewData` отдаёт
  *  ровно эту форму. */
@@ -22,6 +37,11 @@ export type WeeklyReviewInput = {
   previous: WeekAgg;
   /** CycleNote недели (markdown) — «второй мозг» атлета, целиком. */
   cycleNote: string | null;
+  /** Ночи сна за разбираемую (текущую) ISO-неделю — тренер оценивает по ним
+   *  восстановление; пусто → честный null + missingDataAdvice (H11.1). */
+  sleep: WeeklySleepRow[];
+  /** Дни питания за разбираемую ISO-неделю — тренер оценивает по ним КБЖУ. */
+  nutrition: WeeklyNutritionRow[];
 };
 
 /** Есть ли что разбирать: хотя бы одна силовая сессия на этой ИЛИ прошлой
@@ -116,5 +136,42 @@ export function formatWeeklyReviewBlock(data: WeeklyReviewInput): string {
     lines.push("", "## Заметка недели атлета", cycleNote.trim());
   }
 
+  lines.push("", formatWeeklySleepBlock(data.sleep));
+  lines.push("", formatWeeklyNutritionBlock(data.nutrition));
+
   return lines.join("\n");
+}
+
+/** Блок сна за разбираемую неделю. Есть ночи → среднее + по-ночам; пусто →
+ *  явная пометка «нет записей» (тренер обязан вернуть recoveryContext.score
+ *  null, не выдумывать — H11.1). */
+function formatWeeklySleepBlock(rows: WeeklySleepRow[]): string {
+  if (rows.length === 0) {
+    return "# Сон за неделю\n_(нет записей за эту неделю)_";
+  }
+  const avg = rows.reduce((s, r) => s + r.hours, 0) / rows.length;
+  const lines = rows.map(
+    (r) =>
+      `- ${r.date}: ${r.hours} ч${r.quality != null ? ` · качество ${r.quality}/5` : ""}`,
+  );
+  return `# Сон за неделю (${rows.length} ноч., среднее ${avg.toFixed(1)} ч)\n\n${lines.join("\n")}`;
+}
+
+/** Блок питания за разбираемую неделю. Есть дни → по-дням ккал/белок; пусто →
+ *  явная пометка «нет записей» (тренер обязан вернуть nutritionContext.score
+ *  null). */
+function formatWeeklyNutritionBlock(rows: WeeklyNutritionRow[]): string {
+  if (rows.length === 0) {
+    return "# Питание за неделю\n_(нет записей за эту неделю)_";
+  }
+  const lines = rows.map((r) => {
+    const macro = [
+      r.kcal != null ? `${r.kcal} ккал` : null,
+      r.proteinG != null ? `Б ${r.proteinG}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return `- ${r.date}: ${macro || "(без макро)"}`;
+  });
+  return `# Питание за неделю (${rows.length} дн.)\n\n${lines.join("\n")}`;
 }

@@ -962,6 +962,11 @@ export type WeeklyReviewData = {
   current: WeeklyAgg;
   previous: WeeklyAgg;
   cycleNote: string | null;
+  /** Ночи сна за разбираемую (текущую) ISO-неделю — H11.1: недельный тренер
+   *  оценивает восстановление по реальным строкам, а не врёт «нет данных». */
+  sleep: { date: string; hours: number; quality: number | null }[];
+  /** Дни питания за разбираемую ISO-неделю (ккал + белок). */
+  nutrition: { date: string; kcal: number | null; proteinG: number | null }[];
 };
 
 const WEEKLY_REVIEW_SCAN_DAYS = 21;
@@ -1080,11 +1085,48 @@ export async function weeklyReviewData(
     .orderBy(desc(schema.cycleNotes.updatedAt))
     .limit(1);
 
+  // (D) Сон/питание за РАЗБИРАЕМУЮ (текущую) ISO-неделю [weekStart, +7).
+  //     date — строковая колонка YYYY-MM-DD, границы лексикографичны (H11.1).
+  const weekEnd = addDaysIso(weekStart, 7);
+  const sleepRows = await db
+    .select({
+      date: schema.sleepLogs.date,
+      hours: schema.sleepLogs.hours,
+      quality: schema.sleepLogs.quality,
+    })
+    .from(schema.sleepLogs)
+    .where(
+      and(
+        eq(schema.sleepLogs.userId, userId),
+        gte(schema.sleepLogs.date, weekStart),
+        lt(schema.sleepLogs.date, weekEnd),
+      ),
+    )
+    .orderBy(asc(schema.sleepLogs.date));
+
+  const nutritionRows = await db
+    .select({
+      date: schema.nutritionEntries.date,
+      kcal: schema.nutritionEntries.kcal,
+      proteinG: schema.nutritionEntries.proteinG,
+    })
+    .from(schema.nutritionEntries)
+    .where(
+      and(
+        eq(schema.nutritionEntries.userId, userId),
+        gte(schema.nutritionEntries.date, weekStart),
+        lt(schema.nutritionEntries.date, weekEnd),
+      ),
+    )
+    .orderBy(asc(schema.nutritionEntries.date));
+
   return {
     weekStart,
     prevWeekStart,
     current: buildAgg(weekStart),
     previous: buildAgg(prevWeekStart),
     cycleNote: note?.content ?? null,
+    sleep: sleepRows,
+    nutrition: nutritionRows,
   };
 }
