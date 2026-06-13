@@ -4,7 +4,9 @@ import type { CardioSummary } from "@/lib/repos/cardio.repo";
 import type { CircuitSummary } from "@/lib/repos/circuits.repo";
 import type { RecentWorkout } from "@/lib/repos/workouts.repo";
 
-import { buildHistory } from "./history";
+import { isoWeekStartIso } from "@/lib/datetime/iso-week";
+
+import { buildHistory, countWeekSessions } from "./history";
 
 type Status = RecentWorkout["status"];
 
@@ -160,5 +162,49 @@ describe("buildHistory", () => {
       hrAvg: 152,
     });
     expect(items.find((i) => i.id === "k2")).toMatchObject({ hrAvg: null });
+  });
+});
+
+describe("countWeekSessions", () => {
+  const TZ = "Europe/Moscow";
+  // Неделя, содержащая среду 2026-06-10 → понедельник 2026-06-08.
+  const weekStart = isoWeekStartIso(d("2026-06-10T12:00:00Z"), TZ);
+
+  it("returns 0 for empty history", () => {
+    expect(countWeekSessions([], weekStart, TZ)).toBe(0);
+  });
+
+  it("counts ALL three formats in the current week (not just strength)", () => {
+    const history = buildHistory(
+      [strength("s1", d("2026-06-09T10:00:00Z"))],
+      [circuit("c1", d("2026-06-10T10:00:00Z"))],
+      [cardio("k1", d("2026-06-11T10:00:00Z"))],
+    );
+    expect(countWeekSessions(history, weekStart, TZ)).toBe(3);
+  });
+
+  it("excludes sessions from other weeks", () => {
+    const history = buildHistory(
+      [
+        strength("s-this", d("2026-06-09T10:00:00Z")),
+        strength("s-prev", d("2026-06-02T10:00:00Z")), // прошлая неделя
+        strength("s-next", d("2026-06-16T10:00:00Z")), // следующая неделя
+      ],
+      [],
+      [],
+    );
+    expect(countWeekSessions(history, weekStart, TZ)).toBe(1);
+  });
+
+  it("buckets by USER tz at the sunday↔monday boundary", () => {
+    // 2026-06-08 00:30 MSK (UTC+3) = 2026-06-07 21:30 UTC. В MSK это уже
+    // понедельник (эта неделя); в UTC — ещё воскресенье (прошлая). Граница
+    // считается в TZ юзера → попадает в текущую неделю.
+    const history = buildHistory(
+      [strength("s-edge", d("2026-06-07T21:30:00Z"))],
+      [],
+      [],
+    );
+    expect(countWeekSessions(history, weekStart, TZ)).toBe(1);
   });
 });

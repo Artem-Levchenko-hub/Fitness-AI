@@ -95,6 +95,34 @@ test("/dashboard: tile-входы «Статистика» и «Друзья» �
   await expect(page).toHaveURL(/\/stats/);
 });
 
+test("H12.0 — WeekCard «Эта неделя» считает ВСЕ форматы и совпадает с /workouts", async ({
+  page,
+}) => {
+  test.skip(
+    !trainerWorkoutId || !circuitId || !cardioId,
+    "E2E_TRAINER_WORKOUT_ID/E2E_CIRCUIT_ID/E2E_CARDIO_ID не заданы — засеять через scripts/e2e-seed.mjs",
+  );
+  // H12.0 — честный счёт WeekCard: раньше считались только силовые в серверной
+  // TZ → круговая/кардио выпадали. Теперь счёт = завершённые сессии ВСЕХ
+  // форматов за текущую ISO-неделю в TZ юзера, тем же ключом, что группирует
+  // «Эта неделя» на /workouts. Гейт: число WeekCard == число карточек группы
+  // «Эта неделя» на /workouts (self-consistent: оба из одного сида, где этой
+  // недели есть силовая + круговая + кардио → ≥3, не только силовые).
+  await page.goto("/workouts");
+  const thisWeek = page.locator("section", {
+    has: page.getByRole("heading", { name: "Эта неделя" }),
+  });
+  await expect(thisWeek).toBeVisible();
+  const cardCount = await thisWeek.locator("ul > li").count();
+  expect(cardCount).toBeGreaterThanOrEqual(3); // все три формата этой недели
+
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByTestId("dashboard-week-count")).toHaveText(
+    String(cardCount),
+  );
+});
+
 test("/dashboard: мини-аватар-витрина (H9.2) показывает heat-силуэт и ведёт на /profile", async ({
   page,
 }) => {

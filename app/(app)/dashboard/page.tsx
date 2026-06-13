@@ -23,6 +23,7 @@ import { TrainerVoiceBanner } from "@/components/dashboard/TrainerVoiceBanner";
 import { WeekStripPreview } from "@/components/dashboard/WeekStripPreview";
 import {
   buildHistory,
+  countWeekSessions,
   HistoryCard,
   LastSessionMini,
 } from "@/components/workouts/workout-history";
@@ -46,7 +47,6 @@ import {
   getLatestPerWorkoutAnalysis,
   getLatestWeeklyReview,
   listRecentWorkouts,
-  type RecentWorkout,
 } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "Главная" };
@@ -98,8 +98,12 @@ export default async function DashboardPage() {
   // секция не рендерится вовсе (анти-фантом R-37). Без нового AI-вызова.
   const trainerVoice = buildTrainerVoice(latestAnalysis, weeklyReview);
 
+  // Понедельник текущей ISO-недели в TZ юзера — общая граница для week-strip
+  // tile и честного счётчика WeekCard (тот же ключ, что группирует /workouts).
+  const weekStartIso = isoWeekStartIso(now, tz);
+
   // Снимок «эта неделя» для tile-входа /stats (H4.1): 7 дней + тоннаж + дельта.
-  const weekStrip = buildWeekStrip(daily, frequency, isoWeekStartIso(now, tz));
+  const weekStrip = buildWeekStrip(daily, frequency, weekStartIso);
 
   // Мини-аватар витрины (H9.2): тот же heat-источник, что красит 3D на /profile;
   // здесь нужен только цвет/уровень/подходы по группам (без records/forgotten).
@@ -108,11 +112,14 @@ export default async function DashboardPage() {
   const completed = recent.filter((w) => w.status === "completed");
   // `last` = последняя СИЛОВАЯ — нужна для AI-тренера (анализирует силовые).
   const last = completed[0] ?? null;
-  const weekCount = countThisWeek(completed);
   // Единый поток: «Недавние» и тайл «Последняя» сливают силовые + круговые +
   // кардио (как /workouts), а не показывают только силовые — иначе круговая/
   // кардио-сессия «пропадает» и форматы живут в разных мирах.
   const history = buildHistory(recent, recentCircuits, recentCardio);
+  // «Эта неделя» = завершённые сессии ВСЕХ форматов за текущую ISO-неделю в TZ
+  // юзера (H12.0). Раньше считались только силовые в серверной TZ — круговая/
+  // кардио выпадали и граница недели врала вне TZ сервера.
+  const weekCount = countWeekSessions(history, weekStartIso, tz);
   const recentHistory = history.slice(0, 3);
   const latestSession = history[0] ?? null;
 
@@ -266,7 +273,10 @@ function WeekCard({ workouts }: { workouts: number }) {
       <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         Эта неделя
       </p>
-      <p className="font-serif tabular mt-1 text-3xl font-normal tracking-tight">
+      <p
+        data-testid="dashboard-week-count"
+        className="font-serif tabular mt-1 text-3xl font-normal tracking-tight"
+      >
         {workouts}
       </p>
       <p className="text-muted-foreground text-xs">
@@ -297,24 +307,6 @@ function EmptyMini() {
 }
 
 // --- helpers --- //
-
-function startOfWeek(d: Date): Date {
-  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function countThisWeek(items: RecentWorkout[]): number {
-  const from = startOfWeek(new Date()).getTime();
-  let count = 0;
-  for (const w of items) {
-    if (w.startedAt.getTime() >= from) count += 1;
-  }
-  return count;
-}
 
 function pluralize(
   n: number,

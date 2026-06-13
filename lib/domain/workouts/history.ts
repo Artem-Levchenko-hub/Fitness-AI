@@ -1,3 +1,4 @@
+import { isoWeekStartIso } from "@/lib/datetime/iso-week";
 import type { CardioPresetKind } from "@/lib/domain/cardio/presets";
 import type { CardioSummary } from "@/lib/repos/cardio.repo";
 import type { CircuitSummary } from "@/lib/repos/circuits.repo";
@@ -90,4 +91,21 @@ export function buildHistory(
   ];
 
   return items.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+}
+
+/** Число завершённых сессий ВСЕХ форматов за ISO-неделю, содержащую
+ *  `weekStartIso` (понедельник "YYYY-MM-DD" в TZ юзера). Принадлежность недели
+ *  считается ТЕМ ЖЕ ключом `isoWeekStartIso(startedAt, tz)`, что и группировка
+ *  «Эта неделя» на /workouts — счётчик WeekCard дашборда совпадает с числом
+ *  карточек текущей недели cell-for-cell (а не только силовые в серверной TZ).
+ *  Вход — уже собранная `buildHistory` (completed-only), потому брошенные/
+ *  отменённые в счёт не идут по построению (столп 3+4). */
+export function countWeekSessions(
+  history: HistoryItem[],
+  weekStartIso: string,
+  tz: string,
+): number {
+  return history.filter(
+    (it) => isoWeekStartIso(it.startedAt, tz) === weekStartIso,
+  ).length;
 }

@@ -2,12 +2,16 @@ import { ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import type { CardioPresetKind } from "@/lib/domain/cardio/presets";
-import { buildHistory, type HistoryItem } from "@/lib/domain/workouts/history";
+import {
+  buildHistory,
+  countWeekSessions,
+  type HistoryItem,
+} from "@/lib/domain/workouts/history";
 
 // Слияние истории — чистая доменная логика (lib/domain/workouts/history.ts),
 // здесь только её реэкспорт + отрисовка. Существующие импортёры (дашборд,
 // /workouts) тянут buildHistory/HistoryItem отсюда без изменений.
-export { buildHistory };
+export { buildHistory, countWeekSessions };
 export type { HistoryItem };
 
 const CARDIO_FORMAT_LABEL: Record<CardioPresetKind, string> = {
