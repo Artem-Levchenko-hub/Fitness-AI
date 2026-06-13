@@ -5,7 +5,10 @@ import { notFound } from "next/navigation";
 
 import { MuscleBadges, muscleLabel } from "@/components/app/MuscleBadges";
 import { Button } from "@/components/ui/button";
-import { detectStagnation } from "@/lib/domain/progression/stagnation";
+import {
+  detectStagnation,
+  E1RM_STAGNATION_EPSILON_KG,
+} from "@/lib/domain/progression/stagnation";
 import { requireUser } from "@/lib/auth/require-user";
 import { getExerciseById } from "@/lib/repos/exercises.repo";
 import {
@@ -34,7 +37,9 @@ export default async function ExerciseDetailPage({ params }: Props) {
     .filter((s) => s.best1rm > 0)
     .map((s) => s.best1rm)
     .reverse();
-  const stagnation = detectStagnation(e1rmSeries, 3, { epsilon: 0.5 });
+  const stagnation = detectStagnation(e1rmSeries, 3, {
+    epsilon: E1RM_STAGNATION_EPSILON_KG,
+  });
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">

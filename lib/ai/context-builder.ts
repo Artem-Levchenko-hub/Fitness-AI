@@ -24,8 +24,14 @@ import {
 } from "@/lib/domain";
 import { localDateIso, localIsoDay } from "@/lib/datetime/local-day";
 import { formatDays, formatHour, WEEKDAYS } from "@/lib/ui/weekdays";
-import { muscleHeatProfile } from "@/lib/repos/stats.repo";
+import { exerciseSetHistory, muscleHeatProfile } from "@/lib/repos/stats.repo";
+import {
+  detectStagnation,
+  E1RM_STAGNATION_EPSILON_KG,
+} from "@/lib/domain/progression/stagnation";
+import { muscleLabelRu } from "@/lib/domain/avatar/heat";
 import { formatAvatarHeatBlock } from "./avatar-heat";
+import { formatFlagsBlock } from "./flags";
 import {
   formatExerciseComparison,
   type ExerciseComparisonPoint,
@@ -130,12 +136,18 @@ export async function buildCoachContext(
     allTimeBest,
   );
   const volumeByMuscle = await loadVolumeByMuscle(userId, since);
+  const flagsBlock = await loadFlagsBlock(userId, todayWorkout.exercises);
 
   const sections: string[] = [];
 
   sections.push(
     `# Сегодняшняя тренировка\n\n${formatWorkout(todayWorkout, bodyweightKg)}`,
   );
+
+  // H11.4 — блок «# Флаги» сразу после сегодняшней тренировки (высокая
+  // салиентность приоритетов): застойные упражнения + перегруженные группы.
+  // null → секция не добавляется (R-37: без пустого заголовка).
+  if (flagsBlock) sections.push(flagsBlock);
 
   if (comparisons.length > 0) {
     sections.push(
@@ -654,6 +666,58 @@ async function loadTrainerMemoryBlock(
   } catch {
     return "# Память тренера\n_(прошлые разборы недоступны)_";
   }
+}
+
+/** Порог недельных подходов на группу, выше которого heat помечает перегруз
+ *  (15+ = перегрев в формате аватара H5.6). */
+const OVERLOAD_WEEKLY_SETS = 15;
+
+/** H11.4 (под-слайс 2) — «# Флаги» для per-workout контекста: тренер
+ *  предупреждает, а не только разбирает (столп 1). Два источника, оба reuse:
+ *  (1) застой e1RM по упражнениям СЕГОДНЯШНЕЙ сессии — та же `exerciseSetHistory`
+ *  + `detectStagnation` + `E1RM_STAGNATION_EPSILON_KG`, что питают бейдж на
+ *  /exercises/[id] → streak в промпте == streak бейджа (столпы 1+2 не расходятся);
+ *  (2) перегруженные группы (>15 подходов/нед) из того же `muscleHeatProfile`,
+ *  что красит аватар. Fail-soft (R-10): сбой любого источника не валит разбор.
+ *  Пусто → null (R-37: без фантомного пустого блока). */
+async function loadFlagsBlock(
+  userId: string,
+  exercises: { exerciseId: string; nameRu: string }[],
+): Promise<string | null> {
+  // Уникальные упражнения сегодняшней тренировки (одно упражнение = одна серия).
+  const byId = new Map<string, string>();
+  for (const e of exercises) byId.set(e.exerciseId, e.nameRu);
+
+  const stagnant: { nameRu: string; streak: number }[] = [];
+  await Promise.all(
+    [...byId.entries()].map(async ([exerciseId, nameRu]) => {
+      try {
+        const history = await exerciseSetHistory(userId, exerciseId);
+        const series = history
+          .filter((s) => s.best1rm > 0)
+          .map((s) => s.best1rm)
+          .reverse();
+        const { stale, streak } = detectStagnation(series, 3, {
+          epsilon: E1RM_STAGNATION_EPSILON_KG,
+        });
+        if (stale) stagnant.push({ nameRu, streak });
+      } catch {
+        // одно упражнение не загрузилось → молча пропускаем (R-10)
+      }
+    }),
+  );
+
+  let overloaded: { label: string; weeklySets: number }[] = [];
+  try {
+    const rows = await muscleHeatProfile(userId, new Date());
+    overloaded = rows
+      .filter((r) => r.weeklySets > OVERLOAD_WEEKLY_SETS)
+      .map((r) => ({ label: muscleLabelRu(r.muscleKey), weeklySets: r.weeklySets }));
+  } catch {
+    // heat недоступен → флаги перегруза опускаем, разбор продолжается (R-10)
+  }
+
+  return formatFlagsBlock({ stagnant, overloaded });
 }
 
 /** H5.6 — блок нагрева аватара (14 групп, абсолютные недельные подходы) в
