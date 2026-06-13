@@ -15,9 +15,10 @@ import {
   deleteWorkout,
   finishWorkout,
   recordSet,
-  saveManualWorkoutNote,
+  saveWorkoutNote,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
+import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
 
 const startSchema = z.object({
   templateId: z.string().uuid(),
@@ -113,13 +114,23 @@ export async function finishWorkoutAction(formData: FormData) {
   if (!workoutId) throw new Error("Missing workoutId");
 
   const feeling = String(formData.get("feeling") ?? "").trim();
+  // Pliability-тап «легко/норм/тяжело» (H11.3) — одно касание вместо набора.
+  const feelingLine = feelingNoteLine(String(formData.get("feelingTag") ?? ""));
 
   await finishWorkout(user.id, workoutId);
 
-  // Самочувствие атлета → workout_note (source=manual). AI-тренер читает
-  // заметки целиком при разборе.
-  if (feeling) {
-    await saveManualWorkoutNote(user.id, workoutId, feeling.slice(0, 1000));
+  // Самочувствие атлета → одна workout_note. Тап и/или свободный текст
+  // объединяются в одну заметку (не плодим строки — context-builder берёт лишь
+  // 4 свежих). source=auto_generated, если был только тап; manual, если атлет
+  // что-то напечатал. AI-тренер читает заметки целиком при разборе.
+  const noteParts = [feelingLine, feeling].filter(Boolean) as string[];
+  if (noteParts.length > 0) {
+    await saveWorkoutNote(
+      user.id,
+      workoutId,
+      noteParts.join("\n").slice(0, 1000),
+      feeling ? "manual" : "auto_generated",
+    );
   }
 
   // Ставим post_workout аналитический job. Если уже стоит (на случай

@@ -350,18 +350,21 @@ export async function deleteWorkout(
     );
 }
 
-/** Сохраняет ручную заметку к тренировке — самочувствие атлета, записанное
- *  перед завершением. AI-тренер читает workout_notes целиком при разборе. */
-export async function saveManualWorkoutNote(
+/** Сохраняет заметку к тренировке — самочувствие атлета, записанное перед
+ *  завершением. `source`: "manual" — атлет напечатал текст; "auto_generated" —
+ *  заметка собрана из тапа (pliability). AI-тренер читает workout_notes целиком
+ *  при разборе. */
+export async function saveWorkoutNote(
   userId: string,
   workoutId: string,
   content: string,
+  source: "manual" | "auto_generated" = "manual",
 ): Promise<void> {
   await db.insert(schema.workoutNotes).values({
     userId,
     workoutId,
     content,
-    source: "manual",
+    source,
   });
 }
 

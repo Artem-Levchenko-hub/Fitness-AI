@@ -1,12 +1,24 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Frown,
+  Meh,
+  Smile,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  FEELING_TAGS,
+  type FeelingTagKey,
+} from "@/lib/domain/workouts/feeling";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
 import { deleteSetAction, finishWorkoutAction } from "@/server/actions/workouts";
 import { cn } from "@/lib/utils";
@@ -44,12 +56,13 @@ export function ActiveWorkoutView({ workout }: Props) {
 
       <form action={finishWorkoutAction} className="space-y-3 pt-2">
         <input type="hidden" name="workoutId" value={workout.id} />
+        <FeelingPicker />
         <div className="space-y-1.5">
           <label
             htmlFor="feeling"
             className="text-muted-foreground block text-xs font-medium"
           >
-            Как прошла тренировка?{" "}
+            Добавить детали{" "}
             <span className="opacity-70">(необязательно)</span>
           </label>
           <Textarea
@@ -66,6 +79,56 @@ export function ActiveWorkoutView({ workout }: Props) {
           Завершить тренировку
         </Button>
       </form>
+    </div>
+  );
+}
+
+/** H11.3 — самочувствие одним тапом (паттерн pliability). Тап по «легко/норм/
+ *  тяжело» пишет workout_note, которую тренер читает при разборе следующей
+ *  сессии. Иконка + подпись (не только цвет — R-41), тап ≥56px, повторный тап
+ *  снимает выбор. Скип — заметка не пишется. */
+const FEELING_STYLE: Record<
+  FeelingTagKey,
+  { Icon: typeof Smile; selected: string }
+> = {
+  easy: { Icon: Smile, selected: "border-success bg-success/10 text-success" },
+  normal: { Icon: Meh, selected: "border-foreground/40 bg-muted text-foreground" },
+  hard: { Icon: Frown, selected: "border-warning bg-warning/10 text-warning" },
+};
+
+function FeelingPicker() {
+  const [selected, setSelected] = useState<FeelingTagKey | "">("");
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-muted-foreground text-xs font-medium">
+        Как далась тренировка?{" "}
+        <span className="opacity-70">(необязательно)</span>
+      </p>
+      <input type="hidden" name="feelingTag" value={selected} />
+      <div className="grid grid-cols-3 gap-2">
+        {FEELING_TAGS.map((tag) => {
+          const { Icon, selected: selectedClasses } = FEELING_STYLE[tag.key];
+          const isSelected = selected === tag.key;
+          return (
+            <button
+              key={tag.key}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => setSelected(isSelected ? "" : tag.key)}
+              className={cn(
+                "border-border flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border text-xs font-medium capitalize transition-colors motion-safe:duration-150",
+                isSelected
+                  ? selectedClasses
+                  : "text-muted-foreground hover:bg-muted/60",
+              )}
+            >
+              <Icon className="size-5" />
+              {tag.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
