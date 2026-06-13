@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatWeeklyMemoryBlock,
   formatWeeklyReviewBlock,
   hasWeeklyData,
   type WeeklyReviewInput,
 } from "./weekly-review";
+import type { PastAdvice } from "./trainer-memory";
+
+const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
 function base(): WeeklyReviewInput {
   return {
@@ -146,5 +150,50 @@ describe("formatWeeklyReviewBlock", () => {
     const out = formatWeeklyReviewBlock(d);
     const rows = out.split("\n").filter((l) => l.startsWith("- "));
     expect(rows.length).toBeLessThanOrEqual(8);
+  });
+
+  it("включает переданный блок памяти тренера", () => {
+    const memory = "# Память тренера (твой прошлый недельный фокус)\nтест-память";
+    const out = formatWeeklyReviewBlock(base(), memory);
+    expect(out).toContain("# Память тренера (твой прошлый недельный фокус)");
+    expect(out).toContain("тест-память");
+  });
+
+  it("без аргумента памяти не содержит блок памяти (обратная совместимость)", () => {
+    const out = formatWeeklyReviewBlock(base());
+    expect(out).not.toContain("Память тренера");
+  });
+});
+
+describe("formatWeeklyMemoryBlock", () => {
+  function advice(focus: string | null, score: number | null): PastAdvice {
+    return { createdAt: new Date("2026-06-01T12:00:00Z"), focus, score };
+  }
+
+  it("нет предшественника (null) → пустая строка (блок опущен)", () => {
+    expect(formatWeeklyMemoryBlock(null, fmt)).toBe("");
+  });
+
+  it("legacy weekly без focus → пустая строка", () => {
+    expect(formatWeeklyMemoryBlock(advice(null, 70), fmt)).toBe("");
+  });
+
+  it("есть прошлый фокус → цитирует его, дату и инструкцию pastAdviceFollowUp", () => {
+    const out = formatWeeklyMemoryBlock(
+      advice("Добавить 1 сессию на ноги: присед 3×8", 72),
+      fmt,
+    );
+    expect(out).toContain("# Память тренера");
+    expect(out).toContain("Добавить 1 сессию на ноги: присед 3×8");
+    expect(out).toContain("2026-06-01");
+    expect(out).toContain("оценка 72/100");
+    expect(out).toContain("pastAdviceFollowUp");
+    expect(out).toContain("На прошлой неделе я ставил фокус");
+  });
+
+  it("опускает оценку, если score null", () => {
+    const out = formatWeeklyMemoryBlock(advice("Спать 7.5+ ч", null), fmt);
+    expect(out).toContain("Спать 7.5+ ч");
+    expect(out).not.toContain("оценка");
   });
 });

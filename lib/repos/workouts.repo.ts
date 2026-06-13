@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -565,6 +565,44 @@ export async function getLatestWeeklyReview(
     .orderBy(desc(schema.aiJobs.scheduledAt))
     .limit(1);
   return row ?? null;
+}
+
+/** H11.1b «Память недельного тренера»: свежайший succeeded weekly_review со
+ *  `scheduledAt` СТРОГО ДО `before` — границы текущей ISO-недели. Без границы
+ *  (как getLatestWeeklyReview) verification-протокол форсит weekly_review ТЕКУЩЕЙ
+ *  недели и она же стала бы «прошлым» → тренер процитировал бы same-week дубль.
+ *  Тот же innerJoin ai_jobs(kind=weekly_review, succeeded) (R-7 userId на ai_jobs,
+ *  отсекает digest c workoutId/circuitWorkoutId null). null — предшественника
+ *  нет (первый weekly). fail-soft (R-10): сбой → null, разбор не падает. */
+export async function getPreviousWeeklyReview(
+  userId: string,
+  before: Date,
+): Promise<{ resultJson: unknown; createdAt: Date } | null> {
+  try {
+    const [row] = await db
+      .select({
+        resultJson: schema.aiAnalyses.resultJson,
+        createdAt: schema.aiAnalyses.createdAt,
+      })
+      .from(schema.aiJobs)
+      .innerJoin(
+        schema.aiAnalyses,
+        eq(schema.aiAnalyses.id, schema.aiJobs.analysisId),
+      )
+      .where(
+        and(
+          eq(schema.aiJobs.userId, userId),
+          eq(schema.aiJobs.kind, "weekly_review"),
+          eq(schema.aiJobs.status, "succeeded"),
+          lt(schema.aiJobs.scheduledAt, before),
+        ),
+      )
+      .orderBy(desc(schema.aiJobs.scheduledAt))
+      .limit(1);
+    return row ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** H5.7 «совет→следующая сессия»: последний разбор ПРЕДЫДУЩЕЙ тренировки этого

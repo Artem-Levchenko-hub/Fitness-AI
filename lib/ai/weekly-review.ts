@@ -1,4 +1,5 @@
 import { muscleLabelRu } from "../domain/avatar/heat";
+import type { PastAdvice } from "./trainer-memory";
 
 /** Агрегаты одной недели (силовые completed-сессии). Тоннаж = вес×повт
  *  working-подходов; muscleVolumes — role-взвешенный тоннаж по группам
@@ -73,7 +74,10 @@ function signedPct(pct: number): string {
 /** Markdown-блок «итог недели» для промпта тренера: эта неделя vs прошлая по
  *  объёму, сессиям, группам мышц + заметка недели. Чистая функция — числа
  *  даёт репо, тон задаёт WEEKLY_SYSTEM_PROMPT. */
-export function formatWeeklyReviewBlock(data: WeeklyReviewInput): string {
+export function formatWeeklyReviewBlock(
+  data: WeeklyReviewInput,
+  memory = "",
+): string {
   const { current, previous, cycleNote } = data;
   const lines: string[] = [
     `# Итог недели (ISO-неделя с ${data.weekStart}; прошлая — с ${data.prevWeekStart})`,
@@ -139,7 +143,35 @@ export function formatWeeklyReviewBlock(data: WeeklyReviewInput): string {
   lines.push("", formatWeeklySleepBlock(data.sleep));
   lines.push("", formatWeeklyNutritionBlock(data.nutrition));
 
+  if (memory.trim()) {
+    lines.push("", memory.trim());
+  }
+
   return lines.join("\n");
+}
+
+/** H11.1b «Память недельного тренера»: прошлый недельный фокус → блок контекста,
+ *  замыкающий цикл «предписал → проверил». Жанр-специфичен (формулировка про
+ *  НЕДЕЛЮ, не про сессию), поэтому живёт здесь, а не в trainer-memory.ts; парс
+ *  resultJson переиспользует чистый `extractPastAdvice` (R-04). Чистая (R-7),
+ *  formatDate инжектируется (детерминизм теста без ICU).
+ *
+ *  Нет предшественника (null) или legacy-разбор без focus → "" (блок опущен,
+ *  R-37: не выдумывать прошлый фокос, которого нет). Иначе цитирует фокус и
+ *  требует заполнить pastAdviceFollowUp с вердиктом по цифрам недели. */
+export function formatWeeklyMemoryBlock(
+  advice: PastAdvice | null,
+  formatDate: (d: Date) => string,
+): string {
+  if (!advice || !advice.focus) return "";
+  const score = advice.score != null ? ` (оценка ${advice.score}/100)` : "";
+  return [
+    "# Память тренера (твой прошлый недельный фокус)",
+    "",
+    `В прошлый раз (недельный разбор от ${formatDate(advice.createdAt)})${score} ты ставил фокус недели: «${advice.focus}».`,
+    "",
+    "ОБЯЗАТЕЛЬНО заполни поле pastAdviceFollowUp: начни с «На прошлой неделе я ставил фокус: …», затем оцени — выполнен он или нет — цифрами ЭТОЙ недели (тоннаж / число сессий / нагрузка на нужную группу).",
+  ].join("\n");
 }
 
 /** Блок сна за разбираемую неделю. Есть ночи → среднее + по-ночам; пусто →
