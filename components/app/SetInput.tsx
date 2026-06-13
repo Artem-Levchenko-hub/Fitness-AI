@@ -6,6 +6,11 @@ import { startTransition, useActionState, useEffect, useRef, useState } from "re
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { recordSetAction, type RecordSetState } from "@/server/actions/workouts";
+import {
+  clearSetDraft,
+  loadSetDraft,
+  saveSetDraft,
+} from "@/lib/storage/set-input-draft";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -32,26 +37,73 @@ export function SetInput({
   const [rpe, setRpe] = useState<string>("");
 
   const weightRef = useRef<HTMLInputElement>(null);
+  const wasPendingRef = useRef(false);
   const [state, formAction, pending] = useActionState<RecordSetState, FormData>(
     recordSetAction,
     { status: "idle" },
   );
 
+  // H10.4: восстановить НЕсабмитнутый черновик на маунте. Эффект, а не
+  // useState-инициализатор — на сервере localStorage нет, первый клиентский
+  // рендер обязан совпасть с серверным (defaults), иначе hydration mismatch.
+  useEffect(() => {
+    const draft = loadSetDraft(workoutExerciseId);
+    if (!draft) return;
+    // Синхронизация из внешнего хранилища (localStorage) на маунте — это ровно
+    // тот случай, для которого setState-в-эффекте уместен (нельзя в
+    // инициализаторе useState без hydration mismatch: сервер не видит draft).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setWeight(draft.weight);
+    setReps(draft.reps);
+    setRpe(draft.rpe);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [workoutExerciseId]);
+
   useEffect(() => {
     if (state.status === "idle" && !pending) {
       // После успешного добавления ставим фокус обратно на вес
       weightRef.current?.focus();
+      // H10.4: подход записан на сервер → черновик больше не нужен. Успех
+      // detect-им по переходу pending true→false без ошибки (success-ветка
+      // recordSetAction возвращает тот же {status:"idle"}, что и стартовый —
+      // отличить можно только по факту бывшего in-flight сабмита).
+      if (wasPendingRef.current) {
+        clearSetDraft(workoutExerciseId);
+      }
     }
-  }, [state, pending]);
+    wasPendingRef.current = pending;
+  }, [state, pending, workoutExerciseId]);
+
+  // H10.4: сохраняем черновик ТОЛЬКО при реальном вводе пользователя (не на
+  // маунте) — иначе нетронутые defaults (reps=defaultRepsMax) клобберят слой.
+  function persistDraft(next: { weight?: string; reps?: string; rpe?: string }) {
+    saveSetDraft(workoutExerciseId, {
+      weight: next.weight ?? weight,
+      reps: next.reps ?? reps,
+      rpe: next.rpe ?? rpe,
+    });
+  }
+  function changeWeight(value: string) {
+    setWeight(value);
+    persistDraft({ weight: value });
+  }
+  function changeReps(value: string) {
+    setReps(value);
+    persistDraft({ reps: value });
+  }
+  function changeRpe(value: string) {
+    setRpe(value);
+    persistDraft({ rpe: value });
+  }
 
   function adjustWeight(delta: number) {
     const current = Number(weight) || 0;
     const next = Math.max(0, current + delta);
-    setWeight(String(Number.isInteger(next) ? next : next.toFixed(1)));
+    changeWeight(String(Number.isInteger(next) ? next : next.toFixed(1)));
   }
   function adjustReps(delta: number) {
     const current = Number(reps) || 0;
-    setReps(String(Math.max(1, current + delta)));
+    changeReps(String(Math.max(1, current + delta)));
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -92,7 +144,7 @@ export function SetInput({
               name="weightKg"
               decimal
               value={weight}
-              onChange={setWeight}
+              onChange={changeWeight}
               required
               className="tabular h-11 text-center text-xl font-semibold"
             />
@@ -131,7 +183,7 @@ export function SetInput({
               id={`reps-${workoutExerciseId}`}
               name="reps"
               value={reps}
-              onChange={setReps}
+              onChange={changeReps}
               required
               className="tabular h-11 text-center text-xl font-semibold"
             />
@@ -161,7 +213,7 @@ export function SetInput({
           name="rpe"
           decimal
           value={rpe}
-          onChange={setRpe}
+          onChange={changeRpe}
           className="tabular h-9 text-center"
           placeholder="напр. 8"
         />
