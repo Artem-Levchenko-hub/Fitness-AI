@@ -21,6 +21,7 @@ const cardioId = process.env.E2E_CARDIO_ID;
 const circuitTemplateId = process.env.E2E_CIRCUIT_TEMPLATE_ID;
 const cardioTemplateId = process.env.E2E_CARDIO_TEMPLATE_ID;
 const waitingCircuitId = process.env.E2E_WAITING_CIRCUIT_ID;
+const waitingWorkoutId = process.env.E2E_WAITING_WORKOUT_ID;
 
 test("/stats открывается с контентом, а не error-boundary", async ({ page }) => {
   await page.goto("/stats");
@@ -475,6 +476,45 @@ test("H16.3 — круговая в ожидании разбора: живой 
   await expect(page).toHaveURL(new RegExp(`/circuits/${waitingCircuitId}`));
   await expect(page.getByText("Читаю твои подходы")).toBeVisible();
   await expect(page.getByText("обнови страницу")).toHaveCount(0);
+});
+
+test("H16.4 — силовая в ожидании разбора: живой лоадер (толерантно к карточкам)", async ({
+  page,
+}) => {
+  test.skip(
+    !waitingWorkoutId,
+    "E2E_WAITING_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H16.4 толерантная смоук-форма: силовая с pending ai_job (far-future → 0 LLM)
+  // на /workouts/<id>/trainer рендерит TrainerJobPoller → живой лоадер ожидания
+  // (стадии Ahead + скелет). Утверждаем ИМЕННО живой лоадер (детерминирован), а
+  // НЕ карточку-факт: RAG-ретрив = живой embeddings-вызов, его в постоянный сьют
+  // не кладём (флейк-вектор) — карточки проверяются разово MCP. Так гейт зелён
+  // и когда RAG отдал куски, и когда промолчал — оба = PASS (fail-soft R-10/R-37).
+  await page.goto(`/workouts/${waitingWorkoutId}/trainer`);
+  await expect(page).toHaveURL(new RegExp(`/workouts/${waitingWorkoutId}/trainer`));
+  await expect(page.getByText("Читаю твои подходы")).toBeVisible();
+  // Скелет разбора живёт под стадиями (role=status) — лоадер не «завис».
+  await expect(page.getByRole("status")).toBeVisible();
+});
+
+test("H16.4 — reduced-motion: лоадер остаётся спокойным, без дёрганья и ложного «готово»", async ({
+  page,
+}) => {
+  test.skip(
+    !waitingWorkoutId,
+    "E2E_WAITING_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H16.4 (закрывает отложенный из H16.3 reduced-motion-ассерт): при
+  // prefers-reduced-motion лента стадий не тикает (TrainerStages выходит из
+  // эффекта рано — elapsed=0 → активна только первая стадия), спиннер не
+  // крутится. Утверждаем спокойный фолбэк: лоадер ВСЁ РАВНО отрендерен (первая
+  // стадия видна) И последняя стадия на месте, т.е. нет ложного схлопывания в
+  // «всё готово» (массив стадий никогда не all-done — waiting-stages.ts).
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`/workouts/${waitingWorkoutId}/trainer`);
+  await expect(page.getByText("Читаю твои подходы")).toBeVisible();
+  await expect(page.getByText("Пишу разбор")).toBeVisible();
 });
 
 test("/workouts: три формата (силовая+круговая+кардио) вперемешку, каждый открывается в свой detail", async ({
