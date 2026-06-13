@@ -19,13 +19,17 @@ import {
   FEELING_TAGS,
   type FeelingTagKey,
 } from "@/lib/domain/workouts/feeling";
+import type { PreviousSessionSummary } from "@/lib/domain/exercise/previous-session";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
 import { deleteSetAction, finishWorkoutAction } from "@/server/actions/workouts";
 import { cn } from "@/lib/utils";
 
-type Props = { workout: ActiveWorkout };
+type Props = {
+  workout: ActiveWorkout;
+  previousByExerciseId: Map<string, PreviousSessionSummary>;
+};
 
-export function ActiveWorkoutView({ workout }: Props) {
+export function ActiveWorkoutView({ workout, previousByExerciseId }: Props) {
   const completedExercises = useMemo(
     () =>
       workout.exercises.filter((e) => e.sets.length >= e.targetSets).length,
@@ -50,6 +54,7 @@ export function ActiveWorkoutView({ workout }: Props) {
             workoutId={workout.id}
             exercise={ex}
             index={idx}
+            previous={previousByExerciseId.get(ex.exerciseId) ?? null}
           />
         ))}
       </ul>
@@ -137,10 +142,12 @@ function ExerciseCard({
   workoutId,
   exercise,
   index,
+  previous,
 }: {
   workoutId: string;
   exercise: ActiveWorkout["exercises"][number];
   index: number;
+  previous: PreviousSessionSummary | null;
 }) {
   const [expanded, setExpanded] = useState(true);
   const completed = exercise.sets.length >= exercise.targetSets;
@@ -228,6 +235,18 @@ function ExerciseCard({
 
           {!completed ? (
             <>
+              {/* H12.1 — «Прошлый раз» в точке решения: подходы последней
+                  завершённой сессии этого упражнения. Нет истории → строки
+                  нет (R-37). */}
+              {previous ? (
+                <p className="text-muted-foreground tabular text-xs">
+                  <span className="font-medium">Прошлый раз:</span>{" "}
+                  {previous.sets
+                    .map((s) => `${s.weightKg}×${s.reps}`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+
               {lastSet ? (
                 <RestTimer
                   targetSeconds={exercise.targetRestSeconds}
@@ -240,7 +259,10 @@ function ExerciseCard({
                 workoutExerciseId={exercise.id}
                 nextSetIndex={exercise.sets.length}
                 defaultWeightKg={
-                  lastSet?.weightKg ?? exercise.targetWeightKg ?? null
+                  lastSet?.weightKg ??
+                  previous?.prefillWeightKg ??
+                  exercise.targetWeightKg ??
+                  null
                 }
                 defaultRepsMax={exercise.targetRepsMax}
                 restSeconds={exercise.targetRestSeconds}

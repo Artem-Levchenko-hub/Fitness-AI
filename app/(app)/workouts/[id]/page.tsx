@@ -19,12 +19,17 @@ import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { requireUser } from "@/lib/auth/require-user";
 import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
 import {
+  summarizePreviousSession,
+  type PreviousSessionSummary,
+} from "@/lib/domain/exercise/previous-session";
+import {
   getActiveWorkoutForUser,
   getAiAnalysisForWorkout,
   getPreviousAnalysisRef,
   type ActiveWorkout,
   type ActiveWorkoutExercise,
 } from "@/lib/repos/workouts.repo";
+import { exerciseSetHistory } from "@/lib/repos/stats.repo";
 import { deleteWorkoutAction } from "@/server/actions/workouts";
 
 import { ActiveWorkoutView } from "./active-workout";
@@ -56,6 +61,21 @@ export default async function WorkoutPage({ params }: Props) {
     );
   }
 
+  // H12.1 — «Прошлый раз» в точке решения: для каждого упражнения активной
+  // тренировки берём последнюю ЗАВЕРШЁННУЮ сессию того же упражнения
+  // (exerciseSetHistory — тот же источник, что /exercises/[id], → строка
+  // совпадает с историей). Текущая активная тренировка не completed →
+  // исключена запросом. Промах истории → null (R-37: строки нет, префилл
+  // падает на target).
+  const previousByExerciseId = new Map<string, PreviousSessionSummary>();
+  await Promise.all(
+    workout.exercises.map(async (ex) => {
+      const [latest] = await exerciseSetHistory(user.id, ex.exerciseId, 1);
+      const summary = summarizePreviousSession(latest ?? null);
+      if (summary) previousByExerciseId.set(ex.exerciseId, summary);
+    }),
+  );
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -74,7 +94,10 @@ export default async function WorkoutPage({ params }: Props) {
         </h1>
       </header>
 
-      <ActiveWorkoutView workout={workout} />
+      <ActiveWorkoutView
+        workout={workout}
+        previousByExerciseId={previousByExerciseId}
+      />
 
       <div className="border-border mt-8 border-t pt-5">
         <ConfirmDeleteButton

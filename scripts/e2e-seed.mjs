@@ -54,6 +54,10 @@ const WAITING_MARKER = "E2E Smoke — Ожидание";
 // H16.3 — КРУГОВАЯ В ОЖИДАНИИ разбора (pending circuit ai_job, без analysis):
 // де-фриз /circuits/[id] — живой лоадер вместо «обнови страницу».
 const WAITING_CIRCUIT_MARKER = "E2E Smoke — Круг (ожидание)";
+// H12.1 — АКТИВНАЯ силовая (status active, 0 подходов) с тем же упражнением,
+// что завершённый WORKOUT_MARKER: носитель для «Прошлый раз» в точке решения
+// (строка прошлой сессии + префилл веса первого подхода).
+const ACTIVE_MARKER = "E2E Smoke — Жим (активная)";
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
@@ -461,6 +465,22 @@ try {
       values (${waitingCircuitJobId}, ${verifyId}, ${waitingCircuitId},
               'circuit_post_workout', 'pending', ${farFuture})`;
 
+    // H12.1 — АКТИВНАЯ силовая (status active, 0 подходов). Последняя
+    // завершённая сессия жима = WORKOUT_MARKER (working 80×5 @8, 82.5×5 @9) →
+    // на её active-странице «Прошлый раз: 80×5 · 82.5×5», префилл веса = 82.5.
+    // Идемпотентно: снос по маркеру (cascade → exercises).
+    await sql`
+      delete from workouts where user_id = ${verifyId} and name = ${ACTIVE_MARKER}`;
+    const activeStarted = new Date(Date.now() - 5 * 60 * 1000); // 5 мин назад
+    const activeWorkoutId = randomUUID();
+    await sql`
+      insert into workouts (id, user_id, name, status, started_at)
+      values (${activeWorkoutId}, ${verifyId}, ${ACTIVE_MARKER}, 'active',
+              ${activeStarted})`;
+    await sql`
+      insert into workout_exercises (id, workout_id, exercise_id, position)
+      values (${randomUUID()}, ${activeWorkoutId}, ${exerciseId}, 0)`;
+
     const refresh = await encode({
       token: { uid: verifyId },
       secret: process.env.AUTH_SECRET,
@@ -468,6 +488,7 @@ try {
       maxAge: 60 * 60 * 24 * 365,
     });
 
+    console.log("ACTIVE_WORKOUT_ID=" + activeWorkoutId);
     console.log("WAITING_WORKOUT_ID=" + waitingWorkoutId);
     console.log("WAITING_CIRCUIT_ID=" + waitingCircuitId);
     console.log("CIRCUIT_TEMPLATE_ID=" + circuitTemplateId);

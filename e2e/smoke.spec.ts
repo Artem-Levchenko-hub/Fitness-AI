@@ -22,6 +22,7 @@ const circuitTemplateId = process.env.E2E_CIRCUIT_TEMPLATE_ID;
 const cardioTemplateId = process.env.E2E_CARDIO_TEMPLATE_ID;
 const waitingCircuitId = process.env.E2E_WAITING_CIRCUIT_ID;
 const waitingWorkoutId = process.env.E2E_WAITING_WORKOUT_ID;
+const activeWorkoutId = process.env.E2E_ACTIVE_WORKOUT_ID;
 
 test("/stats открывается с контентом, а не error-boundary", async ({ page }) => {
   await page.goto("/stats");
@@ -121,6 +122,28 @@ test("H12.0 — WeekCard «Эта неделя» считает ВСЕ форм�
   await expect(page.getByTestId("dashboard-week-count")).toHaveText(
     String(cardCount),
   );
+});
+
+test("H12.1 — активная тренировка: «Прошлый раз» + префилл веса прошлой сессии", async ({
+  page,
+}) => {
+  test.skip(
+    !activeWorkoutId,
+    "E2E_ACTIVE_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs",
+  );
+  await page.goto(`/workouts/${activeWorkoutId}`);
+  await expect(page).toHaveURL(new RegExp(`/workouts/${activeWorkoutId}`));
+  // Активная (не completed) → рендерит SetInput, не CompletedView.
+  await expect(
+    page.getByText("Активная тренировка", { exact: true }),
+  ).toBeVisible();
+  // «Прошлый раз» = working-подходы последней завершённой сессии жима
+  // (80×5 @8, 82.5×5 @9 из WORKOUT_MARKER) — разминка 60×8 исключена приоритетом
+  // рабочих подходов; совпадает с историей того же упражнения на /exercises/[id].
+  await expect(page.getByText("Прошлый раз:")).toBeVisible();
+  await expect(page.getByText("80×5 · 82.5×5")).toBeVisible();
+  // Префилл первого подхода = вес последнего рабочего подхода прошлой сессии.
+  await expect(page.getByLabel("Вес, кг")).toHaveValue("82.5");
 });
 
 test("/dashboard: мини-аватар-витрина (H9.2) показывает heat-силуэт и ведёт на /profile", async ({
