@@ -8,6 +8,7 @@ import {
   Meh,
   Smile,
   Trash2,
+  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -21,7 +22,11 @@ import {
 } from "@/lib/domain/workouts/feeling";
 import type { PreviousSessionSummary } from "@/lib/domain/exercise/previous-session";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
-import { deleteSetAction, finishWorkoutAction } from "@/server/actions/workouts";
+import {
+  cancelWorkoutAction,
+  deleteSetAction,
+  finishWorkoutAction,
+} from "@/server/actions/workouts";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -35,6 +40,23 @@ export function ActiveWorkoutView({ workout, previousByExerciseId }: Props) {
       workout.exercises.filter((e) => e.sets.length >= e.targetSets).length,
     [workout.exercises],
   );
+
+  /** H12.4 — «Прервать» прямо из активной сессии (зеркало круговой/кардио:
+   *  active-circuit.tsx / active-cardio.tsx). Раньше отменить зависшую силовую
+   *  можно было только из resume-баннера на /dashboard·/workouts; H12.4 уводит
+   *  «Убрать» в саму сессию, чтобы глобальная полоса возобновления осталась
+   *  чисто-навигационной. cancelWorkoutAction ставит status=cancelled и уводит
+   *  на /workouts. */
+  async function handleCancel() {
+    if (
+      !confirm("Прервать тренировку? Прогресс сохранится, статус — cancelled.")
+    ) {
+      return;
+    }
+    const fd = new FormData();
+    fd.append("workoutId", workout.id);
+    await cancelWorkoutAction(fd);
+  }
 
   return (
     <div className="space-y-4">
@@ -84,6 +106,19 @@ export function ActiveWorkoutView({ workout, previousByExerciseId }: Props) {
           Завершить тренировку
         </Button>
       </form>
+
+      <div className="flex justify-center pt-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={handleCancel}
+        >
+          <X className="size-4" />
+          Прервать
+        </Button>
+      </div>
     </div>
   );
 }

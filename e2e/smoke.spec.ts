@@ -150,6 +150,27 @@ test("H12.1 — активная тренировка: «Прошлый раз»
   await expect(page.getByLabel("Вес, кг")).toHaveValue("80");
 });
 
+test("H12.4 — активная силовая несёт «Прервать» из самой сессии (анти-регресс перед глобальной полосой)", async ({
+  page,
+}) => {
+  test.skip(
+    !activeWorkoutId,
+    "E2E_ACTIVE_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs",
+  );
+  // H12.4 под-слайс 1: отменить зависшую силовую теперь можно из её страницы
+  // (зеркало круговой/кардио) — это сохранность «Убрать» ПЕРЕД тем, как
+  // следующий слайс уберёт page-level resume-баннер. Ассерт неразрушающий
+  // (видимость кнопки) — реальная отмена проверяется live-MCP, чтобы не гасить
+  // seed-сессию, нужную другим тестам.
+  await page.goto(`/workouts/${activeWorkoutId}`);
+  await expect(
+    page.getByText("Активная тренировка", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Прервать" }),
+  ).toBeVisible();
+});
+
 test("H12.2 — /create «Силовая»: список шаблонов раскрыт, тап ведёт на старт (повтор ≤2 тапа)", async ({
   page,
 }) => {
