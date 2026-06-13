@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildCircuitTemplatePreset,
   type CircuitTemplatePresetInput,
+  type CircuitTemplateRowForEdit,
+  toCircuitBuilderInitial,
 } from "./circuit-template-preset";
 
 function base(
@@ -110,5 +112,77 @@ describe("buildCircuitTemplatePreset", () => {
     expect(() => buildCircuitTemplatePreset(base([]))).toThrow(
       /хотя бы одно упражнение/,
     );
+  });
+});
+
+function row(
+  exercises: CircuitTemplateRowForEdit["exercises"],
+): CircuitTemplateRowForEdit {
+  return {
+    id: "tpl-1",
+    name: "Full body",
+    totalRounds: 4,
+    restBetweenRoundsSec: 90,
+    restBetweenExercisesSec: 20,
+    exercises,
+  };
+}
+
+describe("toCircuitBuilderInitial", () => {
+  it("сортирует упражнения по orderIdx (БД может вернуть в любом порядке)", () => {
+    const initial = toCircuitBuilderInitial(
+      row([
+        { id: "c", exerciseId: "ex-c", orderIdx: 2, kind: "reps", targetReps: 8, targetDurationSec: null, targetWeightKg: null, notes: null },
+        { id: "a", exerciseId: "ex-a", orderIdx: 0, kind: "reps", targetReps: 10, targetDurationSec: null, targetWeightKg: null, notes: null },
+        { id: "b", exerciseId: "ex-b", orderIdx: 1, kind: "reps", targetReps: 9, targetDurationSec: null, targetWeightKg: null, notes: null },
+      ]),
+    );
+    expect(initial.items.map((i) => i.exerciseId)).toEqual(["ex-a", "ex-b", "ex-c"]);
+    expect(initial.items.map((i) => i.uid)).toEqual(["a", "b", "c"]);
+  });
+
+  it("kind=reps: targetDurationSec null → дефолт, чтобы переключение kind имело значение", () => {
+    const initial = toCircuitBuilderInitial(
+      row([
+        { id: "x", exerciseId: "ex", orderIdx: 0, kind: "reps", targetReps: 12, targetDurationSec: null, targetWeightKg: 20, notes: "хват" },
+      ]),
+    );
+    expect(initial.items[0]).toMatchObject({
+      kind: "reps",
+      targetReps: 12,
+      targetDurationSec: 40,
+      targetWeightKg: 20,
+      notes: "хват",
+    });
+  });
+
+  it("kind=duration: targetReps null → дефолт", () => {
+    const initial = toCircuitBuilderInitial(
+      row([
+        { id: "x", exerciseId: "ex", orderIdx: 0, kind: "duration", targetReps: null, targetDurationSec: 45, targetWeightKg: null, notes: null },
+      ]),
+    );
+    expect(initial.items[0]).toMatchObject({
+      kind: "duration",
+      targetReps: 12,
+      targetDurationSec: 45,
+      targetWeightKg: null,
+      notes: "",
+    });
+  });
+
+  it("переносит параметры круга и templateId", () => {
+    const initial = toCircuitBuilderInitial(
+      row([
+        { id: "x", exerciseId: "ex", orderIdx: 0, kind: "reps", targetReps: 8, targetDurationSec: null, targetWeightKg: null, notes: null },
+      ]),
+    );
+    expect(initial).toMatchObject({
+      templateId: "tpl-1",
+      name: "Full body",
+      totalRounds: 4,
+      restBetweenRoundsSec: 90,
+      restBetweenExercisesSec: 20,
+    });
   });
 });

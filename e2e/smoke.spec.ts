@@ -174,6 +174,54 @@ test("H14.2 — /templates показывает круговой шаблон б
   ).toBeVisible();
 });
 
+test("H14.5b — круговой шаблон редактируется: «Изменить» → префилл → edit-режим", async ({
+  page,
+}) => {
+  test.skip(
+    !circuitTemplateId,
+    "E2E_CIRCUIT_TEMPLATE_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H14.5b — круговой шаблон можно редактировать (столп 3+4): на строке /templates
+  // появилась вторичная ссылка «Изменить» ВНЕ submit-кнопки «Начать» (валидный
+  // HTML, прецедент H6.2b), ведущая на /templates/circuit/<id>/edit. Там тот же
+  // CircuitBuilder в режиме правки: префилл из шаблона (toCircuitBuilderInitial)
+  // + кнопка «Сохранить изменения» вместо «Создать и начать» / «Сохранить как
+  // шаблон». Старт one-off /circuits/new не тронут (столп 4). Сид: rounds=4.
+  await page.goto("/templates");
+  await expect(page).toHaveURL(/\/templates/);
+
+  const tplRow = page
+    .locator("li", { hasText: "E2E Smoke — Круг-шаблон" })
+    .first();
+  await expect(tplRow).toBeVisible();
+
+  const editLink = tplRow.getByRole("link", { name: /Изменить шаблон/ });
+  await expect(editLink).toHaveAttribute(
+    "href",
+    `/templates/circuit/${circuitTemplateId}/edit`,
+  );
+
+  await editLink.click();
+  await expect(page).toHaveURL(
+    new RegExp(`/templates/circuit/${circuitTemplateId}/edit`),
+  );
+
+  // Префилл: имя шаблона подставлено в поле «Название».
+  await expect(page.locator("#name")).toHaveValue("E2E Smoke — Круг-шаблон");
+
+  // Edit-режим: первичное действие = «Сохранить изменения»; one-off-кнопки
+  // создания/«сохранить как шаблон» скрыты (это уже шаблон).
+  await expect(
+    page.getByRole("button", { name: "Сохранить изменения" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Создать и начать круговую" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Сохранить как шаблон" }),
+  ).toHaveCount(0);
+});
+
 test("H14.4 — /templates показывает кардио-шаблон бейджем и стартует его", async ({
   page,
 }) => {

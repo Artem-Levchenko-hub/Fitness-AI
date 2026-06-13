@@ -1,4 +1,4 @@
-import { ChevronRight, Play, Plus } from "lucide-react";
+import { ChevronRight, Pencil, Play, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -59,13 +59,17 @@ export default async function TemplatesPage() {
             ) : (
               // Круговая и кардио переиспользуются стартом одним кликом —
               // форма с серверным экшеном формата (ноль дубля логики старта).
-              <li key={`${tpl.format}-${tpl.id}`}>
+              // Круговая дополнительно несёт «Изменить» — отдельная ссылка ВНЕ
+              // submit-кнопки (валидный HTML, прецедент H6.2b). Кардио-правка —
+              // H14.5c (пока только старт).
+              <li key={`${tpl.format}-${tpl.id}`} className="flex gap-2">
                 <form
                   action={
                     tpl.format === "circuit"
                       ? startCircuitFromTemplateAction
                       : startCardioFromTemplateAction
                   }
+                  className="min-w-0 flex-1"
                 >
                   <input type="hidden" name="templateId" value={tpl.id} />
                   <button
@@ -79,6 +83,15 @@ export default async function TemplatesPage() {
                     </span>
                   </button>
                 </form>
+                {tpl.format === "circuit" ? (
+                  <Link
+                    href={`/templates/circuit/${tpl.id}/edit`}
+                    aria-label={`Изменить шаблон «${tpl.name}»`}
+                    className="bg-card hover:bg-accent border-border text-muted-foreground hover:text-foreground flex min-h-[56px] min-w-[56px] shrink-0 items-center justify-center rounded-xl border transition-colors"
+                  >
+                    <Pencil className="size-5" />
+                  </Link>
+                ) : null}
               </li>
             ),
           )}

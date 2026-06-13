@@ -9,6 +9,7 @@ import { buildCircuitTemplatePreset } from "@/lib/domain";
 import {
   createCircuitTemplate,
   startCircuitFromTemplate,
+  updateCircuitTemplate,
 } from "@/lib/repos/circuit-templates.repo";
 
 const exerciseInputSchema = z.object({
@@ -38,11 +39,9 @@ const saveSchema = z.object({
   exercises: z.array(exerciseInputSchema).min(1).max(20),
 });
 
-/** H14.1 — «Сохранить как шаблон» из CircuitBuilder: круговая сохраняется как
- *  именованный переиспользуемый пресет (НЕ стартует сессию). Payload (JSON) —
- *  тот же формат, что у startCircuitAction. */
-export async function saveCircuitTemplateAction(formData: FormData) {
-  const user = await requireUser();
+/** Разбирает payload кругового шаблона из FormData в нормализованный пресет
+ *  (общий для «сохранить» и «обновить» — один формат, ноль дубля валидации). */
+function parseCircuitTemplatePayload(formData: FormData) {
   const raw = formData.get("payload");
   if (typeof raw !== "string") {
     throw new Error("Отсутствует payload кругового шаблона");
@@ -69,8 +68,35 @@ export async function saveCircuitTemplateAction(formData: FormData) {
     }
   }
 
-  const preset = buildCircuitTemplatePreset(parsed);
+  return buildCircuitTemplatePreset(parsed);
+}
+
+/** H14.1 — «Сохранить как шаблон» из CircuitBuilder: круговая сохраняется как
+ *  именованный переиспользуемый пресет (НЕ стартует сессию). Payload (JSON) —
+ *  тот же формат, что у startCircuitAction. */
+export async function saveCircuitTemplateAction(formData: FormData) {
+  const user = await requireUser();
+  const preset = parseCircuitTemplatePayload(formData);
   await createCircuitTemplate(user.id, preset);
+
+  revalidatePath("/templates");
+  revalidatePath("/dashboard");
+  redirect("/templates");
+}
+
+/** H14.5b — обновление кругового шаблона из CircuitBuilder (edit-режим). Тот же
+ *  payload-формат, что у save; templateId связан в edit-странице/билдере.
+ *  Репозиторий проверяет владение (R-7) и транзакционно заменяет упражнения. */
+export async function updateCircuitTemplateAction(
+  templateId: string,
+  formData: FormData,
+) {
+  const user = await requireUser();
+  const id = z.string().uuid().safeParse(templateId);
+  if (!id.success) throw new Error("Неверный id кругового шаблона");
+
+  const preset = parseCircuitTemplatePayload(formData);
+  await updateCircuitTemplate(user.id, id.data, preset);
 
   revalidatePath("/templates");
   revalidatePath("/dashboard");

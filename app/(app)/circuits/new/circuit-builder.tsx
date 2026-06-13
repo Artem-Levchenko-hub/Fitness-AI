@@ -12,8 +12,12 @@ import { Input } from "@/components/ui/input";
 import { LabeledNumberField } from "@/components/ui/number-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import type { CircuitBuilderInitial } from "@/lib/domain";
 import { cn } from "@/lib/utils";
-import { saveCircuitTemplateAction } from "@/server/actions/circuit-templates";
+import {
+  saveCircuitTemplateAction,
+  updateCircuitTemplateAction,
+} from "@/server/actions/circuit-templates";
 import { startCircuitAction } from "@/server/actions/circuits";
 
 type BuilderItem = {
@@ -36,14 +40,22 @@ const DEFAULT_ITEM: Omit<BuilderItem, "uid" | "exerciseId"> = {
 
 export function CircuitBuilder({
   exercises,
+  initial,
 }: {
   exercises: ReadonlyArray<PickerExercise>;
+  /** H14.5b — режим редактирования существующего шаблона (префилл + update). */
+  initial?: CircuitBuilderInitial;
 }) {
-  const [name, setName] = useState("");
-  const [totalRounds, setTotalRounds] = useState(3);
-  const [restBetweenRoundsSec, setRestBetweenRoundsSec] = useState(60);
-  const [restBetweenExercisesSec, setRestBetweenExercisesSec] = useState(15);
-  const [items, setItems] = useState<BuilderItem[]>([]);
+  const isEditing = Boolean(initial);
+  const [name, setName] = useState(initial?.name ?? "");
+  const [totalRounds, setTotalRounds] = useState(initial?.totalRounds ?? 3);
+  const [restBetweenRoundsSec, setRestBetweenRoundsSec] = useState(
+    initial?.restBetweenRoundsSec ?? 60,
+  );
+  const [restBetweenExercisesSec, setRestBetweenExercisesSec] = useState(
+    initial?.restBetweenExercisesSec ?? 15,
+  );
+  const [items, setItems] = useState<BuilderItem[]>(initial?.items ?? []);
   const [submitting, setSubmitting] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,10 +134,14 @@ export function CircuitBuilder({
     setSubmitting(true);
     startTransition(async () => {
       try {
-        await startCircuitAction(fd);
+        if (initial) {
+          await updateCircuitTemplateAction(initial.templateId, fd);
+        } else {
+          await startCircuitAction(fd);
+        }
       } catch (err) {
         if (isRedirect(err)) return;
-        const msg = err instanceof Error ? err.message : "Не удалось создать";
+        const msg = err instanceof Error ? err.message : "Не удалось сохранить";
         setError(msg);
         setSubmitting(false);
       }
@@ -254,34 +270,40 @@ export function CircuitBuilder({
         {submitting ? (
           <>
             <Loader2 className="size-4 animate-spin" />
-            Запускаем…
+            {isEditing ? "Сохраняем…" : "Запускаем…"}
           </>
+        ) : isEditing ? (
+          "Сохранить изменения"
         ) : (
           "Создать и начать круговую"
         )}
       </Button>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="lg"
-        className="w-full"
-        onClick={handleSaveTemplate}
-        disabled={!canSubmit}
-        aria-busy={savingTemplate}
-      >
-        {savingTemplate ? (
-          <>
-            <Loader2 className="size-4 animate-spin" />
-            Сохраняем…
-          </>
-        ) : (
-          "Сохранить как шаблон"
-        )}
-      </Button>
-      <p className="text-muted-foreground -mt-3 text-center text-xs">
-        Шаблон можно переиспользовать позже без повторной сборки.
-      </p>
+      {isEditing ? null : (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            className="w-full"
+            onClick={handleSaveTemplate}
+            disabled={!canSubmit}
+            aria-busy={savingTemplate}
+          >
+            {savingTemplate ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Сохраняем…
+              </>
+            ) : (
+              "Сохранить как шаблон"
+            )}
+          </Button>
+          <p className="text-muted-foreground -mt-3 text-center text-xs">
+            Шаблон можно переиспользовать позже без повторной сборки.
+          </p>
+        </>
+      )}
     </form>
   );
 }
