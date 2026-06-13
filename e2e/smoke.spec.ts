@@ -253,6 +253,52 @@ test("H14.4 — /templates показывает кардио-шаблон бей
   ).toBeVisible();
 });
 
+test("H14.5c — кардио-шаблон редактируется: «Изменить» → префилл → edit-режим", async ({
+  page,
+}) => {
+  test.skip(
+    !cardioTemplateId,
+    "E2E_CARDIO_TEMPLATE_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H14.5c — кардио-шаблон можно редактировать (столп 3+4): на строке /templates
+  // появилась вторичная ссылка «Изменить» ВНЕ submit-кнопки «Начать» (валидный
+  // HTML, прецедент H6.2b), ведущая на /templates/cardio/<id>/edit. Кардио-
+  // «билдера» нет — там форма правки: префилл из плана (toCardioEditInitial) +
+  // кнопка «Сохранить изменения». one-off /cardio/new не тронут (столп 4). Сид:
+  // custom-пресет, rounds=6.
+  await page.goto("/templates");
+  await expect(page).toHaveURL(/\/templates/);
+
+  const tplRow = page
+    .locator("li", { hasText: "E2E Smoke — Кардио-шаблон" })
+    .first();
+  await expect(tplRow).toBeVisible();
+
+  const editLink = tplRow.getByRole("link", { name: /Изменить шаблон/ });
+  await expect(editLink).toHaveAttribute(
+    "href",
+    `/templates/cardio/${cardioTemplateId}/edit`,
+  );
+
+  await editLink.click();
+  await expect(page).toHaveURL(
+    new RegExp(`/templates/cardio/${cardioTemplateId}/edit`),
+  );
+
+  // Префилл: имя шаблона в поле «Название», параметр custom-пресета (Раундов=6).
+  await expect(page.locator("#name")).toHaveValue("E2E Smoke — Кардио-шаблон");
+  await expect(page.locator('input[name="rounds"]')).toHaveValue("6");
+
+  // Edit-режим: первичное действие = «Сохранить изменения»; one-off-кнопки
+  // старта/«сохранить как шаблон» с /cardio/new здесь отсутствуют.
+  await expect(
+    page.getByRole("button", { name: "Сохранить изменения" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Сохранить как шаблон" }),
+  ).toHaveCount(0);
+});
+
 test("разбор завершённой тренировки виден (TrainerResultCard)", async ({
   page,
 }) => {

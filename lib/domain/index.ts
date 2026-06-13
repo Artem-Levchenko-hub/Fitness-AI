@@ -11,5 +11,6 @@ export * from "./body/bmi";
 export * from "./cardio/presets";
 export * from "./cardio/cardio-template-preset";
 export * from "./cardio/cardio-template-summary";
+export * from "./cardio/cardio-edit-initial";
 export * from "./circuits/circuit-template-preset";
 export * from "./templates/template-list";

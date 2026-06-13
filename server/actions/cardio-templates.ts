@@ -9,6 +9,7 @@ import { buildCardioTemplatePreset } from "@/lib/domain";
 import {
   createCardioTemplate,
   startCardioFromTemplate,
+  updateCardioTemplate,
 } from "@/lib/repos/cardio-templates.repo";
 
 /** Зеркало startSchema из server/actions/cardio.ts — те же поля формы, тот же
@@ -23,11 +24,9 @@ const saveSchema = z.object({
   emomRounds: z.coerce.number().int().min(1).max(60).optional(),
 });
 
-/** H14.3 — «Сохранить как шаблон» из кардио-билдера: кардио сохраняется как
- *  именованный переиспользуемый пресет (НЕ стартует сессию). Поля формы — те же,
- *  что у startCardioAction, поэтому кнопка просто переключает formAction. */
-export async function saveCardioTemplateAction(formData: FormData) {
-  const user = await requireUser();
+/** Разбирает payload кардио-шаблона из FormData в нормализованный пресет (общий
+ *  для «сохранить» и «обновить» — один формат, ноль дубля валидации). */
+function parseCardioTemplatePayload(formData: FormData) {
   const parsed = saveSchema.safeParse({
     preset: formData.get("preset"),
     name: formData.get("name"),
@@ -43,8 +42,36 @@ export async function saveCardioTemplateAction(formData: FormData) {
     );
   }
 
-  const preset = buildCardioTemplatePreset(parsed.data);
+  return buildCardioTemplatePreset(parsed.data);
+}
+
+/** H14.3 — «Сохранить как шаблон» из кардио-билдера: кардио сохраняется как
+ *  именованный переиспользуемый пресет (НЕ стартует сессию). Поля формы — те же,
+ *  что у startCardioAction, поэтому кнопка просто переключает formAction. */
+export async function saveCardioTemplateAction(formData: FormData) {
+  const user = await requireUser();
+  const preset = parseCardioTemplatePayload(formData);
   await createCardioTemplate(user.id, preset);
+
+  revalidatePath("/templates");
+  revalidatePath("/dashboard");
+  redirect("/templates");
+}
+
+/** H14.5c — обновление кардио-шаблона из формы редактирования (edit-режим). Тот
+ *  же payload-формат, что у save; templateId связан в edit-странице через .bind
+ *  (прецедент силового updateTemplateAction.bind). Репозиторий проверяет владение
+ *  (R-7) и обновляет одну строку (детей нет). */
+export async function updateCardioTemplateAction(
+  templateId: string,
+  formData: FormData,
+) {
+  const user = await requireUser();
+  const id = z.string().uuid().safeParse(templateId);
+  if (!id.success) throw new Error("Неверный id кардио-шаблона");
+
+  const preset = parseCardioTemplatePayload(formData);
+  await updateCardioTemplate(user.id, id.data, preset);
 
   revalidatePath("/templates");
   revalidatePath("/dashboard");

@@ -82,6 +82,78 @@ export async function startCardioFromTemplate(
   });
 }
 
+export type CardioTemplateRowForEdit = {
+  id: string;
+  name: string;
+  preset: CardioTemplatePreset["preset"];
+  planJson: CardioTemplateParams | null;
+};
+
+/** H14.5c — читает кардио-шаблон для редактирования (R-7: userId явный,
+ *  чужой/несуществующий → null → notFound на странице). У кардио нет
+ *  упражнений-детей, поэтому возвращается одна строка с preset+planJson —
+ *  forCardioEditInitial префиллит соответствующую preset-форму. */
+export async function getCardioTemplateForEdit(
+  userId: string,
+  templateId: string,
+): Promise<CardioTemplateRowForEdit | null> {
+  const [tpl] = await db
+    .select({
+      id: schema.cardioTemplates.id,
+      name: schema.cardioTemplates.name,
+      preset: schema.cardioTemplates.preset,
+      planJson: schema.cardioTemplates.planJson,
+    })
+    .from(schema.cardioTemplates)
+    .where(
+      and(
+        eq(schema.cardioTemplates.id, templateId),
+        eq(schema.cardioTemplates.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!tpl) return null;
+
+  return {
+    id: tpl.id,
+    name: tpl.name,
+    preset: tpl.preset,
+    planJson: tpl.planJson as CardioTemplateParams | null,
+  };
+}
+
+/** H14.5c — обновляет кардио-шаблон (R-7: userId-фильтр, чужой/несуществующий →
+ *  ошибка). В отличие от updateCircuitTemplate здесь нет упражнений-детей и
+ *  транзакции — одна строка: имя, пресет и снимок params. Пресет уже нормализован
+ *  чистой buildCardioTemplatePreset (params содержит только релевантные пресету
+ *  поля). updatedAt поднимается через $onUpdate. */
+export async function updateCardioTemplate(
+  userId: string,
+  templateId: string,
+  preset: CardioTemplatePreset,
+): Promise<void> {
+  const [owned] = await db
+    .select({ id: schema.cardioTemplates.id })
+    .from(schema.cardioTemplates)
+    .where(
+      and(
+        eq(schema.cardioTemplates.id, templateId),
+        eq(schema.cardioTemplates.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!owned) throw new Error("Кардио-шаблон не найден или не твой");
+
+  await db
+    .update(schema.cardioTemplates)
+    .set({
+      name: preset.name,
+      preset: preset.preset,
+      planJson: preset.params,
+    })
+    .where(eq(schema.cardioTemplates.id, templateId));
+}
+
 /** H14.3 — создаёт кардио-шаблон одной строкой (R-7: userId явный, шаблон
  *  принадлежит вызывающему). Пресет уже нормализован чистой
  *  buildCardioTemplatePreset (params содержит только релевантные пресету поля).

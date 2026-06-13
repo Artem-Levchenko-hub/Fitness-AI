@@ -59,9 +59,11 @@ export default async function TemplatesPage() {
             ) : (
               // Круговая и кардио переиспользуются стартом одним кликом —
               // форма с серверным экшеном формата (ноль дубля логики старта).
-              // Круговая дополнительно несёт «Изменить» — отдельная ссылка ВНЕ
-              // submit-кнопки (валидный HTML, прецедент H6.2b). Кардио-правка —
-              // H14.5c (пока только старт).
+              // Оба несут «Изменить» — отдельная ссылка ВНЕ submit-кнопки
+              // (валидный HTML, прецедент H6.2b); маршрут формат-aware
+              // (circuit → /templates/circuit/<id>/edit, cardio →
+              // /templates/cardio/<id>/edit) — статический сегмент бьёт
+              // динамический /templates/[id] без коллизии.
               <li key={`${tpl.format}-${tpl.id}`} className="flex gap-2">
                 <form
                   action={
@@ -83,15 +85,13 @@ export default async function TemplatesPage() {
                     </span>
                   </button>
                 </form>
-                {tpl.format === "circuit" ? (
-                  <Link
-                    href={`/templates/circuit/${tpl.id}/edit`}
-                    aria-label={`Изменить шаблон «${tpl.name}»`}
-                    className="bg-card hover:bg-accent border-border text-muted-foreground hover:text-foreground flex min-h-[56px] min-w-[56px] shrink-0 items-center justify-center rounded-xl border transition-colors"
-                  >
-                    <Pencil className="size-5" />
-                  </Link>
-                ) : null}
+                <Link
+                  href={`/templates/${tpl.format}/${tpl.id}/edit`}
+                  aria-label={`Изменить шаблон «${tpl.name}»`}
+                  className="bg-card hover:bg-accent border-border text-muted-foreground hover:text-foreground flex min-h-[56px] min-w-[56px] shrink-0 items-center justify-center rounded-xl border transition-colors"
+                >
+                  <Pencil className="size-5" />
+                </Link>
               </li>
             ),
           )}
