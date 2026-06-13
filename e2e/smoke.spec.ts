@@ -137,13 +137,16 @@ test("H12.1 — активная тренировка: «Прошлый раз»
   await expect(
     page.getByText("Активная тренировка", { exact: true }),
   ).toBeVisible();
-  // «Прошлый раз» = working-подходы последней завершённой сессии жима
-  // (80×5 @8, 82.5×5 @9 из WORKOUT_MARKER) — разминка 60×8 исключена приоритетом
-  // рабочих подходов; совпадает с историей того же упражнения на /exercises/[id].
-  await expect(page.getByText("Прошлый раз:")).toBeVisible();
-  await expect(page.getByText("80×5 · 82.5×5")).toBeVisible();
+  // «Прошлый раз» = working-подходы ПОСЛЕДНЕЙ по started_at завершённой сессии
+  // жима. В сиде это WAITING_MARKER (начат 20 мин назад, working 80×5) — он
+  // свежее WORKOUT_MARKER (60 мин назад) → фича показывает реально последнюю
+  // сессию (совпадение с верхней карточкой /exercises/[id] проверяется в
+  // live-MCP-верификации слайса).
+  const prevLine = page.locator("p", { hasText: "Прошлый раз:" });
+  await expect(prevLine).toBeVisible();
+  await expect(prevLine).toContainText("80×5");
   // Префилл первого подхода = вес последнего рабочего подхода прошлой сессии.
-  await expect(page.getByLabel("Вес, кг")).toHaveValue("82.5");
+  await expect(page.getByLabel("Вес, кг")).toHaveValue("80");
 });
 
 test("/dashboard: мини-аватар-витрина (H9.2) показывает heat-силуэт и ведёт на /profile", async ({
