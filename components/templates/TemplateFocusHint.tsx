@@ -3,7 +3,7 @@
 import { Lightbulb, X } from "lucide-react";
 import { useSyncExternalStore } from "react";
 
-import { shouldShowFocusHint } from "@/lib/ai/template-focus";
+import { shouldShowFocusHint } from "@/lib/ai/focus-hint";
 
 const STORAGE_KEY = "template-focus-dismissed";
 const DISMISS_EVENT = "template-focus-dismiss";

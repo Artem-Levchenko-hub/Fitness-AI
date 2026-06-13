@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -634,6 +634,48 @@ export async function getLastTemplateAnalysis(
     .orderBy(desc(schema.aiAnalyses.createdAt))
     .limit(1);
   return row ?? null;
+}
+
+/** H11.2 «голос тренера на /dashboard»: свежайший per-workout разбор атлета
+ *  (силовой `workoutId` ЛИБО круговой `circuitWorkoutId`), созданный не раньше
+ *  `since` (окно «свежести», обычно 7 дней). Возвращает сырой resultJson + FK —
+ *  focus и ссылку резолвит buildTrainerVoice (R-7: repo не знает AI-формат).
+ *  null, если свежего per-workout разбора нет → вызывающий падает на недельный
+ *  fallback. fail-soft (R-10): сбой → null, дашборд не падает. */
+export async function getLatestPerWorkoutAnalysis(
+  userId: string,
+  since: Date,
+): Promise<{
+  id: string;
+  resultJson: unknown;
+  createdAt: Date;
+  workoutId: string | null;
+  circuitWorkoutId: string | null;
+} | null> {
+  try {
+    const a = schema.aiAnalyses;
+    const [row] = await db
+      .select({
+        id: a.id,
+        resultJson: a.resultJson,
+        createdAt: a.createdAt,
+        workoutId: a.workoutId,
+        circuitWorkoutId: a.circuitWorkoutId,
+      })
+      .from(a)
+      .where(
+        and(
+          eq(a.userId, userId),
+          or(isNotNull(a.workoutId), isNotNull(a.circuitWorkoutId)),
+          gte(a.createdAt, since),
+        ),
+      )
+      .orderBy(desc(a.createdAt))
+      .limit(1);
+    return row ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Включить публичный шеринг разбора. R-7: правит только СВОЙ разбор

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldShowFocusHint } from "./template-focus";
+import { shouldShowFocusHint } from "./focus-hint";
 
-/** H5.7: решение «показывать ли строку-совет прошлого разбора на экране старта
- *  тренировки по шаблону». Чистая функция — ядро dismiss-логики, переиспользуется
- *  в клиентском компоненте и здесь без jsdom/localStorage. */
+/** Общий предикат dismissible-совета тренера (H5.7 экран старта + H11.2 голос на
+ *  /dashboard). Чистая функция — ядро dismiss-логики, переиспользуется в обоих
+ *  клиентских компонентах и здесь без jsdom/localStorage. */
 describe("shouldShowFocusHint", () => {
   it("показывает свежий совет, который ещё не закрывали", () => {
     expect(shouldShowFocusHint("Жим: 85×5", "an-1", null)).toBe(true);

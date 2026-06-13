@@ -19,6 +19,7 @@ import { ResumeBanner } from "@/components/dashboard/ResumeBanner";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
+import { TrainerVoiceBanner } from "@/components/dashboard/TrainerVoiceBanner";
 import { WeekStripPreview } from "@/components/dashboard/WeekStripPreview";
 import {
   buildHistory,
@@ -27,6 +28,7 @@ import {
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
 import { isoWeekStartIso } from "@/lib/datetime/iso-week";
+import { buildTrainerVoice } from "@/lib/ai/trainer-voice";
 import { buildWeekStrip } from "@/lib/domain/stats/week-strip";
 import { getUserProfile } from "@/lib/repos/body.repo";
 import {
@@ -41,6 +43,8 @@ import {
 } from "@/lib/repos/stats.repo";
 import {
   getActiveWorkoutId,
+  getLatestPerWorkoutAnalysis,
+  getLatestWeeklyReview,
   listRecentWorkouts,
   type RecentWorkout,
 } from "@/lib/repos/workouts.repo";
@@ -57,6 +61,10 @@ export default async function DashboardPage() {
   const profile = await getUserProfile(user.id);
   const tz = profile?.timezone ?? "Europe/Moscow";
 
+  // H11.2 «голос тренера»: свежий per-workout разбор (≤7 дней) приоритетен,
+  // недельный — fallback. Окно свежести — чтобы старый совет не висел вечно.
+  const voiceSince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
   const [
     recent,
     activeId,
@@ -67,6 +75,8 @@ export default async function DashboardPage() {
     heat,
     daily,
     frequency,
+    latestAnalysis,
+    weeklyReview,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     getActiveWorkoutId(user.id),
@@ -80,7 +90,13 @@ export default async function DashboardPage() {
     // покрывает текущую + прошлую ISO-неделю.
     dailyVolume(user.id, "30d", tz),
     workoutFrequency(user.id, "30d", tz),
+    getLatestPerWorkoutAnalysis(user.id, voiceSince),
+    getLatestWeeklyReview(user.id),
   ]);
+
+  // Голос тренера: focus последнего разбора + ссылка на сам разбор. null →
+  // секция не рендерится вовсе (анти-фантом R-37). Без нового AI-вызова.
+  const trainerVoice = buildTrainerVoice(latestAnalysis, weeklyReview);
 
   // Снимок «эта неделя» для tile-входа /stats (H4.1): 7 дней + тоннаж + дельта.
   const weekStrip = buildWeekStrip(daily, frequency, isoWeekStartIso(now, tz));
@@ -126,6 +142,14 @@ export default async function DashboardPage() {
             />
           ))}
         </div>
+      ) : null}
+
+      {trainerVoice ? (
+        <TrainerVoiceBanner
+          focus={trainerVoice.focus}
+          analysisId={trainerVoice.analysisId}
+          href={trainerVoice.href}
+        />
       ) : null}
 
       <TodayScheduleCard userId={user.id} />

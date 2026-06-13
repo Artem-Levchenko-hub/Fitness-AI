@@ -112,6 +112,44 @@ test("/dashboard: мини-аватар-витрина (H9.2) показывае
   await expect(page).toHaveURL(/\/profile/);
 });
 
+test("H11.2 — голос тренера на /dashboard ведёт в последний разбор; dismiss переживает reload", async ({
+  page,
+}) => {
+  test.skip(
+    !circuitId,
+    "E2E_CIRCUIT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  // H11.2 — тренер, уже разобравший сессию, говорит первым на главной (столп 1):
+  // одна строка-совет (nextSessionFocus последнего разбора) отдельной dismissible-
+  // секцией над StartCard. Сид: свежайший per-workout разбор = текущая круговая
+  // (вставлена последней из ai_analyses) с focus «4 раунда вместо 3» → ссылка
+  // ведёт на /circuits/<circuitId>. Анти-фантом (R-37): скрытая строка = НИЧЕГО
+  // в DOM (count=0), а не пустая строка; «новый разбор не скрыт» покрыт юнитом
+  // shouldShowFocusHint; «нет разбора → count=0» покрыт юнитом buildTrainerVoice.
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  const voice = page.getByTestId("dashboard-trainer-voice");
+  await expect(voice).toHaveCount(1); // ровно одна строка, не фантом-дубль
+  const voiceLink = voice.getByRole("link");
+  await expect(voiceLink).toHaveAttribute("href", `/circuits/${circuitId}`);
+  await expect(voiceLink).toContainText("4 раунда вместо 3"); // реальный focus
+
+  // Тап реально ведёт в тот разбор (его карточка рендерится).
+  await voiceLink.click();
+  await expect(page).toHaveURL(new RegExp(`/circuits/${circuitId}`));
+  await expect(page.getByText("Оценка тренера", { exact: true })).toBeVisible();
+
+  // Dismiss: закрываю строку → её больше нет в DOM (count=0), и закрытие
+  // переживает reload (persist по analysisId в localStorage).
+  await page.goto("/dashboard");
+  await expect(voice).toHaveCount(1);
+  await voice.getByRole("button", { name: "Скрыть совет тренера" }).click();
+  await expect(voice).toHaveCount(0);
+  await page.reload();
+  await expect(voice).toHaveCount(0);
+});
+
 test("H14.1 — /circuits/new несёт «Сохранить как шаблон» рядом со стартом", async ({
   page,
 }) => {
