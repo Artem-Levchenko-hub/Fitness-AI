@@ -148,6 +148,13 @@
       "when": 1781457241654,
       "tag": "0020_salty_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781462527105,
+      "tag": "0021_fearless_leopardon",
+      "breakpoints": true
     }
   ]
 }

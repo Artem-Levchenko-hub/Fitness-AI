@@ -2,6 +2,7 @@ export * from "./enums";
 export * from "./auth";
 export * from "./exercises";
 export * from "./templates";
+export * from "./training-programs";
 export * from "./workouts";
 export * from "./notes";
 export * from "./circuit";

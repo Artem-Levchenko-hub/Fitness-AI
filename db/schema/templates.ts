@@ -11,6 +11,7 @@ import {
 import { users } from "./auth";
 import { templateSource } from "./enums";
 import { exercises } from "./exercises";
+import { trainingPrograms } from "./training-programs";
 
 /** Шаблон тренировки. Принадлежит пользователю — стабильный набор
  *  упражнений с целевыми параметрами. */
@@ -31,6 +32,18 @@ export const workoutTemplates = pgTable(
      *  (одна trainer-шаблон-«следующая» на завершённую тренировку). Nullable:
      *  у ручных шаблонов источника нет. */
     sourceWorkoutId: text("source_workout_id"),
+    /** Программа (тренировочная система), днём которой является этот шаблон.
+     *  null — одиночный шаблон. SET NULL при удалении программы — день
+     *  отвязывается в standalone, данные не теряются. */
+    programId: text("program_id").references(() => trainingPrograms.id, {
+      onDelete: "set null",
+    }),
+    /** Порядок дня внутри программы (0-индекс). null у одиночных шаблонов. */
+    dayOrder: integer("day_order"),
+    /** Последняя тренировка, по которой шаблон-день адаптирован на месте
+     *  (тренер правил вес/повторы прямо здесь) — ключ идемпотентности:
+     *  повторный finish / офлайн-реплей с тем же workoutId = no-op. */
+    lastAdaptedWorkoutId: text("last_adapted_workout_id"),
     archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()
@@ -40,7 +53,10 @@ export const workoutTemplates = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index("workout_templates_user_idx").on(t.userId)],
+  (t) => [
+    index("workout_templates_user_idx").on(t.userId),
+    index("workout_templates_program_idx").on(t.programId, t.dayOrder),
+  ],
 );
 
 /** Упражнение в шаблоне с порядком и целевыми параметрами.
@@ -77,6 +93,11 @@ export const workoutTemplatesRelations = relations(
     user: one(users, {
       fields: [workoutTemplates.userId],
       references: [users.id],
+    }),
+    /** Программа-владелец, если шаблон — день тренировочной системы. */
+    program: one(trainingPrograms, {
+      fields: [workoutTemplates.programId],
+      references: [trainingPrograms.id],
     }),
     items: many(templateExercises),
   }),

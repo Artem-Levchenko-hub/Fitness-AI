@@ -22,6 +22,7 @@ import {
   createTrainerNextTemplate,
   trainerTemplateExistsForWorkout,
 } from "@/lib/repos/templates.repo";
+import { adaptProgramDayAfterWorkout } from "@/lib/repos/training-programs.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
 import { buildNextTemplateItems } from "@/lib/domain/templates/next-template";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
@@ -161,25 +162,47 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
     );
   }
 
-  // «Следующая тренировка от тренера»: авто-составляем прогрессию по этой
-  // силовой, чтобы атлет был в потоке и не собирал шаблон руками. Fail-soft
-  // (R-10): любая ошибка генерации НЕ должна ломать завершение тренировки.
-  // Идемпотентно (sourceWorkoutId) — повторный finish / реплей не плодит дубль.
+  // Прогрессия от тренера по завершённой силовой — чтобы атлет был в потоке и не
+  // собирал шаблон руками. Fail-soft (R-10): любая ошибка НЕ должна ломать
+  // завершение тренировки.
+  //  • Тренировка по программному шаблону (день тренировочной системы) → тренер
+  //    адаптирует ТОТ ЖЕ шаблон-день НА МЕСТЕ: вес/повторы по факту, изредка свап
+  //    застойного упражнения. Идемпотентно по lastAdaptedWorkoutId.
+  //  • Одиночный шаблон → старый путь: отдельный trainer-шаблон «следующая»
+  //    (идемпотентно по sourceWorkoutId).
   try {
     const done = await getActiveWorkoutForUser(user.id, workoutId);
     if (done && done.status === "completed") {
-      const already = await trainerTemplateExistsForWorkout(user.id, workoutId);
-      if (!already) {
-        const items = buildNextTemplateItems(
-          done.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+      const performed = done.exercises.map((e) => ({
+        exerciseId: e.exerciseId,
+        sets: e.sets,
+      }));
+
+      const program = await adaptProgramDayAfterWorkout(
+        user.id,
+        workoutId,
+        performed,
+      );
+
+      if (program) {
+        // День программы адаптирован на месте (или идемпотентно пропущен).
+        revalidatePath("/programs");
+        revalidatePath("/templates");
+      } else {
+        const already = await trainerTemplateExistsForWorkout(
+          user.id,
+          workoutId,
         );
-        if (items.length > 0) {
-          await createTrainerNextTemplate(user.id, {
-            name: `${done.name} · следующая`,
-            sourceWorkoutId: workoutId,
-            items,
-          });
-          revalidatePath("/templates");
+        if (!already) {
+          const items = buildNextTemplateItems(performed);
+          if (items.length > 0) {
+            await createTrainerNextTemplate(user.id, {
+              name: `${done.name} · следующая`,
+              sourceWorkoutId: workoutId,
+              items,
+            });
+            revalidatePath("/templates");
+          }
         }
       }
     }
