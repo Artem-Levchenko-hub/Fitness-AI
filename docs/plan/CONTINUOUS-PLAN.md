@@ -331,6 +331,9 @@ HARD-STOP = 2026-06-17 06:52 MSK
 
 ## §7. ЛОГ (append-only — НИКОГДА не переписывать/не удалять прошлое; новое сверху)
 
+### exec94 — 2026-06-14 07:30 MSK — SKIPPED tick — RAM<2GB после reap
+- RAM-GUARD (§0b): свободно 1.9 GB ПОСЛЕ reap-orphans (снёс осиротевшие cmd/conhost; PID 14188/1604 уже мертвы). Порог 2 GB не пройден → тяжёлый слайс (build+chromium) не начинаю, машину не топлю. Lock НЕ брал. STOP — догоню следующим тиком. NEXT без изменений = H15.2 (первый `[ ]` сверху §5★).
+
 ### v1.13-exec93 — 2026-06-14 07:30 MSK — H15.1 `[x]` ЗАКРЫТ (АУДИТ+ЛОК+ВЕРИФ) — PWA офлайн-фундамент уже зашипан push-эпиком, залочен тестом + доказан на проде — столп 4
 - **Слайс:** §6 NEXT = H15.1 (первый `[ ]` сверху §5★; refactor v1.13 уже пометил «DONE-IN-CODE — верифицировать, не строить»). IN-FLIGHT: НЕТ. Lock exec-aa032ff6. now 2026-06-14 07:11 < HARD-STOP 2026-06-17 04:52. RAM 3.3GB (после reap, >2GB). `git pull --ff-only` up to date (HEAD d39d662 на старте).
 - **Аудит (sequential-thinking, 4 шага):** премиса плана «SW НЕ установлен / Serwist в deps нет / офлайна нет вообще» — УСТАРЕЛА. Рукописный [public/sw.js](public/sw.js) (путь B; выбран ранее под web-push) уже несёт ВСЁ из гейта H15.1: зарегистрирован [PwaProvider.tsx:26-30](components/app/PwaProvider.tsx), прекэш `/offline.html`, навигация=network-only-с-fallback (анти-stale-shell + гард iOS login-307-redirect), cache-first для _next/static, `skipWaiting`+`clients.claim`+чистка версионных кэшей на activate, полированная [offline.html](public/offline.html) (кнопка 3.5rem≥56px, dark-mode, НЕ dino). Путь B зафиксирован (Turbopack≠webpack → @serwist/next несовместим, build НЕ трогаем). → реальный слайс = ЗАЛОЧИТЬ инварианты + ДОКАЗАТЬ на проде, БЕЗ реимплементации (столп 4 — ничего не потеряно).
