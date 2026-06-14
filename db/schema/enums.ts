@@ -91,6 +91,10 @@ export const circuitExerciseKind = pgEnum("circuit_exercise_kind", [
   "duration",
 ]);
 
+/** Авторство шаблона: manual — создан атлетом; trainer — авто-составлен тренером
+ *  как «следующая тренировка» (прогрессия по завершённой). */
+export const templateSource = pgEnum("template_source", ["manual", "trainer"]);
+
 export const friendshipStatus = pgEnum("friendship_status", [
   "pending",
   "accepted",

@@ -13,6 +13,9 @@ export type TemplateListSource = {
   description: string | null;
   exerciseCount: number;
   updatedAt: Date;
+  /** Авторство — для бейджа «Тренер» (авто-«следующая тренировка»). Опционально:
+   *  у круговых/кардио источника нет → трактуем как ручной. */
+  source?: "manual" | "trainer";
 };
 
 /** Кардио-шаблон НЕ имеет упражнений-детей (блоки выводятся из preset+params)
@@ -23,6 +26,9 @@ export type CardioTemplateListSource = {
   description: string | null;
   metaLine: string;
   updatedAt: Date;
+  /** Кардио всегда ручное — поле для единообразия объединения (бейдж «Тренер»
+   *  только у силовых). */
+  source?: "manual" | "trainer";
 };
 
 export type UnifiedTemplateItem =

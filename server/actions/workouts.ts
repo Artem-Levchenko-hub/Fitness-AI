@@ -14,11 +14,17 @@ import {
   deleteSet,
   deleteWorkout,
   finishWorkout,
+  getActiveWorkoutForUser,
   recordSet,
   saveWorkoutNote,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
+import {
+  createTrainerNextTemplate,
+  trainerTemplateExistsForWorkout,
+} from "@/lib/repos/templates.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
+import { buildNextTemplateItems } from "@/lib/domain/templates/next-template";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
 import { parseClientWorkoutId } from "@/lib/domain/workouts/client-workout-id";
 
@@ -154,6 +160,32 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
       noteParts.join("\n").slice(0, 1000),
       feeling ? "manual" : "auto_generated",
     );
+  }
+
+  // «Следующая тренировка от тренера»: авто-составляем прогрессию по этой
+  // силовой, чтобы атлет был в потоке и не собирал шаблон руками. Fail-soft
+  // (R-10): любая ошибка генерации НЕ должна ломать завершение тренировки.
+  // Идемпотентно (sourceWorkoutId) — повторный finish / реплей не плодит дубль.
+  try {
+    const done = await getActiveWorkoutForUser(user.id, workoutId);
+    if (done && done.status === "completed") {
+      const already = await trainerTemplateExistsForWorkout(user.id, workoutId);
+      if (!already) {
+        const items = buildNextTemplateItems(
+          done.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+        );
+        if (items.length > 0) {
+          await createTrainerNextTemplate(user.id, {
+            name: `${done.name} · следующая`,
+            sourceWorkoutId: workoutId,
+            items,
+          });
+          revalidatePath("/templates");
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[next-template] generation failed:", e);
   }
 
   // Ставим post_workout аналитический job. Если уже стоит (на случай

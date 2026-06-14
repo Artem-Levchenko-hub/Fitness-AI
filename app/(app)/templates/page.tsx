@@ -1,4 +1,4 @@
-import { ChevronRight, Pencil, Play, Plus } from "lucide-react";
+import { ChevronRight, Pencil, Play, Plus, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -107,6 +107,12 @@ function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
   // пилюли-бейджа: одна поверхность, не вкладки/разделы (столп 3).
   return (
     <div className="min-w-0 flex-1">
+      {tpl.source === "trainer" ? (
+        <p className="text-primary mb-1 inline-flex items-center gap-1 text-[10px] font-semibold tracking-[0.1em] uppercase">
+          <Sparkles className="size-3" />
+          Составил тренер
+        </p>
+      ) : null}
       <h2 className="truncate text-sm font-semibold">{tpl.name}</h2>
       <p className="text-muted-foreground mt-0.5 text-xs">
         {formatTemplateMeta(tpl)}

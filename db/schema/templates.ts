@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
+import { templateSource } from "./enums";
 import { exercises } from "./exercises";
 
 /** Шаблон тренировки. Принадлежит пользователю — стабильный набор
@@ -24,6 +25,12 @@ export const workoutTemplates = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
+    /** Авторство: manual (атлет) или trainer (авто-«следующая тренировка»). */
+    source: templateSource("source").notNull().default("manual"),
+    /** Силовая, по которой тренер составил прогрессию — ключ идемпотентности
+     *  (одна trainer-шаблон-«следующая» на завершённую тренировку). Nullable:
+     *  у ручных шаблонов источника нет. */
+    sourceWorkoutId: text("source_workout_id"),
     archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()
