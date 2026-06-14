@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { BodyTrendChart, type BodyPoint } from "@/components/charts/BodyTrendChart";
 import { FrequencyHeatmap } from "@/components/charts/FrequencyHeatmap";
 import { MuscleVolumeBars } from "@/components/charts/MuscleVolumeChart";
+import { MuscleVolumeSilhouette } from "@/components/charts/MuscleVolumeSilhouette";
 import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
 import { PeriodInsightCard } from "@/components/stats/PeriodInsightCard";
@@ -234,6 +235,7 @@ export default async function StatsPage({ searchParams }: Props) {
         <h2 className="mb-4 text-sm font-semibold tracking-tight">
           Объём по группам мышц
         </h2>
+        <MuscleVolumeSilhouette data={muscle} />
         <MuscleVolumeBars data={muscle} />
       </section>
 
