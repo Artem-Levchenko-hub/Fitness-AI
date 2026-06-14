@@ -23,12 +23,18 @@ import {
   type PreviousSessionSummary,
 } from "@/lib/domain/exercise/previous-session";
 import {
+  summarizeGoalProgress,
+  type GoalProgressView,
+} from "@/lib/domain/progression/goal-projection";
+import { goalSeries } from "@/lib/domain/progression/goal-series";
+import {
   getActiveWorkoutForUser,
   getAiAnalysisForWorkout,
   getPreviousAnalysisRef,
   type ActiveWorkout,
   type ActiveWorkoutExercise,
 } from "@/lib/repos/workouts.repo";
+import { getExerciseGoal } from "@/lib/repos/goals.repo";
 import { exerciseSetHistory } from "@/lib/repos/stats.repo";
 import { deleteWorkoutAction } from "@/server/actions/workouts";
 
@@ -68,11 +74,25 @@ export default async function WorkoutPage({ params }: Props) {
   // исключена запросом. Промах истории → null (R-37: строки нет, префилл
   // падает на target).
   const previousByExerciseId = new Map<string, PreviousSessionSummary>();
+  // H18.2 (под-слайс B) — активная цель упражнения → read-only трек-бар
+  // «текущее→цель» ТЕМ ЖЕ компонентом GoalTrackBar под «Прошлый раз» (носитель
+  // цели = точка решения; урок H4.3 — один компонент). Полную историю тянем
+  // ТОЛЬКО при наличии цели; goalSeries — тот же источник, что /exercises/[id].
+  const goalByExerciseId = new Map<string, GoalProgressView>();
   await Promise.all(
     workout.exercises.map(async (ex) => {
       const [latest] = await exerciseSetHistory(user.id, ex.exerciseId, 1);
       const summary = summarizePreviousSession(latest ?? null);
       if (summary) previousByExerciseId.set(ex.exerciseId, summary);
+
+      const goal = await getExerciseGoal(user.id, ex.exerciseId);
+      if (goal && (goal.kind === "weight" || goal.kind === "1rm")) {
+        const history = await exerciseSetHistory(user.id, ex.exerciseId);
+        goalByExerciseId.set(
+          ex.exerciseId,
+          summarizeGoalProgress(goalSeries(history, goal.kind), goal.targetValue),
+        );
+      }
     }),
   );
 
@@ -97,6 +117,7 @@ export default async function WorkoutPage({ params }: Props) {
       <ActiveWorkoutView
         workout={workout}
         previousByExerciseId={previousByExerciseId}
+        goalByExerciseId={goalByExerciseId}
       />
 
       <div className="border-border mt-8 border-t pt-5">

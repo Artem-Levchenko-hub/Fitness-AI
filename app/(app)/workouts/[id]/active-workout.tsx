@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
+import { GoalTrackBar } from "@/components/progression/GoalTrackBar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -21,6 +22,7 @@ import {
   type FeelingTagKey,
 } from "@/lib/domain/workouts/feeling";
 import type { PreviousSessionSummary } from "@/lib/domain/exercise/previous-session";
+import type { GoalProgressView } from "@/lib/domain/progression/goal-projection";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
 import {
   cancelWorkoutAction,
@@ -32,9 +34,14 @@ import { cn } from "@/lib/utils";
 type Props = {
   workout: ActiveWorkout;
   previousByExerciseId: Map<string, PreviousSessionSummary>;
+  goalByExerciseId: Map<string, GoalProgressView>;
 };
 
-export function ActiveWorkoutView({ workout, previousByExerciseId }: Props) {
+export function ActiveWorkoutView({
+  workout,
+  previousByExerciseId,
+  goalByExerciseId,
+}: Props) {
   const completedExercises = useMemo(
     () =>
       workout.exercises.filter((e) => e.sets.length >= e.targetSets).length,
@@ -77,6 +84,7 @@ export function ActiveWorkoutView({ workout, previousByExerciseId }: Props) {
             exercise={ex}
             index={idx}
             previous={previousByExerciseId.get(ex.exerciseId) ?? null}
+            goal={goalByExerciseId.get(ex.exerciseId) ?? null}
           />
         ))}
       </ul>
@@ -178,11 +186,13 @@ function ExerciseCard({
   exercise,
   index,
   previous,
+  goal,
 }: {
   workoutId: string;
   exercise: ActiveWorkout["exercises"][number];
   index: number;
   previous: PreviousSessionSummary | null;
+  goal: GoalProgressView | null;
 }) {
   const [expanded, setExpanded] = useState(true);
   const completed = exercise.sets.length >= exercise.targetSets;
@@ -281,6 +291,11 @@ function ExerciseCard({
                     .join(" · ")}
                 </p>
               ) : null}
+
+              {/* H18.2 (под-слайс B) — при активной цели упражнения тот же
+                  GoalTrackBar, что на /exercises/[id]: «текущее→цель» прямо
+                  в точке решения. Нет цели → ничего (R-37). */}
+              {goal ? <GoalTrackBar view={goal} /> : null}
 
               {lastSet ? (
                 <RestTimer

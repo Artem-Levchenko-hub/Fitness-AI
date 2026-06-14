@@ -10,6 +10,7 @@ import {
   summarizeGoalProgress,
   type GoalProgressView,
 } from "@/lib/domain/progression/goal-projection";
+import { goalSeries } from "@/lib/domain/progression/goal-series";
 import {
   detectStagnation,
   E1RM_STAGNATION_EPSILON_KG,
@@ -51,27 +52,16 @@ export default async function ExerciseDetailPage({ params }: Props) {
     epsilon: E1RM_STAGNATION_EPSILON_KG,
   });
 
-  // H18.2 — цель упражнения + проекция темпа. Серия зависит от вида цели:
-  // 1ПМ — та же e1RM-серия (что застой); вес — топ рабочего веса по сессиям,
-  // хронологически (новые снизу). Нет цели → блок не рендерится (R-37).
+  // H18.2 — цель упражнения + проекция темпа. Серия зависит от вида цели
+  // (goalSeries — единый источник правила, тот же на «Прошлый раз» активной
+  // тренировки). Нет цели → блок не рендерится (R-37).
   const goal = await getExerciseGoal(user.id, id);
   let goalView: GoalProgressView | null = null;
   if (goal && (goal.kind === "weight" || goal.kind === "1rm")) {
-    const series =
-      goal.kind === "1rm"
-        ? e1rmSeries
-        : history
-            .map((s) =>
-              Math.max(
-                0,
-                ...s.sets
-                  .filter((x) => x.setType === "working")
-                  .map((x) => x.weightKg),
-              ),
-            )
-            .filter((w) => w > 0)
-            .reverse();
-    goalView = summarizeGoalProgress(series, goal.targetValue);
+    goalView = summarizeGoalProgress(
+      goalSeries(history, goal.kind),
+      goal.targetValue,
+    );
   }
 
   return (
