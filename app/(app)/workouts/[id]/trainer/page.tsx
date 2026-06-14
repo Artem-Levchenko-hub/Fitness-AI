@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { TrainerJobPoller } from "@/components/trainer/TrainerJobPoller";
 import {
   TrainerResultCard,
   type TrainerResultData,
@@ -15,9 +14,6 @@ import { AskTrainerPanel } from "@/components/trainer/AskTrainerPanel";
 import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { renderTrainerMarkdown, trainerSchema } from "@/lib/ai/trainer-parse";
-import { db } from "@/db/client";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { totalVolume } from "@/lib/domain";
 import {
@@ -40,23 +36,12 @@ export default async function TrainerPage({ params }: Props) {
     redirect(`/workouts/${id}`);
   }
 
-  // 1) Уже есть сохранённый structured-разбор (cron ИЛИ стрим) — показываем
-  //    сразу, без стрима/поллинга. Покрывает повторный заход после стрима.
+  // Уже есть сохранённый structured-разбор (живой стрим ИЛИ отложенный cron-job)
+  // — показываем сразу. Иначе — живой стрим прямо в запросе: пользователь
+  // СМОТРИТ, как тренер пишет разбор в реальном времени (H-LIVE). Отложенный
+  // safety-net job (+90с, finishWorkoutCore) догенерит, только если стрим не
+  // отработал — и идемпотентно пропустится, если стрим уже сохранил разбор.
   const savedAnalysis = await getLatestTrainerResult(user.id, id);
-
-  // 2) Иначе — последний aiJob для этой тренировки (его создаёт finishWorkout
-  //    через cron-путь). Игнорируем failed — стрим-консьюмер создаст разбор сам.
-  const [latestJob] = await db
-    .select()
-    .from(schema.aiJobs)
-    .where(
-      and(
-        eq(schema.aiJobs.workoutId, id),
-        inArray(schema.aiJobs.status, ["pending", "running", "succeeded"]),
-      ),
-    )
-    .orderBy(desc(schema.aiJobs.scheduledAt))
-    .limit(1);
 
   const totalSets = workout.exercises.reduce(
     (sum, e) => sum + e.sets.length,
@@ -146,17 +131,8 @@ export default async function TrainerPage({ params }: Props) {
             analysisMarkdown={analysisToMarkdown(savedAnalysis.resultJson)}
           />
         </>
-      ) : latestJob ? (
-        // cron уже обрабатывает (или succeeded-legacy) — поллим как fallback.
-        <TrainerJobPoller
-          jobId={latestJob.id}
-          workoutId={id}
-          exerciseLinks={buildExerciseLinkMap(workout.exercises)}
-          linkLifeFactors
-          pastAdviceHref={pastAdviceHref}
-        />
       ) : (
-        // Свежий on_demand — генерируем live прямо в запросе (F8-B run-2).
+        // Живой стрим: тренер пишет разбор на глазах (H-LIVE).
         <TrainerStreamConsumer
           workoutId={id}
           exerciseLinks={buildExerciseLinkMap(workout.exercises)}

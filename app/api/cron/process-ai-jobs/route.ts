@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, or } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -7,6 +7,7 @@ import {
   generateTrainerResponse,
   renderTrainerMarkdown,
   TRAINER_MODEL,
+  trainerSchema,
   type TrainerResponse,
 } from "@/lib/ai/trainer-structured";
 import {
@@ -128,6 +129,13 @@ async function processJob(
     return processWeeklyReview(job);
   }
 
+  // Идемпотентность: живой стрим (POST /api/ai/trainer/stream) генерит разбор
+  // inline и сохраняет ai_analyses раньше, чем отложенный safety-net job
+  // успевает стартовать. Если разбор по этой тренировке уже есть — НЕ
+  // перегенерируем (нет двойного вызова LLM), просто привязываем существующий.
+  const existing = await findExistingAnalysis(job);
+  if (existing) return existing;
+
   const context = await buildTrainerContext(job.userId, job.workoutId, {
     kind: job.kind,
     circuitWorkoutId: job.circuitWorkoutId ?? null,
@@ -185,6 +193,32 @@ ${context.prompt}`;
 
   if (!analysis) throw new Error("Не удалось сохранить ai_analyses");
   return { analysisId: analysis.id, result: result.json };
+}
+
+/** Уже сохранённый разбор по этой тренировке (силовой/круговой) — для
+ *  идемпотентности с живым стримом. null если нет / kind без привязки к
+ *  тренировке / сохранённый JSON не проходит схему (тогда перегенерим). */
+async function findExistingAnalysis(
+  job: typeof schema.aiJobs.$inferSelect,
+): Promise<{ analysisId: string; result: TrainerResponse } | null> {
+  const match = job.workoutId
+    ? eq(schema.aiAnalyses.workoutId, job.workoutId)
+    : job.circuitWorkoutId
+      ? eq(schema.aiAnalyses.circuitWorkoutId, job.circuitWorkoutId)
+      : null;
+  if (!match) return null;
+
+  const [row] = await db
+    .select({ id: schema.aiAnalyses.id, resultJson: schema.aiAnalyses.resultJson })
+    .from(schema.aiAnalyses)
+    .where(and(eq(schema.aiAnalyses.userId, job.userId), match))
+    .orderBy(desc(schema.aiAnalyses.createdAt))
+    .limit(1);
+
+  if (!row?.resultJson) return null;
+  const parsed = trainerSchema.safeParse(row.resultJson);
+  if (!parsed.success) return null;
+  return { analysisId: row.id, result: parsed.data };
 }
 
 /** H8.2 — авто-разбор недели по закрытии ISO-недели. Использует общее ядро

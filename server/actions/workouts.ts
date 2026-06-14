@@ -8,7 +8,6 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
-import { env } from "@/lib/env";
 import {
   cancelWorkout,
   deleteSet,
@@ -202,24 +201,19 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
     .limit(1);
 
   if (!existing) {
+    // Отложенный safety-net (+90с): на /workouts/[id]/trainer живой стрим
+    // (TrainerStreamConsumer) генерит разбор inline и сохраняет раньше — тогда
+    // cron-job идемпотентно пропускается (findExistingAnalysis). Если страницу
+    // не открыли / стрим упал — cron-runner догенерит сам в течение минуты
+    // после scheduledAt. Немедленный триггер воркера УБРАН, чтобы не гонять
+    // вторую генерацию параллельно стриму.
     await db.insert(schema.aiJobs).values({
       userId: user.id,
       workoutId,
       kind: "post_workout",
       status: "pending",
+      scheduledAt: new Date(Date.now() + 90_000),
     });
-
-    // Триггерим воркер сразу. Если упало — cron-runner подхватит в течение минуты.
-    if (env.CRON_SECRET) {
-      try {
-        void fetch(`${env.NEXT_PUBLIC_APP_URL}/api/cron/process-ai-jobs`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
-        });
-      } catch {
-        /* пусто */
-      }
-    }
   }
 
   revalidatePath(`/workouts/${workoutId}`);

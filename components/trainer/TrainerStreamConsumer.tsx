@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  extractPartialTrainer,
+  type PartialTrainer,
+} from "@/lib/ai/trainer-stream-parse";
 
 import {
   TrainerResultCard,
@@ -12,11 +16,12 @@ import { TrainerWaiting } from "./TrainerWaiting";
 
 type Phase = "streaming" | "loading-result" | "done" | "error";
 
-/** F8-B run-2: live-стрим разбора. POST /api/ai/trainer/stream генерирует
- *  inline (без cron/poll). Стрим эмитит СЫРОЙ JSON (+ reasoning у thinking-
- *  модели) — НЕ рендерим его как текст, только индикатор прогресса по факту
- *  поступления байт. По завершении — перечитываем сохранённый structured
- *  разбор (GET /api/ai/trainer/latest) и показываем цветные дельты F4. */
+/** F8-B / H-LIVE: живой стрим разбора. POST /api/ai/trainer/stream генерирует
+ *  inline (без cron/poll) и льёт сырой JSON. Мы копим текст и через толерантный
+ *  парсер показываем РОЖДАЮЩИЙСЯ разбор в реальном времени (как тренер пишет) —
+ *  оценка, мотивация, «что хорошо», рекомендации проступают по мере печати. До
+ *  первого поля сверху живут книжные факты (TrainerWaiting). По завершении —
+ *  перечитываем сохранённый structured-разбор (цветные дельты F4). */
 export function TrainerStreamConsumer({
   workoutId,
   exerciseLinks,
@@ -24,22 +29,17 @@ export function TrainerStreamConsumer({
   pastAdviceHref,
 }: {
   workoutId: string;
-  /** H13.1 — карта имя→exerciseId своей тренировки (см. TrainerResultCard). */
   exerciseLinks?: Record<string, string>;
-  /** H13.2 — на своём разборе заголовки факторов жизни кликабельны. */
   linkLifeFactors?: boolean;
-  /** H13.5 — ссылка из «Прошлый совет» на прошлый разбор (см. TrainerResultCard). */
   pastAdviceHref?: string | null;
 }) {
   const [phase, setPhase] = useState<Phase>("streaming");
   const [result, setResult] = useState<TrainerResultData | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
-  const [bytes, setBytes] = useState(0);
+  const [partial, setPartial] = useState<PartialTrainer>({});
   const [attempt, setAttempt] = useState(0);
 
-  // Защита от двойного запуска (StrictMode dev мог бы дважды дёрнуть стрим).
   const startedRef = useRef(false);
-
   useEffect(() => {
     startedRef.current = false;
   }, [attempt]);
@@ -49,14 +49,11 @@ export function TrainerStreamConsumer({
     startedRef.current = true;
 
     let cancelled = false;
-    // Локальный AbortController только для cleanup на размонтировании. Сервер
-    // продолжит генерацию (endpoint использует timeout, не request.signal),
-    // поэтому уход со страницы не теряет разбор.
     const controller = new AbortController();
 
     const run = async () => {
       setPhase("streaming");
-      setBytes(0);
+      setPartial({});
       setErrorText(null);
 
       let res: Response;
@@ -78,25 +75,26 @@ export function TrainerStreamConsumer({
 
       if (!res.ok) {
         if (cancelled) return;
-        const msg =
+        setErrorText(
           res.status === 503
             ? "AI-тренер временно выключен."
-            : "Не получилось запустить разбор.";
-        setErrorText(msg);
+            : "Не получилось запустить разбор.",
+        );
         setPhase("error");
         return;
       }
 
-      // Дренируем стрим ради прогресса; содержимое (сырой JSON) не показываем.
+      // Копим текст потока и достаём готовые поля для живой «печати».
       const reader = res.body?.getReader();
       if (reader) {
-        let received = 0;
+        const decoder = new TextDecoder();
+        let acc = "";
         try {
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
-            received += value?.byteLength ?? 0;
-            if (!cancelled) setBytes(received);
+            acc += decoder.decode(value, { stream: true });
+            if (!cancelled) setPartial(extractPartialTrainer(acc));
           }
         } catch {
           // Стрим оборвался — onFinish на сервере всё равно мог сохранить.
@@ -172,16 +170,135 @@ export function TrainerStreamConsumer({
     );
   }
 
-  return (
-    <TrainerWaiting
-      workoutId={workoutId}
-      text={
-        phase === "loading-result"
-          ? "Собираю разбор…"
-          : bytes > 0
-            ? "Тренер пишет разбор…"
-            : "Тренер анализирует тренировку…"
-      }
+  // Есть уже хоть одно готовое поле → показываем живой черновик; до первого
+  // слова — книжные факты + скелет (TrainerWaiting).
+  const hasDraft =
+    partial.overallScore != null ||
+    Boolean(partial.motivation) ||
+    Boolean(partial.qualityComment) ||
+    Boolean(partial.whatWorked) ||
+    (partial.recommendations?.length ?? 0) > 0;
+
+  if (!hasDraft) {
+    return (
+      <TrainerWaiting
+        workoutId={workoutId}
+        text="Тренер анализирует тренировку…"
+      />
+    );
+  }
+
+  return <LiveTrainerDraft partial={partial} streaming={phase === "streaming"} />;
+}
+
+/** Живой черновик разбора: поля проступают по мере печати, с мигающим курсором
+ *  (motion-safe). Это «как тренер пишет в реальном времени». */
+function LiveTrainerDraft({
+  partial,
+  streaming,
+}: {
+  partial: PartialTrainer;
+  streaming: boolean;
+}) {
+  const caret = streaming ? (
+    <span
+      aria-hidden="true"
+      className="bg-primary ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle motion-reduce:animate-none"
     />
+  ) : null;
+
+  return (
+    <div
+      role="status"
+      aria-busy={streaming}
+      aria-live="polite"
+      className="bg-card border-border space-y-5 rounded-2xl border p-6"
+    >
+      <p className="text-muted-foreground flex items-center gap-2 text-[11px] font-medium tracking-[0.14em] uppercase">
+        <span className="bg-primary size-1.5 animate-pulse rounded-full motion-reduce:animate-none" />
+        Тренер пишет разбор
+      </p>
+
+      {partial.overallScore != null ? (
+        <Field>
+          <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+            Оценка тренера
+          </p>
+          <p className="font-serif tabular text-3xl font-normal">
+            {partial.overallScore}
+            <span className="text-muted-foreground text-lg">/100</span>
+          </p>
+        </Field>
+      ) : null}
+
+      {partial.motivation ? (
+        <Field>
+          <p className="border-l-primary/40 border-l-2 pl-4 text-sm leading-relaxed font-medium">
+            {partial.motivation}
+            {caret}
+          </p>
+        </Field>
+      ) : null}
+
+      {partial.qualityComment ? (
+        <Field>
+          <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+            Качество тренировки
+          </p>
+          <p className="text-sm leading-relaxed">
+            {partial.qualityComment}
+            {!partial.whatWorked ? caret : null}
+          </p>
+        </Field>
+      ) : null}
+
+      {partial.whatWorked ? (
+        <Field>
+          <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+            Что хорошо
+          </p>
+          <p className="text-sm leading-relaxed">
+            {partial.whatWorked}
+            {!partial.recommendations?.length ? caret : null}
+          </p>
+        </Field>
+      ) : null}
+
+      {partial.recommendations?.length ? (
+        <Field>
+          <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+            Рекомендации
+          </p>
+          <ul className="mt-1 space-y-1.5">
+            {partial.recommendations.map((rec, i) => (
+              <li key={i} className="flex gap-2 text-sm leading-relaxed">
+                <span className="text-primary">•</span>
+                <span>{rec}</span>
+              </li>
+            ))}
+          </ul>
+        </Field>
+      ) : null}
+
+      {partial.nextSessionFocus ? (
+        <Field>
+          <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+            Фокус на следующую
+          </p>
+          <p className="text-sm leading-relaxed italic">
+            {partial.nextSessionFocus}
+          </p>
+        </Field>
+      ) : null}
+    </div>
+  );
+}
+
+/** Обёртка-поле с мягким проявлением (motion-safe). */
+function Field({ children }: { children: ReactNode }) {
+  return (
+    <div className="animate-in fade-in space-y-1 duration-500 motion-reduce:animate-none">
+      {children}
+    </div>
   );
 }
