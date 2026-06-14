@@ -841,3 +841,77 @@ test("H3.3 — шапка профиля друга показывает рос�
   // (body_measurements). Строка совпадает с его /body и видна только другу.
   await expect(page.getByText("178 см · 82.5 кг", { exact: true })).toBeVisible();
 });
+
+test("H15.5 — airplane-mode: офлайн-подход переживает reload и синкается при реконнекте (ноль потерь/дублей)", async ({
+  page,
+}) => {
+  test.skip(
+    !activeWorkoutId,
+    "E2E_ACTIVE_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs",
+  );
+  // H15.5 — капстоун offline-first: единственный автоматический гейт ПОЛНОГО
+  // airplane-цикла «начать → сохранить → синк» (владелец дословно: «начать,
+  // сохранить — и они ТОЧНО сохранятся, друзья увидят их когда появится
+  // интернет»). Замыкает в один регресс то, что прежде проверялось вручную через
+  // MCP: офлайн-запись (H15.3b), переживание reload, реконнект-дренаж (H15.4) и
+  // индикатор «N несинхронизировано»→0 (sharpen line-243). Детерминирован — ноль
+  // LLM. Мутирует seed-активную тренировку (drain пишет 1 подход) → снос
+  // scripts/e2e-seed.mjs --cleanup. Идёт ПОСЛЕДНИМ (workers:1) — оставляет
+  // активную тренировку нетронутой для H12.1/H12.4 выше.
+  const ctx = page.context();
+
+  // 1) Онлайн-визит прогревает SW-кэш страницы (reload офлайн затем отдаётся из
+  //    него — network-first sw.js). Свежий seed = 0 подходов.
+  await page.goto(`/workouts/${activeWorkoutId}`);
+  await expect(
+    page.getByText("Активная тренировка", { exact: true }),
+  ).toBeVisible();
+
+  // 2) Офлайн → подход идёт в IndexedDB-outbox, не на сервер (navigator.onLine=
+  //    false → SetInput.recordOffline). Оптимистичная строка видна сразу и
+  //    помечена «не синхр.» (R-41 — иконка CloudOff + текст, не только цвет).
+  await ctx.setOffline(true);
+  await page.getByLabel("Вес, кг").fill("70");
+  await page.getByLabel("Повторений").fill("6");
+  await page.getByRole("button", { name: /Завершить подход/ }).click();
+
+  // Оптимистичная строка = внутренний dashed-li подхода (не внешняя карточка
+  // упражнения — она тоже содержит «не синхр.»; `li.border-dashed` бьёт ровно
+  // в pending-строку, у серверных рядов и карточки этого класса нет).
+  const offlineRow = page.locator("li.border-dashed", { hasText: "не синхр." });
+  await expect(offlineRow).toContainText("70 кг × 6");
+  // Бейдж сетевого статуса виден — единственный носитель сигнала (OfflineBanner).
+  await expect(page.locator("[data-offline-banner]")).toBeVisible();
+
+  // 3) Reload ОФЛАЙН (страница из SW-кэша) → офлайн-подход переживает: на маунте
+  //    ActiveWorkoutView восстанавливает его из outbox (listPending). Активная
+  //    тренировка = серверный RSC-рендер без подхода → доказывает, что строка
+  //    живёт именно в IndexedDB, а не в серверном снимке.
+  await page.reload();
+  await expect(
+    page.locator("li.border-dashed", { hasText: "не синхр." }),
+  ).toContainText("70 кг × 6");
+
+  // 4) Реконнект → online-событие → OfflineBanner дренажит outbox через ТОТ ЖЕ
+  //    recordSetAction под тем же client_set_id (идемпотентно). Индикатор «N
+  //    несинхронизировано» опускается до 0 → бейдж исчезает из DOM. Auto-retry
+  //    assertion (expect.timeout=10s) поглощает латентность дренажа.
+  await ctx.setOffline(false);
+  await expect(page.locator("[data-offline-banner]")).toHaveCount(0);
+
+  // 5) Reload ОНЛАЙН → подход теперь СЕРВЕРНАЯ строка (несёт «Удалить подход»),
+  //    оптимистичная «не синхр.» исчезла, и таких строк РОВНО одна (ноль дублей —
+  //    partial-unique client_set_id отбил бы повторный дренаж).
+  await page.reload();
+  // Серверная строка подхода = внутренний li с классом `bg-background` (карточка
+  // упражнения — `bg-card`, офлайн-ряды — `bg-muted/40`; так бьём ровно в
+  // синхронизированный подход, а не в его li-предка). Свежий seed = 0 подходов →
+  // дренаж даёт РОВНО один → count 1 (ноль дублей; partial-unique client_set_id
+  // отбил бы повторный дренаж). Несёт «Удалить подход» (у офлайн-рядов её нет).
+  const serverRow = page.locator("li.bg-background", { hasText: "70 кг × 6" });
+  await expect(serverRow).toHaveCount(1);
+  await expect(
+    serverRow.getByRole("button", { name: "Удалить подход" }),
+  ).toBeVisible();
+  await expect(page.getByText("не синхр.")).toHaveCount(0);
+});
