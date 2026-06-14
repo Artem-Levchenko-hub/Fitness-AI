@@ -13,10 +13,12 @@ import { describe, expect, it, vi } from "vitest";
  *
  *  1. **Офлайн-fallback (столп 4).** Любая навигация без сети → закэшированная
  *     `/offline.html`, а не браузерный dino. Прекэш `/offline.html` на install.
- *  2. **Свежий билд после деплоя (анти-stale-shell).** Навигации НИКОГДА не
- *     кэшируются (network-only): закэшированный 307→/login пережил бы валидный
- *     логин (баг iOS PWA), а stale-shell отравил бы все live-верификации
- *     следующих тиков. Поэтому прод всегда отдаёт свежий RSC-рендер.
+ *  2. **Свежий билд + офлайн-чтение (network-first, H15.2).** Навигации идут
+ *     network-FIRST: онлайн сеть выигрывает всегда → свежий RSC-рендер, никакого
+ *     stale-shell. Офлайн → последняя закэшированная версия страницы (чтение без
+ *     сети, столп 4), иначе `/offline.html`. В кэш кладём ТОЛЬКО чистый `200`
+ *     (не редиректы): закэшированный 307→/login пережил бы валидный логин (баг
+ *     iOS PWA) — поэтому редиректы в кэш не попадают никогда.
  *  3. **Стратегия обновления SW.** `skipWaiting` + `clients.claim` + чистка
  *     старых версионных кэшей на activate — новый SW берёт управление сразу,
  *     осиротевшие кэши прошлых версий сносятся.
@@ -29,15 +31,22 @@ class FakeResponse {
   body: string;
   status: number;
   ok: boolean;
+  redirected: boolean;
   headers: Record<string, string>;
   marker?: string;
   constructor(
     body: string,
-    init: { status?: number; headers?: Record<string, string>; marker?: string } = {},
+    init: {
+      status?: number;
+      headers?: Record<string, string>;
+      marker?: string;
+      redirected?: boolean;
+    } = {},
   ) {
     this.body = body;
     this.status = init.status ?? 200;
     this.ok = this.status >= 200 && this.status < 300;
+    this.redirected = init.redirected ?? false;
     this.headers = init.headers ?? {};
     this.marker = init.marker;
   }
@@ -46,6 +55,7 @@ class FakeResponse {
       status: this.status,
       headers: this.headers,
       marker: this.marker,
+      redirected: this.redirected,
     });
   }
 }
@@ -207,27 +217,86 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     expect(res?.body).toBe(OFFLINE_BODY);
   });
 
-  it("навигация онлайн → отдаёт сетевой ответ и НЕ кэширует его (инвариант 2, анти-stale-shell)", async () => {
+  it("навигация онлайн (200) → отдаёт сетевой ответ и кэширует его для офлайна (инвариант 2, network-first)", async () => {
     const networkBody = "FRESH_NETWORK_RENDER";
     const env = loadSw((req) =>
       keyOf(req).endsWith("/dashboard")
         ? Promise.resolve(new FakeResponse(networkBody, { marker: "net" }))
         : Promise.resolve(new FakeResponse(OFFLINE_BODY)),
     );
-    const navEvt = makeEvent({
+    const navReq = {
       method: "GET",
       url: "https://app.lead-generator.ru/dashboard",
       mode: "navigate",
-    });
+    };
+    const navEvt = makeEvent(navReq);
     env.listeners.fetch(navEvt);
     const res = await navEvt.responded;
+    // сеть выигрывает онлайн → свежий рендер, никакого stale-shell
     expect(res?.body).toBe(networkBody);
-    // навигация НЕ должна осесть ни в одном кэше → следующий деплой свежий
-    const cached = await env.caches.match({
+    // дать put-в-кэш в network-first завершиться
+    await new Promise((r) => setTimeout(r, 0));
+    // чистый 200 ОСЕЛ в кэше → доступен офлайн следующим заходом
+    const cached = await env.caches.match(navReq);
+    expect(cached?.body).toBe(networkBody);
+  });
+
+  it("навигация офлайн на ранее закэшированную страницу → отдаёт кэш, не offline.html (H15.2, офлайн-чтение)", async () => {
+    const statsBody = "STATS_KPI_SNAPSHOT";
+    let online = true;
+    const env = loadSw((req) => {
+      if (keyOf(req) === "/offline.html")
+        return Promise.resolve(new FakeResponse(OFFLINE_BODY, { marker: "offline" }));
+      if (!online) return Promise.reject(new Error("offline"));
+      return keyOf(req).endsWith("/stats")
+        ? Promise.resolve(new FakeResponse(statsBody, { marker: "net" }))
+        : Promise.resolve(new FakeResponse("", { status: 404 }));
+    });
+    // прекэш offline.html на install
+    env.listeners.install(makeEvent("/install"));
+    await new Promise((r) => setTimeout(r, 0));
+    const statsReq = {
+      method: "GET",
+      url: "https://app.lead-generator.ru/stats",
+      mode: "navigate",
+    };
+    // 1) онлайн-заход прогревает кэш
+    const onlineEvt = makeEvent(statsReq);
+    env.listeners.fetch(onlineEvt);
+    await onlineEvt.responded;
+    await new Promise((r) => setTimeout(r, 0));
+    // 2) уходим в офлайн, повторно заходим
+    online = false;
+    const offlineEvt = makeEvent(statsReq);
+    env.listeners.fetch(offlineEvt);
+    const res = await offlineEvt.responded;
+    // видим последние данные, а не дино/offline.html
+    expect(res?.body).toBe(statsBody);
+  });
+
+  it("навигация онлайн (307 редирект) → отдаёт ответ, но НЕ кэширует (анти-stale-login guard)", async () => {
+    const env = loadSw((req) =>
+      keyOf(req).endsWith("/dashboard")
+        ? Promise.resolve(
+            new FakeResponse("REDIRECT_TO_LOGIN", {
+              status: 200,
+              redirected: true,
+            }),
+          )
+        : Promise.resolve(new FakeResponse(OFFLINE_BODY)),
+    );
+    const navReq = {
       method: "GET",
       url: "https://app.lead-generator.ru/dashboard",
       mode: "navigate",
-    });
+    };
+    const navEvt = makeEvent(navReq);
+    env.listeners.fetch(navEvt);
+    await navEvt.responded;
+    await new Promise((r) => setTimeout(r, 0));
+    // редирект (даже со статусом 200 + redirected) НЕ оседает в кэше →
+    // не переживёт валидный логин (баг iOS PWA)
+    const cached = await env.caches.match(navReq);
     expect(cached).toBeUndefined();
   });
 

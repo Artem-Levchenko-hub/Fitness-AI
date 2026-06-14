@@ -58,12 +58,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation (HTML pages) — network only с offline fallback. НЕ
-  // кэшируем ответ: иначе закэшированный 307-редирект на /login
-  // переживёт последующий валидный логин и будет отдаваться раньше,
-  // чем сеть пришлёт свежий ответ (известный баг iOS PWA).
+  // Navigation (HTML pages) — network-FIRST с офлайн-фоллбэком на последнюю
+  // закэшированную версию страницы (офлайн-чтение, H15.2). Онлайн сеть
+  // выигрывает всегда → свежий RSC-рендер, никакого stale-shell. В кэш
+  // кладём ТОЛЬКО чистый 200 (НЕ редиректы): закэшированный 307→/login
+  // пережил бы валидный логин (известный баг iOS PWA).
   if (request.mode === "navigate") {
-    event.respondWith(networkOnlyWithOfflineFallback(request));
+    event.respondWith(networkFirstNavigation(request));
     return;
   }
 
@@ -87,10 +88,22 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-async function networkOnlyWithOfflineFallback(request) {
+async function networkFirstNavigation(request) {
   try {
-    return await fetch(request);
+    const response = await fetch(request);
+    // Кэшируем для офлайн-чтения ТОЛЬКО чистый 200 — не редиректы (307→/login
+    // не должен пережить логин). Онлайн всё равно отдаём сетевой ответ ниже,
+    // так что свежесть не страдает.
+    if (response.status === 200 && !response.redirected) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      cache.put(request, response.clone());
+    }
+    return response;
   } catch {
+    // Офлайн → последняя закэшированная версия этой страницы, иначе offline.html.
+    const cached = await caches.match(request);
+    if (cached) return cached;
+
     const offlinePage = await caches.match("/offline.html");
     if (offlinePage) return offlinePage;
 
