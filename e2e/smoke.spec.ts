@@ -543,6 +543,29 @@ test("разбор завершённой тренировки виден (Train
   }
 });
 
+test("H17.0-B — силуэт под «Баланс по аватару» кликабелен: тап группы → /profile?muscle=<key>", async ({
+  page,
+}) => {
+  test.skip(
+    !trainerWorkoutId,
+    "E2E_TRAINER_WORKOUT_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  await page.goto(`/workouts/${trainerWorkoutId}/trainer`);
+  await expect(page).toHaveURL(new RegExp(`/workouts/${trainerWorkoutId}/trainer`));
+
+  // Сид кладёт muscleBalanceNote + balanceMuscleKeys=["chest","quads"] →
+  // секция «Баланс по аватару» несёт кликабельный мини-силуэт (BalanceSilhouette).
+  await expect(page.getByText("Баланс по аватару", { exact: true })).toBeVisible();
+  const silhouette = page.locator('svg[aria-label*="Баланс групп"]');
+  await expect(silhouette).toBeVisible();
+
+  // Тап по фигуре «грудь» (named тренером) → /profile?muscle=chest. Deep-link
+  // (sub-slice A) открывает панель мышцы «Грудь» на маунте.
+  await silhouette.locator('[data-muscle="chest"]').first().click();
+  await expect(page).toHaveURL(/\/profile\?muscle=chest/);
+  await expect(page.getByRole("heading", { name: "Грудь" })).toBeVisible();
+});
+
 test("H13.5 — заголовок «Прошлый совет» ведёт в сам тот прошлый разбор", async ({
   page,
 }) => {
