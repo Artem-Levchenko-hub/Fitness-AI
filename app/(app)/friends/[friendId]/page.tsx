@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { ProfileAvatar } from "@/components/avatar/ProfileAvatar";
 import { buildAvatarData } from "@/components/avatar/build-avatar-data";
+import { HeatComparison } from "@/components/friends/HeatComparison";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { formatFriendBodyLine } from "@/lib/domain/friends/friend-body";
@@ -34,12 +35,16 @@ export default async function FriendWorkoutsPage({ params }: Props) {
   if (!friend) notFound();
 
   const now = new Date();
-  const [workoutsRaw, heat] = await Promise.all([
+  // Heat друга — РОВНО за areFriends-гейтом выше (R-7). Мой heat — мои данные,
+  // нужны для силуэта сравнения H3.5.
+  const [workoutsRaw, heat, myHeat] = await Promise.all([
     listRecentWorkouts(friendId, 30),
     muscleHeatProfile(friendId, now),
+    muscleHeatProfile(user.id, now),
   ]);
   const workouts = workoutsRaw.filter((w) => w.status === "completed");
   const avatarData = buildAvatarData(heat, now);
+  const myAvatarData = buildAvatarData(myHeat, now);
   const bodyLine = formatFriendBodyLine(friend.heightCm, friend.weightKg);
 
   return (
@@ -73,6 +78,12 @@ export default async function FriendWorkoutsPage({ params }: Props) {
       <section className="mb-6">
         <ProfileAvatar data={avatarData} />
       </section>
+
+      <HeatComparison
+        mine={myAvatarData}
+        theirs={avatarData}
+        friendName={displayName(friend)}
+      />
 
       <h2 className="mb-3 text-sm font-semibold tracking-tight">
         Последние тренировки
