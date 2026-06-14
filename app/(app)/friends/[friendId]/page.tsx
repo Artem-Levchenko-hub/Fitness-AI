@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ProfileAvatar } from "@/components/avatar/ProfileAvatar";
 import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { HeatComparison } from "@/components/friends/HeatComparison";
 import { Button } from "@/components/ui/button";
@@ -74,10 +73,6 @@ export default async function FriendWorkoutsPage({ params }: Props) {
           ) : null}
         </div>
       </header>
-
-      <section className="mb-6">
-        <ProfileAvatar data={avatarData} />
-      </section>
 
       <HeatComparison
         mine={myAvatarData}
