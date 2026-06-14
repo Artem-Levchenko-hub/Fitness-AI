@@ -116,7 +116,14 @@ export async function deleteSetAction(formData: FormData) {
   revalidatePath(`/workouts/${parsed.data.workoutId}`);
 }
 
-export async function finishWorkoutAction(formData: FormData) {
+/**
+ * Логика завершения тренировки БЕЗ redirect — единый источник для онлайн-формы
+ * (finishWorkoutAction → core + redirect) и фонового дренажа outbox
+ * (replayFinishWorkoutAction → только core, без навигации; H15.4). Идемпотентно:
+ * finishWorkout фильтрует status=active (повторный дренаж = 0 строк, без ошибки),
+ * aiJobs-вставка защищена existing-check. Возвращает workoutId для redirect.
+ */
+async function finishWorkoutCore(formData: FormData): Promise<string> {
   const user = await requireUser();
   const workoutId = String(formData.get("workoutId"));
   if (!workoutId) throw new Error("Missing workoutId");
@@ -179,9 +186,26 @@ export async function finishWorkoutAction(formData: FormData) {
   revalidatePath("/workouts");
   revalidatePath("/dashboard");
 
+  return workoutId;
+}
+
+export async function finishWorkoutAction(formData: FormData) {
+  const workoutId = await finishWorkoutCore(formData);
   // Trainer (structured JSON оценка) — основной flow. Coach (диалог) теперь
-  // вторичен, доступен через кнопку на trainer/completed-view.
+  // вторичен, доступен через кнопку на trainer/completed-view. redirect throws
+  // — держим вне try/catch (вне finishWorkoutCore).
   redirect(`/workouts/${workoutId}/trainer`);
+}
+
+/**
+ * H15.4 — реплей офлайн-завершения при дренаже outbox. Та же логика финиша, но
+ * БЕЗ redirect: фоновая синхронизация по событию `online` не должна навигировать
+ * пользователя. Идемпотентно при двойном дренаже (см. finishWorkoutCore).
+ */
+export async function replayFinishWorkoutAction(
+  formData: FormData,
+): Promise<void> {
+  await finishWorkoutCore(formData);
 }
 
 const cancelSchema = z.object({ workoutId: z.string().uuid() });
