@@ -25,13 +25,18 @@ const AvatarCanvas = dynamic(() => import("./AvatarCanvas"), {
 export function ProfileAvatar({
   data,
   linkExercises = false,
+  initialMuscle = null,
 }: {
   data: AvatarMuscleDatum[];
   /** Делать упражнения в панели мышцы ссылками на их историю /exercises/[id].
    *  Только свой /profile — профиль друга показал бы историю смотрящего. */
   linkExercises?: boolean;
+  /** H17.0 — глубокий линк `/profile?muscle=<key>` сразу открывает панель этой
+   *  группы (вход из разбора в тело). Уже провалидирован сервером
+   *  (parseMuscleParam); неизвестная группа → панель закрыта (data.find промах). */
+  initialMuscle?: string | null;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialMuscle);
   const [cycle, setCycle] = useState(0);
   // Поддержка WebGL — внешнее (браузерное) состояние, читаем через
   // useSyncExternalStore: на сервере считаем поддержку (canvas всё равно

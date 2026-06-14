@@ -7,6 +7,7 @@ import {
   buildAvatarData,
   hasTrainingData,
 } from "@/components/avatar/build-avatar-data";
+import { parseMuscleParam } from "@/lib/domain/avatar/muscle-param";
 import { requireUser } from "@/lib/auth/require-user";
 import { getLatestMeasurement, getUserProfile } from "@/lib/repos/body.repo";
 import {
@@ -17,9 +18,14 @@ import {
 
 export const metadata: Metadata = { title: "Профиль" };
 
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ muscle?: string | string[] }>;
+}) {
   const user = await requireUser();
   const now = new Date();
+  const initialMuscle = parseMuscleParam((await searchParams).muscle);
 
   const [heat, records, lastTrained, profile, measurement] = await Promise.all([
     muscleHeatProfile(user.id, now),
@@ -63,7 +69,7 @@ export default async function ProfilePage() {
         </div>
       ) : null}
 
-      <ProfileAvatar data={data} linkExercises />
+      <ProfileAvatar data={data} linkExercises initialMuscle={initialMuscle} />
 
       <BodyMetrics heightCm={heightCm} weightKg={weightKg} />
 
