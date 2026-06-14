@@ -7,6 +7,7 @@ import { ProfileAvatar } from "@/components/avatar/ProfileAvatar";
 import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
+import { formatFriendBodyLine } from "@/lib/domain/friends/friend-body";
 import { getFriendProfile } from "@/lib/repos/friends.repo";
 import { muscleHeatProfile } from "@/lib/repos/stats.repo";
 import {
@@ -39,6 +40,7 @@ export default async function FriendWorkoutsPage({ params }: Props) {
   ]);
   const workouts = workoutsRaw.filter((w) => w.status === "completed");
   const avatarData = buildAvatarData(heat, now);
+  const bodyLine = formatFriendBodyLine(friend.heightCm, friend.weightKg);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -60,6 +62,11 @@ export default async function FriendWorkoutsPage({ params }: Props) {
           <h1 className="font-serif mt-0.5 truncate text-2xl font-normal tracking-tight md:text-3xl">
             {displayName(friend)}
           </h1>
+          {bodyLine ? (
+            <p className="text-muted-foreground tabular mt-1 text-sm">
+              {bodyLine}
+            </p>
+          ) : null}
         </div>
       </header>
 

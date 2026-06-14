@@ -7,12 +7,22 @@ import {
   sortFriendsByRecency,
 } from "@/lib/domain/friends/friend-activity";
 import type { HistoryItem } from "@/lib/domain/workouts/history";
+import { getLatestMeasurement } from "@/lib/repos/body.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
 import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 /** Публичная карточка друга/заявителя — минимум для UI (без приватных полей). */
 export type FriendUser = { id: string; name: string | null; email: string };
+
+/** Карточка друга для его страницы — публичные поля + рост/последний вес,
+ *  показываемые read-only только подтверждённому другу (R-7, см.
+ *  getFriendProfile). heightCm — с профиля (users), weightKg — из последнего
+ *  замера тела; любое может быть null. */
+export type FriendProfile = FriendUser & {
+  heightCm: number | null;
+  weightKg: number | null;
+};
 
 /** Дружба/заявка вместе с «другим» пользователем (партнёром по связи). */
 export type FriendshipWithUser = {
@@ -184,22 +194,27 @@ export async function areFriends(
 }
 
 /** Публичная карточка друга — ТОЛЬКО если otherId является принятым другом
- *  userId. Иначе null. Единый R-7-гейт: чужие данные смотрим лишь по дружбе. */
+ *  userId. Иначе null. Единый R-7-гейт: чужие данные смотрим лишь по дружбе.
+ *  Возвращает рост (с профиля) + вес последнего замера — read-only для шапки
+ *  страницы друга; reuse getLatestMeasurement (R-04). */
 export async function getFriendProfile(
   userId: string,
   otherId: string,
-): Promise<FriendUser | null> {
+): Promise<FriendProfile | null> {
   if (!(await areFriends(userId, otherId))) return null;
   const [u] = await db
     .select({
       id: schema.users.id,
       name: schema.users.name,
       email: schema.users.email,
+      heightCm: schema.users.heightCm,
     })
     .from(schema.users)
     .where(eq(schema.users.id, otherId))
     .limit(1);
-  return u ?? null;
+  if (!u) return null;
+  const latest = await getLatestMeasurement(otherId);
+  return { ...u, weightKg: latest?.weightKg ?? null };
 }
 
 /** Дополнить строки дружбы карточкой «другого» пользователя одним запросом

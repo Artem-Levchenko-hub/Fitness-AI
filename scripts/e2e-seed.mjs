@@ -185,6 +185,16 @@ try {
                 ${s.reps}, ${s.rpe}, ${friendFinished})`;
     }
 
+    // H3.3 — другу рост (users.height_cm) + последний замер веса
+    // (body_measurements): шапка /friends/[id] показывает «178 см · 82.5 кг»,
+    // совпадающие с его /body. Идемпотентно: рост через update, вес — снести
+    // прошлые замеры друга и вставить один.
+    await sql`update users set height_cm = 178 where id = ${friendId}`;
+    await sql`delete from body_measurements where user_id = ${friendId}`;
+    await sql`
+      insert into body_measurements (id, user_id, measured_at, weight_kg)
+      values (${randomUUID()}, ${friendId}, ${friendFinished}, 82.5)`;
+
     // Детерминированный structured-разбор (форма TrainerResponse, проходит
     // trainerSchema). content — короткий markdown, карточку рисует resultJson.
     const resultJson = {

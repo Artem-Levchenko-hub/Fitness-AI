@@ -828,3 +828,16 @@ test("/friends → переход в профиль друга", async ({ page }
     page.getByText("Только просмотр", { exact: true }),
   ).toBeVisible();
 });
+
+test("H3.3 — шапка профиля друга показывает рост · вес (read-only, за areFriends-гейтом)", async ({
+  page,
+}) => {
+  test.skip(
+    !friendId,
+    "E2E_FRIEND_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  await page.goto(`/friends/${friendId}`);
+  // Друг засеян ростом 178 см (users.height_cm) + замером веса 82.5 кг
+  // (body_measurements). Строка совпадает с его /body и видна только другу.
+  await expect(page.getByText("178 см · 82.5 кг", { exact: true })).toBeVisible();
+});
