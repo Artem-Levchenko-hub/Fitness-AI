@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { formatOfflineSince, LAST_ONLINE_KEY } from "@/lib/pwa/offline-status";
+import {
+  formatOfflineSince,
+  LAST_ONLINE_KEY,
+  subscribeOnline,
+} from "@/lib/pwa/offline-status";
 
 describe("formatOfflineSince", () => {
   // Опорное «сейчас»: 14 июн 2026, 08:20 локального времени.
@@ -31,5 +35,47 @@ describe("formatOfflineSince", () => {
 
   it("ключ localStorage стабилен", () => {
     expect(LAST_ONLINE_KEY).toBe("fit:last-online");
+  });
+});
+
+describe("subscribeOnline", () => {
+  it("вешает online/offline-листенеры на target", () => {
+    const target = new EventTarget();
+    const add = vi.spyOn(target, "addEventListener");
+    const onOnline = vi.fn();
+    const onOffline = vi.fn();
+
+    subscribeOnline({ onOnline, onOffline }, target);
+
+    expect(add).toHaveBeenCalledWith("online", onOnline);
+    expect(add).toHaveBeenCalledWith("offline", onOffline);
+  });
+
+  it("реально дёргает хендлеры по событиям, и перестаёт после unsubscribe", () => {
+    const target = new EventTarget();
+    const onOnline = vi.fn();
+    const onOffline = vi.fn();
+
+    const unsubscribe = subscribeOnline({ onOnline, onOffline }, target);
+
+    target.dispatchEvent(new Event("offline"));
+    target.dispatchEvent(new Event("online"));
+    expect(onOffline).toHaveBeenCalledTimes(1);
+    expect(onOnline).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    target.dispatchEvent(new Event("offline"));
+    target.dispatchEvent(new Event("online"));
+    // После отписки счётчики не растут (ровно один носитель, листенер снят).
+    expect(onOffline).toHaveBeenCalledTimes(1);
+    expect(onOnline).toHaveBeenCalledTimes(1);
+  });
+
+  it("target undefined (SSR) → безопасный no-op unsubscribe", () => {
+    const unsubscribe = subscribeOnline(
+      { onOnline: vi.fn(), onOffline: vi.fn() },
+      undefined,
+    );
+    expect(() => unsubscribe()).not.toThrow();
   });
 });

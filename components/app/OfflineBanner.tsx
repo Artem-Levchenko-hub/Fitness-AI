@@ -3,7 +3,11 @@
 import { CloudOff, Loader2, RefreshCw, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { formatOfflineSince, LAST_ONLINE_KEY } from "@/lib/pwa/offline-status";
+import {
+  formatOfflineSince,
+  LAST_ONLINE_KEY,
+  subscribeOnline,
+} from "@/lib/pwa/offline-status";
 import { listPending, remove } from "@/lib/storage/outbox";
 import {
   drainOutbox,
@@ -114,12 +118,9 @@ export function OfflineBanner() {
       void listPending().then((p) => setPendingCount(p.length));
     }
 
-    window.addEventListener("online", markOnline);
-    window.addEventListener("offline", goOffline);
-    return () => {
-      window.removeEventListener("online", markOnline);
-      window.removeEventListener("offline", goOffline);
-    };
+    // Единый санкционированный носитель reconnect-сигнала (R-01/R-04) — НЕ
+    // плодим второй `window 'online'`-листенер (урок H4.3).
+    return subscribeOnline({ onOnline: markOnline, onOffline: goOffline });
   }, [runDrain]);
 
   // Невидим, когда онлайн, нечего синкать и дренаж не идёт.

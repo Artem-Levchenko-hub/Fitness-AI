@@ -50,3 +50,39 @@ export function formatOfflineSince(ts: number | null, now: number): string {
   });
   return `данные на ${date}`;
 }
+
+/**
+ * Единый reconnect-сигнал (H15.4 sharpen).
+ *
+ * ЕДИНСТВЕННЫЙ санкционированный способ подписаться на смену сетевого статуса в
+ * (app)-слое — глубокий модуль (R-01), прячущий проводку `window`
+ * online/offline + SSR-гард за узким интерфейсом. Все потребители (бейдж
+ * свежести, дренаж outbox, будущий офлайн-старт) подписываются ЧЕРЕЗ него и НЕ
+ * плодят второй `window 'online'`-листенер (урок H4.3). `target` инъектируем →
+ * чистая юнит-проверка в node без jsdom; по умолчанию = window, на сервере
+ * undefined → безопасный no-op.
+ */
+export type OnlineHandlers = {
+  onOnline: () => void;
+  onOffline: () => void;
+};
+
+type OnlineEventTarget = Pick<
+  typeof window,
+  "addEventListener" | "removeEventListener"
+>;
+
+export function subscribeOnline(
+  handlers: OnlineHandlers,
+  target: OnlineEventTarget | undefined = typeof window !== "undefined"
+    ? window
+    : undefined,
+): () => void {
+  if (!target) return () => {};
+  target.addEventListener("online", handlers.onOnline);
+  target.addEventListener("offline", handlers.onOffline);
+  return () => {
+    target.removeEventListener("online", handlers.onOnline);
+    target.removeEventListener("offline", handlers.onOffline);
+  };
+}
