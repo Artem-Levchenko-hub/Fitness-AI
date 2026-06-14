@@ -1,5 +1,6 @@
 import { BottomTabBar } from "@/components/app/BottomTabBar";
 import { GlobalResumeBar } from "@/components/app/GlobalResumeBar";
+import { OfflineBanner } from "@/components/app/OfflineBanner";
 import { SessionRefreshSync } from "@/components/auth/SessionRefreshSync";
 import { requireUser } from "@/lib/auth/require-user";
 import { getActiveResumes } from "@/server/actions/active-resumes";
@@ -19,6 +20,7 @@ export default async function AppLayout({
   return (
     <div className="bg-background flex min-h-dvh flex-col">
       <SessionRefreshSync />
+      <OfflineBanner />
       <div className="flex-1 pb-20">{children}</div>
       <GlobalResumeBar initial={initialResumes} />
       <BottomTabBar />
