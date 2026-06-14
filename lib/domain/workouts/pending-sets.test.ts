@@ -58,7 +58,7 @@ describe("pendingSetsFromOutbox", () => {
 
   it("отбрасывает не-recordSet вид (fail-soft)", () => {
     const m = mut({ clientId: "c", kind: "recordSet" });
-    // @ts-expect-error — будущий kind H15.3c не должен попадать в подходы
+    // startWorkout — валидный kind (H15.3c-2), но в подходы попадать не должен.
     m.kind = "startWorkout";
     expect(pendingSetsFromOutbox([m], WORKOUT)).toEqual([]);
   });

@@ -48,8 +48,29 @@ export type ActiveWorkout = {
 export async function startWorkoutFromTemplate(
   userId: string,
   templateId: string,
+  opts?: { clientWorkoutId?: string | null },
 ): Promise<{ id: string }> {
+  const clientWorkoutId = opts?.clientWorkoutId ?? null;
   return db.transaction(async (tx) => {
+    // H15.3c-2 — идемпотентность офлайн-старта: реплей того же clientWorkoutId
+    // при повторном дренаже outbox находит уже созданную тренировку и НЕ плодит
+    // дубль. Проверка ДО отмены активных/вставки — повторный дренаж не должен
+    // переотменять/пересоздавать. Онлайн-старт: clientWorkoutId=null, сюда не
+    // заходит → поведение не меняется (столп 4).
+    if (clientWorkoutId) {
+      const [existing] = await tx
+        .select({ id: schema.workouts.id })
+        .from(schema.workouts)
+        .where(
+          and(
+            eq(schema.workouts.userId, userId),
+            eq(schema.workouts.clientWorkoutId, clientWorkoutId),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id };
+    }
+
     const [tpl] = await tx
       .select({ id: schema.workoutTemplates.id, name: schema.workoutTemplates.name })
       .from(schema.workoutTemplates)
@@ -88,6 +109,7 @@ export async function startWorkoutFromTemplate(
       templateId,
       name: tpl.name,
       status: "active",
+      clientWorkoutId,
     });
 
     if (tplItems.length > 0) {

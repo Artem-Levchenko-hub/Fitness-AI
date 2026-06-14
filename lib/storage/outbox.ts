@@ -16,9 +16,9 @@
  * R-10) — его проверяет рантайм (Playwright offline в H15.3b), не юнит.
  */
 
-/** Виды мутаций в очереди. H15.3c добавил finishWorkout (старт офлайн —
- *  будущий под-слайс). */
-export type OutboxMutationKind = "recordSet" | "finishWorkout";
+/** Виды мутаций в очереди. H15.3c-1 добавил finishWorkout; H15.3c-2 — startWorkout
+ *  (офлайн-старт тренировки: реплеится при реконнекте под clientWorkoutId). */
+export type OutboxMutationKind = "recordSet" | "finishWorkout" | "startWorkout";
 
 export type OutboxMutation = {
   /** Стабильный client-UUID — канонический ключ идемпотентности (для recordSet
@@ -49,7 +49,9 @@ function isValidMutation(value: unknown): value is OutboxMutation {
   return (
     typeof m.clientId === "string" &&
     m.clientId.length > 0 &&
-    (m.kind === "recordSet" || m.kind === "finishWorkout") &&
+    (m.kind === "recordSet" ||
+      m.kind === "finishWorkout" ||
+      m.kind === "startWorkout") &&
     typeof m.payload === "object" &&
     m.payload !== null &&
     typeof m.queuedAt === "number" &&

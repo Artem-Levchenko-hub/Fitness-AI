@@ -36,6 +36,13 @@ export const workouts = pgTable(
     finishedAt: timestamp("finished_at", { mode: "date", withTimezone: true }),
     totalDurationSeconds: integer("total_duration_seconds"),
     notes: text("notes"),
+    /** Стабильный client-generated UUID офлайн-СТАРТА (H15.3c-2 outbox). NULL для
+     *  всех онлайн/legacy-тренировок. Канонический ключ идемпотентности реплея
+     *  старта: дренаж outbox при реконнекте создаёт тренировку под этим ключом,
+     *  повторный дренаж находит уже созданную (existing-check в repo) →
+     *  partial-unique ниже отвергает дубль ТОЛЬКО среди non-null значений
+     *  (legacy/онлайн-строки не трогаются, столп 4). */
+    clientWorkoutId: text("client_workout_id"),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -43,6 +50,9 @@ export const workouts = pgTable(
   (t) => [
     index("workouts_user_idx").on(t.userId, t.startedAt),
     index("workouts_status_idx").on(t.status),
+    uniqueIndex("workouts_client_workout_id_uq")
+      .on(t.clientWorkoutId)
+      .where(sql`${t.clientWorkoutId} is not null`),
   ],
 );
 
