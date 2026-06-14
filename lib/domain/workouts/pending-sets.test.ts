@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { OutboxMutation } from "../../storage/outbox";
 import {
   groupPendingByExerciseId,
+  hasPendingFinish,
   pendingSetsFromOutbox,
 } from "./pending-sets";
 
@@ -94,5 +95,43 @@ describe("groupPendingByExerciseId", () => {
 
   it("пустой вход → пустая карта", () => {
     expect(groupPendingByExerciseId([]).size).toBe(0);
+  });
+});
+
+describe("hasPendingFinish", () => {
+  function finishMut(over: Partial<OutboxMutation> = {}): OutboxMutation {
+    return {
+      clientId: over.clientId ?? `finish:${WORKOUT}`,
+      kind: "finishWorkout",
+      queuedAt: over.queuedAt ?? 2000,
+      payload: { workoutId: WORKOUT, ...(over.payload ?? {}) },
+    };
+  }
+
+  it("пустая очередь → false", () => {
+    expect(hasPendingFinish([], WORKOUT)).toBe(false);
+  });
+
+  it("finishWorkout этой тренировки → true", () => {
+    expect(hasPendingFinish([finishMut()], WORKOUT)).toBe(true);
+  });
+
+  it("finishWorkout другой тренировки → false", () => {
+    const other = finishMut({ payload: { workoutId: "deadbeef" } });
+    expect(hasPendingFinish([other], WORKOUT)).toBe(false);
+  });
+
+  it("только recordSet в очереди → false", () => {
+    expect(hasPendingFinish([mut({ clientId: "c" })], WORKOUT)).toBe(false);
+  });
+
+  it("finishWorkout без workoutId в payload → false (fail-soft)", () => {
+    const broken: OutboxMutation = {
+      clientId: "finish:x",
+      kind: "finishWorkout",
+      queuedAt: 2000,
+      payload: {}, // workoutId отсутствует → не матчит ни одну тренировку
+    };
+    expect(hasPendingFinish([broken], WORKOUT)).toBe(false);
   });
 });

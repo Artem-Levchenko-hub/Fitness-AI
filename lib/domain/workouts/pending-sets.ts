@@ -72,6 +72,21 @@ export function pendingSetsFromOutbox(
     .sort((a, b) => a.setIndex - b.setIndex);
 }
 
+/**
+ * H15.3c — есть ли в очереди незадренированное офлайн-ЗАВЕРШЕНИЕ этой тренировки.
+ * Активная сессия рендерится сервером (status=active), но при офлайн-финише UI
+ * показывает её завершённой оптимистично; этот флаг восстанавливает то состояние
+ * на маунте (переживает reload). Реальный server-finish — дренаж H15.4.
+ */
+export function hasPendingFinish(
+  mutations: OutboxMutation[],
+  workoutId: string,
+): boolean {
+  return mutations.some(
+    (m) => m.kind === "finishWorkout" && String(m.payload.workoutId) === workoutId,
+  );
+}
+
 /** Подходы, сгруппированные по упражнению (каждая группа по setIndex). */
 export function groupPendingByExerciseId(
   pending: PendingSet[],

@@ -24,10 +24,11 @@ import {
 } from "@/lib/domain/workouts/feeling";
 import {
   groupPendingByExerciseId,
+  hasPendingFinish,
   pendingSetsFromOutbox,
   type PendingSet,
 } from "@/lib/domain/workouts/pending-sets";
-import { listPending } from "@/lib/storage/outbox";
+import { enqueue, listPending } from "@/lib/storage/outbox";
 import type { PreviousSessionSummary } from "@/lib/domain/exercise/previous-session";
 import type { GoalProgressView } from "@/lib/domain/progression/goal-projection";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
@@ -57,10 +58,17 @@ export function ActiveWorkoutView({
   // восстанавливаем их (переживают reload), а офлайн-сабвмит добавляет через
   // onOfflineRecord. Дренаж/синк при реконнекте — H15.4.
   const [pending, setPending] = useState<PendingSet[]>([]);
+  // H15.3c — офлайн-завершение тренировки. При офлайн-финише мутация кладётся в
+  // outbox + UI показывает сессию завершённой оптимистично; на маунте флаг
+  // восстанавливается из outbox (переживает reload). Реальный server-finish и
+  // переход на разбор — дренаж H15.4.
+  const [finishedOffline, setFinishedOffline] = useState(false);
   useEffect(() => {
     let alive = true;
     listPending().then((mutations) => {
-      if (alive) setPending(pendingSetsFromOutbox(mutations, workout.id));
+      if (!alive) return;
+      setPending(pendingSetsFromOutbox(mutations, workout.id));
+      setFinishedOffline(hasPendingFinish(mutations, workout.id));
     });
     return () => {
       alive = false;
@@ -106,6 +114,34 @@ export function ActiveWorkoutView({
     await cancelWorkoutAction(fd);
   }
 
+  // H15.3c — офлайн-завершение через outbox. Детерминированный ключ
+  // `finish:<workoutId>` → двойной тап офлайн перезаписывает одну запись
+  // (keyPath=clientId), а не плодит два реплея финиша. Payload зеркалит
+  // FormData finishWorkoutAction — H15.4 реплеит ЧЕРЕЗ тот же server-action.
+  async function finishOffline(fd: FormData) {
+    await enqueue({
+      clientId: `finish:${workout.id}`,
+      kind: "finishWorkout",
+      payload: {
+        workoutId: workout.id,
+        feeling: String(fd.get("feeling") ?? ""),
+        feelingTag: String(fd.get("feelingTag") ?? ""),
+      },
+      queuedAt: Date.now(),
+    });
+    setFinishedOffline(true);
+  }
+
+  function handleFinish(e: React.FormEvent<HTMLFormElement>) {
+    // Офлайн → preventDefault отменяет server-action, финиш уходит в outbox.
+    // Онлайн → preventDefault НЕ зовём → нативный finishWorkoutAction
+    // отрабатывает без изменений (столп 4 — онлайн-путь не тронут).
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      e.preventDefault();
+      void finishOffline(new FormData(e.currentTarget));
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="bg-card border-border rounded-2xl border p-4">
@@ -132,44 +168,69 @@ export function ActiveWorkoutView({
         ))}
       </ul>
 
-      <form action={finishWorkoutAction} className="space-y-3 pt-2">
-        <input type="hidden" name="workoutId" value={workout.id} />
-        <FeelingPicker />
-        <div className="space-y-1.5">
-          <label
-            htmlFor="feeling"
-            className="text-muted-foreground block text-xs font-medium"
-          >
-            Добавить детали{" "}
-            <span className="opacity-70">(необязательно)</span>
-          </label>
-          <Textarea
-            id="feeling"
-            name="feeling"
-            rows={3}
-            maxLength={1000}
-            placeholder="Самочувствие, энергия, что болело, как спал — тренер учтёт это в разборе"
-            className="resize-none"
-          />
-        </div>
-        <Button type="submit" size="xl" variant="default" className="w-full">
-          <CheckCircle2 className="size-5" />
-          Завершить тренировку
-        </Button>
-      </form>
-
-      <div className="flex justify-center pt-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={handleCancel}
+      {finishedOffline ? (
+        // H15.3c — офлайн-финиш: сессия завершена локально, синхронизируется при
+        // подключении (дренаж H15.4). Отличимо НЕ только цветом (R-41): иконки +
+        // текст. На сервере тренировка остаётся active до дренажа (столп 4).
+        <div
+          role="status"
+          className="border-success/30 bg-success/5 space-y-1 rounded-2xl border p-4 text-center"
         >
-          <X className="size-4" />
-          Прервать
-        </Button>
-      </div>
+          <p className="text-success inline-flex items-center justify-center gap-2 text-sm font-semibold">
+            <CheckCircle2 className="size-5" aria-hidden />
+            Тренировка завершена офлайн
+          </p>
+          <p className="text-muted-foreground inline-flex items-center justify-center gap-1.5 text-xs">
+            <CloudOff className="size-3.5" aria-hidden />
+            Синхронизируется при подключении
+          </p>
+        </div>
+      ) : (
+        <>
+          <form
+            action={finishWorkoutAction}
+            onSubmit={handleFinish}
+            className="space-y-3 pt-2"
+          >
+            <input type="hidden" name="workoutId" value={workout.id} />
+            <FeelingPicker />
+            <div className="space-y-1.5">
+              <label
+                htmlFor="feeling"
+                className="text-muted-foreground block text-xs font-medium"
+              >
+                Добавить детали{" "}
+                <span className="opacity-70">(необязательно)</span>
+              </label>
+              <Textarea
+                id="feeling"
+                name="feeling"
+                rows={3}
+                maxLength={1000}
+                placeholder="Самочувствие, энергия, что болело, как спал — тренер учтёт это в разборе"
+                className="resize-none"
+              />
+            </div>
+            <Button type="submit" size="xl" variant="default" className="w-full">
+              <CheckCircle2 className="size-5" />
+              Завершить тренировку
+            </Button>
+          </form>
+
+          <div className="flex justify-center pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={handleCancel}
+            >
+              <X className="size-4" />
+              Прервать
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

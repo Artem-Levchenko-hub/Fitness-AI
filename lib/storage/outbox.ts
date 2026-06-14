@@ -1,8 +1,9 @@
 /**
  * H15.3a — клиентский outbox офлайн-мутаций тренировки (фундамент, без UI).
  *
- * Когда сети нет, мутация (пока — запись подхода; старт/финиш добавит H15.3c)
- * кладётся сюда с стабильным client-generated UUID и реплеится при реконнекте
+ * Когда сети нет, мутация (запись подхода + завершение тренировки H15.3c; старт
+ * офлайн — будущий под-слайс) кладётся сюда с стабильным client-generated ключом
+ * и реплеится при реконнекте
  * (H15.4) ЧЕРЕЗ ТОТ ЖЕ server-action — не сырой Request (action-ID
  * build-специфичен). Идемпотентность держит ОДИН канонический ключ — `clientId`
  * (= `clientSetId` для recordSet): и здесь (dedupe/keyPath), и в БД
@@ -15,8 +16,9 @@
  * R-10) — его проверяет рантайм (Playwright offline в H15.3b), не юнит.
  */
 
-/** Виды мутаций в очереди. Расширяется H15.3c (startWorkout/finishWorkout). */
-export type OutboxMutationKind = "recordSet";
+/** Виды мутаций в очереди. H15.3c добавил finishWorkout (старт офлайн —
+ *  будущий под-слайс). */
+export type OutboxMutationKind = "recordSet" | "finishWorkout";
 
 export type OutboxMutation = {
   /** Стабильный client-UUID — канонический ключ идемпотентности (для recordSet
@@ -47,7 +49,7 @@ function isValidMutation(value: unknown): value is OutboxMutation {
   return (
     typeof m.clientId === "string" &&
     m.clientId.length > 0 &&
-    m.kind === "recordSet" &&
+    (m.kind === "recordSet" || m.kind === "finishWorkout") &&
     typeof m.payload === "object" &&
     m.payload !== null &&
     typeof m.queuedAt === "number" &&
