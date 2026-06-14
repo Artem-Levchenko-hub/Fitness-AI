@@ -30,6 +30,15 @@ import {
   mergeVolumeBuckets,
   type VolumeBucket,
 } from "@/lib/domain/stats/volume-merge";
+import {
+  foldMuscleVolume,
+  roleFactor,
+  type MuscleVolumeRow,
+} from "@/lib/domain/stats/muscle-volume";
+import {
+  distributeRepRanges,
+  type RepRangePoint,
+} from "@/lib/domain/stats/rep-ranges";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 import { isoWeekKey } from "@/lib/domain/cycle/iso-week";
 import { addDaysIso, isoWeekStartIso } from "@/lib/datetime/iso-week";
@@ -203,14 +212,14 @@ export type MuscleVolumePoint = {
   volume: number;
 };
 
-/** Объём по группам мышц (primary 1.0 / secondary 0.5). */
-export async function volumeByMuscle(
+/** Тоннаж группы мышц по роли из одного формата за окно. Силовые и круговые
+ *  возвращают одинаковые строки {группа, роль, тоннаж}, чтобы свернуться вместе
+ *  `foldMuscleVolume`. */
+async function muscleVolumeRows(
   userId: string,
-  range: StatsRange,
-): Promise<MuscleVolumePoint[]> {
-  const from = rangeToFromDate(range);
-
-  const rows = await db
+  from: Date | null,
+): Promise<MuscleVolumeRow[]> {
+  const strength = await db
     .select({
       muscle: schema.exerciseMuscleGroups.muscleGroupKey,
       role: schema.exerciseMuscleGroups.role,
@@ -245,22 +254,66 @@ export async function volumeByMuscle(
       schema.exerciseMuscleGroups.role,
     );
 
-  const acc = new Map<string, number>();
-  for (const r of rows) {
-    const factor = r.role === "primary" ? 1 : 0.5;
-    acc.set(r.muscle, (acc.get(r.muscle) ?? 0) + Number(r.volume) * factor);
-  }
-  return Array.from(acc.entries())
-    .map(([muscleKey, volume]) => ({ muscleKey, volume }))
-    .sort((a, b) => b.volume - a.volume);
+  // Круговые: тоннаж раундов (вес·повторы) по группе×роли. Bodyweight (вес NULL)
+  // даёт 0 тоннажа — в объёме по группам не виден (это метрика тоннажа, не
+  // усилия; усилие живёт в нагреве аватара). Окно/фильтр по completedAt.
+  const circuit = await db
+    .select({
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      role: schema.exerciseMuscleGroups.role,
+      volume: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}), 0)`,
+    })
+    .from(schema.circuitRoundLogs)
+    .innerJoin(
+      schema.circuitExercises,
+      eq(schema.circuitExercises.id, schema.circuitRoundLogs.circuitExerciseId),
+    )
+    .innerJoin(
+      schema.circuitWorkouts,
+      eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.circuitExercises.exerciseId,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "completed"),
+        eq(schema.circuitRoundLogs.skipped, false),
+        from ? gte(schema.circuitRoundLogs.completedAt, from) : undefined,
+      ),
+    )
+    .groupBy(
+      schema.exerciseMuscleGroups.muscleGroupKey,
+      schema.exerciseMuscleGroups.role,
+    );
+
+  return [...strength, ...circuit].map((r) => ({
+    muscleKey: r.muscle,
+    role: r.role,
+    volume: Number(r.volume),
+  }));
+}
+
+/** Объём по группам мышц (primary 1.0 / secondary 0.5) — силовые И круговые
+ *  тоннажем, свёрнутые `foldMuscleVolume`. */
+export async function volumeByMuscle(
+  userId: string,
+  range: StatsRange,
+): Promise<MuscleVolumePoint[]> {
+  const rows = await muscleVolumeRows(userId, rangeToFromDate(range));
+  return foldMuscleVolume(rows);
 }
 
 /** Тоннаж каждой группы мышц по последним `weeks` ISO-неделям (H17.1 «нагрев по
- *  неделям» — тело→время в панели мышцы). Один скан силовых working-сетов с
- *  role-fold (primary 1.0 / secondary 0.5) — та же семантика и источник, что
- *  `volumeByMuscle` (круговые НЕ считаются — паритет с барами /stats). Бакетит
- *  чистой `weeklyVolumeSeries` (срез пустых краёв). Группы без истории в Map
- *  отсутствуют → datum получает []. */
+ *  неделям» — тело→время в панели мышцы). Силовые working-сеты И круговые
+ *  раунды с role-fold (primary 1.0 / secondary 0.5) — та же семантика и
+ *  источник, что `volumeByMuscle`. Бакетит чистой `weeklyVolumeSeries` (срез
+ *  пустых краёв). Группы без истории в Map отсутствуют → datum получает []. */
 export async function muscleWeeklyVolume(
   userId: string,
   now: Date,
@@ -271,45 +324,81 @@ export async function muscleWeeklyVolume(
   // по TZ-границе; запрос лишь грубо отсекает старое.
   const from = new Date(now.getTime() - (weeks * 7 + 2) * DAY_MS);
 
-  const rows = await db
-    .select({
-      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
-      role: schema.exerciseMuscleGroups.role,
-      weight: schema.workoutSets.weightKg,
-      reps: schema.workoutSets.reps,
-      at: schema.workouts.startedAt,
-    })
-    .from(schema.workoutSets)
-    .innerJoin(
-      schema.workoutExercises,
-      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
-    )
-    .innerJoin(
-      schema.workouts,
-      eq(schema.workouts.id, schema.workoutExercises.workoutId),
-    )
-    .innerJoin(
-      schema.exerciseMuscleGroups,
-      eq(
-        schema.exerciseMuscleGroups.exerciseId,
-        schema.workoutExercises.exerciseId,
+  const [strengthRows, circuitRows] = await Promise.all([
+    db
+      .select({
+        muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+        role: schema.exerciseMuscleGroups.role,
+        weight: schema.workoutSets.weightKg,
+        reps: schema.workoutSets.reps,
+        at: schema.workouts.startedAt,
+      })
+      .from(schema.workoutSets)
+      .innerJoin(
+        schema.workoutExercises,
+        eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+      )
+      .innerJoin(
+        schema.workouts,
+        eq(schema.workouts.id, schema.workoutExercises.workoutId),
+      )
+      .innerJoin(
+        schema.exerciseMuscleGroups,
+        eq(
+          schema.exerciseMuscleGroups.exerciseId,
+          schema.workoutExercises.exerciseId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.workouts.userId, userId),
+          eq(schema.workouts.status, "completed"),
+          eq(schema.workoutSets.setType, "working"),
+          gte(schema.workouts.startedAt, from),
+        ),
       ),
-    )
-    .where(
-      and(
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "completed"),
-        eq(schema.workoutSets.setType, "working"),
-        gte(schema.workouts.startedAt, from),
+    db
+      .select({
+        muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+        role: schema.exerciseMuscleGroups.role,
+        weight: schema.circuitRoundLogs.actualWeightKg,
+        reps: schema.circuitRoundLogs.actualReps,
+        at: schema.circuitRoundLogs.completedAt,
+      })
+      .from(schema.circuitRoundLogs)
+      .innerJoin(
+        schema.circuitExercises,
+        eq(
+          schema.circuitExercises.id,
+          schema.circuitRoundLogs.circuitExerciseId,
+        ),
+      )
+      .innerJoin(
+        schema.circuitWorkouts,
+        eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+      )
+      .innerJoin(
+        schema.exerciseMuscleGroups,
+        eq(
+          schema.exerciseMuscleGroups.exerciseId,
+          schema.circuitExercises.exerciseId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.circuitWorkouts.userId, userId),
+          eq(schema.circuitWorkouts.status, "completed"),
+          eq(schema.circuitRoundLogs.skipped, false),
+          gte(schema.circuitRoundLogs.completedAt, from),
+        ),
       ),
-    );
+  ]);
 
   const byMuscle = new Map<string, WeeklyVolumeContribution[]>();
-  for (const r of rows) {
+  for (const r of [...strengthRows, ...circuitRows]) {
     if (r.weight == null || r.reps == null) continue;
-    const factor = r.role === "primary" ? 1 : 0.5;
     const list = byMuscle.get(r.muscle) ?? [];
-    list.push({ at: r.at, volume: r.weight * r.reps * factor });
+    list.push({ at: r.at, volume: r.weight * r.reps * roleFactor(r.role) });
     byMuscle.set(r.muscle, list);
   }
 
@@ -321,54 +410,58 @@ export async function muscleWeeklyVolume(
   return out;
 }
 
-export type RepRangePoint = {
-  bucket: "1-5" | "6-10" | "11-15" | "16+";
-  sets: number;
-};
-
-/** Распределение working-подходов по rep-диапазонам — power/hypertrophy/
- *  endurance split. */
+/** Распределение выполненных подходов по rep-диапазонам — power/hypertrophy/
+ *  endurance split. Силовые working-сеты И круговые reps-раунды (duration-
+ *  раунды без повторов исключены). Бакетинг — чистый `distributeRepRanges`. */
 export async function repRangeDistribution(
   userId: string,
   range: StatsRange,
 ): Promise<RepRangePoint[]> {
   const from = rangeToFromDate(range);
 
-  const rows = await db
-    .select({
-      reps: schema.workoutSets.reps,
-    })
-    .from(schema.workoutSets)
-    .innerJoin(
-      schema.workoutExercises,
-      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
-    )
-    .innerJoin(
-      schema.workouts,
-      eq(schema.workouts.id, schema.workoutExercises.workoutId),
-    )
-    .where(
-      and(
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "completed"),
-        eq(schema.workoutSets.setType, "working"),
-        from ? gte(schema.workouts.startedAt, from) : undefined,
+  const [strengthRows, circuitRows] = await Promise.all([
+    db
+      .select({ reps: schema.workoutSets.reps })
+      .from(schema.workoutSets)
+      .innerJoin(
+        schema.workoutExercises,
+        eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+      )
+      .innerJoin(
+        schema.workouts,
+        eq(schema.workouts.id, schema.workoutExercises.workoutId),
+      )
+      .where(
+        and(
+          eq(schema.workouts.userId, userId),
+          eq(schema.workouts.status, "completed"),
+          eq(schema.workoutSets.setType, "working"),
+          from ? gte(schema.workouts.startedAt, from) : undefined,
+        ),
       ),
-    );
+    db
+      .select({ reps: schema.circuitRoundLogs.actualReps })
+      .from(schema.circuitRoundLogs)
+      .innerJoin(
+        schema.circuitWorkouts,
+        eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+      )
+      .where(
+        and(
+          eq(schema.circuitWorkouts.userId, userId),
+          eq(schema.circuitWorkouts.status, "completed"),
+          eq(schema.circuitRoundLogs.skipped, false),
+          from ? gte(schema.circuitRoundLogs.completedAt, from) : undefined,
+        ),
+      ),
+  ]);
 
-  const buckets = { "1-5": 0, "6-10": 0, "11-15": 0, "16+": 0 };
-  for (const r of rows) {
-    if (r.reps <= 5) buckets["1-5"] += 1;
-    else if (r.reps <= 10) buckets["6-10"] += 1;
-    else if (r.reps <= 15) buckets["11-15"] += 1;
-    else buckets["16+"] += 1;
-  }
-  return [
-    { bucket: "1-5", sets: buckets["1-5"] },
-    { bucket: "6-10", sets: buckets["6-10"] },
-    { bucket: "11-15", sets: buckets["11-15"] },
-    { bucket: "16+", sets: buckets["16+"] },
-  ];
+  const reps = [
+    ...strengthRows.map((r) => r.reps),
+    ...circuitRows.map((r) => r.reps),
+  ].filter((n): n is number => n != null);
+
+  return distributeRepRanges(reps);
 }
 
 export type OneRmTrendPoint = {
