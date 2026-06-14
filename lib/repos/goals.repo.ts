@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -79,6 +79,49 @@ export async function clearExerciseGoals(
       and(
         eq(schema.goals.userId, userId),
         eq(schema.goals.exerciseId, exerciseId),
+      ),
+    );
+}
+
+/** H18.2 — все цели пользователя, прикреплённые к группам мышц (дрилл мышцы),
+ *  свежайшая на группу. Один запрос (карта вместо 14 точечных) → передаётся
+ *  в buildAvatarData. R-7: только свои цели. */
+export async function getMuscleGroupGoals(
+  userId: string,
+): Promise<Map<string, Goal>> {
+  const rows = await db
+    .select()
+    .from(schema.goals)
+    .where(
+      and(
+        eq(schema.goals.userId, userId),
+        isNotNull(schema.goals.muscleGroupKey),
+      ),
+    )
+    .orderBy(desc(schema.goals.createdAt));
+  // rows свежие сверху → первая встреченная по ключу = активная цель группы.
+  const out = new Map<string, Goal>();
+  for (const row of rows) {
+    if (row.muscleGroupKey && !out.has(row.muscleGroupKey)) {
+      out.set(row.muscleGroupKey, row);
+    }
+  }
+  return out;
+}
+
+/** H18.2 — снимает ВСЕ цели группы мышц пользователя (постановка новой цели
+ *  заменяет прежнюю — один активный таргет на группу, без дублей строк).
+ *  R-7: только свои; чужие не трогаются. */
+export async function clearMuscleGroupGoals(
+  userId: string,
+  muscleGroupKey: NonNullable<schema.Goal["muscleGroupKey"]>,
+): Promise<void> {
+  await db
+    .delete(schema.goals)
+    .where(
+      and(
+        eq(schema.goals.userId, userId),
+        eq(schema.goals.muscleGroupKey, muscleGroupKey),
       ),
     );
 }

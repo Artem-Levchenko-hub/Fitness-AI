@@ -22,6 +22,9 @@ export function buildAvatarData(
   /** H17.1 — тоннаж группы по ISO-неделям (muscleWeeklyVolume). Только свой
    *  /profile передаёт его; без него шаг «по неделям» пуст (друг/дашборд). */
   weeklyVolume?: Map<string, number[]>,
+  /** H18.2 — целевая частота (подходов/нед) на группу (getMuscleGroupGoals).
+   *  Только свой /profile; без неё трек-бар цели в панели не рендерится. */
+  muscleGoals?: Map<string, number>,
 ): AvatarMuscleDatum[] {
   return heat.map((m) => {
     const h = heatFromSets(m.weeklySets);
@@ -39,6 +42,7 @@ export function buildAvatarData(
       top3: m.top3,
       records: records?.get(m.muscleKey) ?? [],
       weeklyVolume: weeklyVolume?.get(m.muscleKey) ?? [],
+      goalTarget: muscleGoals?.get(m.muscleKey) ?? null,
     };
   });
 }

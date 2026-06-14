@@ -3,7 +3,14 @@
 import { ChevronRight, Dumbbell, Snowflake, Trophy, X } from "lucide-react";
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
+import { GoalTrackBar } from "@/components/progression/GoalTrackBar";
 import { forgottenLabel } from "@/lib/domain/avatar/forgotten";
+import { frequencyGoalView } from "@/lib/domain/progression/frequency-goal";
+import {
+  clearMuscleGoalAction,
+  setMuscleGoalAction,
+} from "@/server/actions/goals";
 
 import type { AvatarMuscleDatum } from "./types";
 
@@ -27,6 +34,9 @@ type Props = {
    *  Только на своём /profile — на профиле друга страница показала бы историю
    *  смотрящего, а не друга, поэтому там ссылок нет (default false). */
   linkExercises?: boolean;
+  /** H18.2 — показывать формы постановки/снятия цели частоты для этой группы.
+   *  Только свой /profile (default false): на профиле друга цель не правим. */
+  editableGoals?: boolean;
 };
 
 export function MuscleInfoPanel({
@@ -35,6 +45,7 @@ export function MuscleInfoPanel({
   onAdvance,
   onClose,
   linkExercises = false,
+  editableGoals = false,
 }: Props) {
   if (!datum) {
     return (
@@ -114,6 +125,77 @@ export function MuscleInfoPanel({
           />
         ))}
       </div>
+
+      <GoalSection datum={datum} editableGoals={editableGoals} />
+    </div>
+  );
+}
+
+/** H18.2 — постановка+трек цели ЧАСТОТЫ группы (подходов/нед) прямо в дрилле
+ *  мышцы: цель крепится к телу (столп 2), тренер ведёт вперёд (столп 1). Не
+ *  часть 6-шагового цикла панели (фикс. CYCLE_LEN — урок H17.1), а отдельная
+ *  секция под индикатором. Read-only трек-бар — общий GoalTrackBar (тот же, что
+ *  на /exercises/[id] — урок H4.3, один носитель). Формы видны только на своём
+ *  /profile (editableGoals); на профиле друга секция не рендерится. */
+function GoalSection({
+  datum,
+  editableGoals,
+}: {
+  datum: AvatarMuscleDatum;
+  editableGoals: boolean;
+}) {
+  const hasGoal = datum.goalTarget != null;
+  // У друга (не editableGoals) и без цели — секции нет вовсе (R-37).
+  if (!hasGoal && !editableGoals) return null;
+
+  const view =
+    datum.goalTarget != null
+      ? frequencyGoalView(datum.sets, datum.goalTarget)
+      : null;
+
+  return (
+    <div className="border-border/60 mt-3 space-y-3 border-t pt-3">
+      {view ? <GoalTrackBar view={view} unit="подх./нед" /> : null}
+
+      {editableGoals ? (
+        <>
+          <form action={setMuscleGoalAction} className="flex items-end gap-2">
+            <input type="hidden" name="muscleGroupKey" value={datum.key} />
+            <label className="flex-1">
+              <span className="text-muted-foreground mb-1 block text-xs font-medium">
+                Цель, подходов в неделю
+              </span>
+              <input
+                name="targetValue"
+                type="number"
+                inputMode="numeric"
+                step="1"
+                min="1"
+                required
+                placeholder="например, 12"
+                className="border-border bg-background h-11 w-full rounded-lg border px-3 text-sm"
+              />
+            </label>
+            <Button type="submit" className="h-11">
+              {hasGoal ? "Обновить" : "Поставить"}
+            </Button>
+          </form>
+
+          {hasGoal ? (
+            <form action={clearMuscleGoalAction}>
+              <input type="hidden" name="muscleGroupKey" value={datum.key} />
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground -ml-2"
+              >
+                Убрать цель
+              </Button>
+            </form>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

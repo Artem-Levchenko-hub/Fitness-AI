@@ -10,6 +10,7 @@ import {
 import { parseMuscleParam } from "@/lib/domain/avatar/muscle-param";
 import { requireUser } from "@/lib/auth/require-user";
 import { getLatestMeasurement, getUserProfile } from "@/lib/repos/body.repo";
+import { getMuscleGroupGoals } from "@/lib/repos/goals.repo";
 import {
   muscleGroupRecords,
   muscleHeatProfile,
@@ -35,16 +36,29 @@ export default async function ProfilePage({
   const profile = await getUserProfile(user.id);
   const tz = profile?.timezone ?? "Europe/Moscow";
 
-  const [heat, records, lastTrained, weeklyVolume, measurement] =
+  const [heat, records, lastTrained, weeklyVolume, measurement, muscleGoals] =
     await Promise.all([
       muscleHeatProfile(user.id, now),
       muscleGroupRecords(user.id),
       muscleLastTrained(user.id),
       muscleWeeklyVolume(user.id, now, tz, WEEKLY_VOLUME_WEEKS),
       getLatestMeasurement(user.id),
+      getMuscleGroupGoals(user.id),
     ]);
 
-  const data = buildAvatarData(heat, now, records, lastTrained, weeklyVolume);
+  // Цель группы → целевое число (частота подходов/нед) для трек-бара в панели.
+  const goalTargets = new Map(
+    [...muscleGoals].map(([key, goal]) => [key, goal.targetValue]),
+  );
+
+  const data = buildAvatarData(
+    heat,
+    now,
+    records,
+    lastTrained,
+    weeklyVolume,
+    goalTargets,
+  );
   const hasData = hasTrainingData(heat);
 
   const displayName = user.name?.trim() || user.email;
@@ -78,7 +92,12 @@ export default async function ProfilePage({
         </div>
       ) : null}
 
-      <ProfileAvatar data={data} linkExercises initialMuscle={initialMuscle} />
+      <ProfileAvatar
+        data={data}
+        linkExercises
+        editableGoals
+        initialMuscle={initialMuscle}
+      />
 
       <BodyMetrics heightCm={heightCm} weightKg={weightKg} />
 

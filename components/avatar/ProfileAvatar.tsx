@@ -26,6 +26,7 @@ export function ProfileAvatar({
   data,
   linkExercises = false,
   initialMuscle = null,
+  editableGoals = false,
 }: {
   data: AvatarMuscleDatum[];
   /** Делать упражнения в панели мышцы ссылками на их историю /exercises/[id].
@@ -35,6 +36,9 @@ export function ProfileAvatar({
    *  группы (вход из разбора в тело). Уже провалидирован сервером
    *  (parseMuscleParam); неизвестная группа → панель закрыта (data.find промах). */
   initialMuscle?: string | null;
+  /** H18.2 — разрешить постановку/снятие цели частоты в панели мышцы. Только
+   *  свой /profile (default false): на профиле друга цель не правим. */
+  editableGoals?: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(initialMuscle);
   const [cycle, setCycle] = useState(0);
@@ -103,6 +107,7 @@ export function ProfileAvatar({
         onAdvance={() => selected && onSelect(selected)}
         onClose={() => onSelect(null)}
         linkExercises={linkExercises}
+        editableGoals={editableGoals}
       />
 
       {/* Легенда-чипы по нагреву свёрнута по умолчанию — громоздкий раздел не
