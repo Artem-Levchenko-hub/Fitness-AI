@@ -1,4 +1,6 @@
 import {
+  Archive,
+  Check,
   ChevronLeft,
   ChevronRight,
   Layers,
@@ -10,7 +12,11 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
-import { LIBRARY_PROGRAMS, levelLabelRu } from "@/lib/domain/programs/library";
+import {
+  LIBRARY_PROGRAMS,
+  levelLabelRu,
+  pluralDays,
+} from "@/lib/domain/programs/library";
 import {
   listPrograms,
   type ProgramListItem,
@@ -101,8 +107,8 @@ export default async function LibraryPage() {
                     {levelLabelRu(p.level)} · {p.frequency}
                   </p>
                   <h3 className="truncate text-sm font-semibold">{p.name}</h3>
-                  <p className="text-muted-foreground mt-0.5 text-xs">
-                    {p.days.length} дн. · {p.description}
+                  <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+                    {p.days.length} {pluralDays(p.days.length)} · {p.description}
                   </p>
                 </div>
                 <ChevronRight className="text-muted-foreground size-5 shrink-0" />
@@ -134,12 +140,19 @@ function ProgramRow({ program }: { program: ProgramListItem }) {
         <span className="block truncate text-sm font-semibold">
           {program.name}
         </span>
-        <span className="text-muted-foreground block text-xs">
-          {program.dayCount} дн. ·{" "}
+        <span className="mt-1 flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground tabular-nums">
+            {program.dayCount} {pluralDays(program.dayCount)}
+          </span>
           {program.active ? (
-            <span className="text-primary font-medium">в Шаблонах</span>
+            <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+              <Check className="size-3" />в Шаблонах
+            </span>
           ) : (
-            "на полке"
+            <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium">
+              <Archive className="size-3" />
+              на полке
+            </span>
           )}
         </span>
       </span>
