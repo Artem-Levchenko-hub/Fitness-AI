@@ -745,48 +745,71 @@ export async function topLineKpi(
 }
 
 export type PeriodVolumeComparison = {
-  /** Working-тоннаж за текущее окно периода. */
+  /** Тоннаж всех форматов (силовые + круговые) за текущее окно периода. */
   current: number;
-  /** Working-тоннаж за предыдущее окно той же длины, или null если сравнить
-   *  не с чем (range='all' — нет ограниченного прошлого окна). */
+  /** Тоннаж всех форматов за предыдущее окно той же длины, или null если
+   *  сравнить не с чем (range='all' — нет ограниченного прошлого окна). */
   previous: number | null;
 };
 
-/** Working-тоннаж (вес × повторы) за произвольное окно [from, to). Только
- *  completed-тренировки (G1). `from`/`to` null → без соответствующей границы. */
-async function workingTonnage(
+/** Тоннаж активности (вес × повторы) за окно [from, to) — силовые working
+ *  подходы И круговые раунды (паритет с KPI «Тоннаж» и графиком объёма). Только
+ *  completed-сессии (G1). `from`/`to` null → без соответствующей границы. Так
+ *  вывод «растёшь/падаешь» не врёт круговому атлету, что объём «упал до нуля». */
+async function activityTonnage(
   userId: string,
   from: Date | null,
   to: Date | null,
 ): Promise<number> {
-  const [agg] = await db
-    .select({
-      tonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
-    })
-    .from(schema.workoutSets)
-    .innerJoin(
-      schema.workoutExercises,
-      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
-    )
-    .innerJoin(
-      schema.workouts,
-      eq(schema.workouts.id, schema.workoutExercises.workoutId),
-    )
-    .where(
-      and(
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "completed"),
-        eq(schema.workoutSets.setType, "working"),
-        from ? gte(schema.workouts.startedAt, from) : undefined,
-        to ? lt(schema.workouts.startedAt, to) : undefined,
+  const [strength, circuit] = await Promise.all([
+    db
+      .select({
+        tonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
+      })
+      .from(schema.workoutSets)
+      .innerJoin(
+        schema.workoutExercises,
+        eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+      )
+      .innerJoin(
+        schema.workouts,
+        eq(schema.workouts.id, schema.workoutExercises.workoutId),
+      )
+      .where(
+        and(
+          eq(schema.workouts.userId, userId),
+          eq(schema.workouts.status, "completed"),
+          eq(schema.workoutSets.setType, "working"),
+          from ? gte(schema.workouts.startedAt, from) : undefined,
+          to ? lt(schema.workouts.startedAt, to) : undefined,
+        ),
       ),
-    );
+    db
+      .select({
+        tonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}), 0)`,
+      })
+      .from(schema.circuitRoundLogs)
+      .innerJoin(
+        schema.circuitWorkouts,
+        eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+      )
+      .where(
+        and(
+          eq(schema.circuitWorkouts.userId, userId),
+          eq(schema.circuitWorkouts.status, "completed"),
+          eq(schema.circuitRoundLogs.skipped, false),
+          from ? gte(schema.circuitWorkouts.startedAt, from) : undefined,
+          to ? lt(schema.circuitWorkouts.startedAt, to) : undefined,
+        ),
+      ),
+  ]);
 
-  return Number(agg?.tonnage ?? 0);
+  return Number(strength[0]?.tonnage ?? 0) + Number(circuit[0]?.tonnage ?? 0);
 }
 
 /** Сравнение объёма текущего периода с предыдущим окном той же длины —
- *  для человекочитаемого вывода «растёшь/стоишь/падаешь» (G6). */
+ *  для человекочитаемого вывода «растёшь/стоишь/падаешь» (G6). Тоннаж —
+ *  всех форматов (силовые + круговые), как KPI и график. */
 export async function periodVolumeComparison(
   userId: string,
   range: StatsRange,
@@ -795,7 +818,7 @@ export async function periodVolumeComparison(
 
   // range='all' → окно неограниченно, сравнивать не с чем.
   if (!from) {
-    const current = await workingTonnage(userId, null, null);
+    const current = await activityTonnage(userId, null, null);
     return { current, previous: null };
   }
 
@@ -803,8 +826,8 @@ export async function periodVolumeComparison(
   const prevFrom = new Date(from.getTime() - lengthMs);
 
   const [current, previous] = await Promise.all([
-    workingTonnage(userId, from, null),
-    workingTonnage(userId, prevFrom, from),
+    activityTonnage(userId, from, null),
+    activityTonnage(userId, prevFrom, from),
   ]);
 
   return { current, previous };
