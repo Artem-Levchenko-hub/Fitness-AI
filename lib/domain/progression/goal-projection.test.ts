@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectProgress } from "./goal-projection";
+import { projectProgress, summarizeGoalProgress } from "./goal-projection";
 
 describe("projectProgress", () => {
   it("пустая история → все поля undefined (нет точки отсчёта)", () => {
@@ -55,5 +55,46 @@ describe("projectProgress", () => {
     const p = projectProgress([100, 100.3], 120, { epsilon: 0.5 });
     expect(p.paceToTarget).toBeUndefined();
     expect(p.etaWeeks).toBeUndefined();
+  });
+});
+
+describe("summarizeGoalProgress", () => {
+  it("пустая история → current null, pct 0, не достигнуто, eta null", () => {
+    const v = summarizeGoalProgress([], 100);
+    expect(v.current).toBeNull();
+    expect(v.target).toBe(100);
+    expect(v.pct).toBe(0);
+    expect(v.reached).toBe(false);
+    expect(v.etaWeeks).toBeNull();
+  });
+
+  it("растущая серия [60,70,80] цель 100 → current 80, pct 0.8, не достигнуто", () => {
+    const v = summarizeGoalProgress([60, 70, 80], 100);
+    expect(v.current).toBe(80);
+    expect(v.pct).toBeCloseTo(0.8, 5);
+    expect(v.reached).toBe(false);
+    // растёт +10/нед за 2 интервала → (100−80)/10 = 2 нед
+    expect(v.etaWeeks).toBeCloseTo(2, 5);
+  });
+
+  it("цель достигнута (current ≥ target) → pct 1, reached, eta 0", () => {
+    const v = summarizeGoalProgress([90, 105], 100);
+    expect(v.current).toBe(105);
+    expect(v.pct).toBe(1); // клампится, не >1
+    expect(v.reached).toBe(true);
+    expect(v.etaWeeks).toBe(0);
+  });
+
+  it("застой ниже цели → pct по current/target, eta null (темпа нет)", () => {
+    const v = summarizeGoalProgress([80, 80, 80], 100);
+    expect(v.current).toBe(80);
+    expect(v.pct).toBeCloseTo(0.8, 5);
+    expect(v.reached).toBe(false);
+    expect(v.etaWeeks).toBeNull();
+  });
+
+  it("неположительная цель → pct 0 (защита от деления на 0/отрицательное)", () => {
+    const v = summarizeGoalProgress([80], 0);
+    expect(v.pct).toBe(0);
   });
 });

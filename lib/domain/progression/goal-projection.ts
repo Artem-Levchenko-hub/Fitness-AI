@@ -54,3 +54,41 @@ export function projectProgress(
 
   return { current, deltaSinceStart, paceToTarget, etaWeeks };
 }
+
+/** H18.2 — view-model read-only трек-бара «текущее → цель» для UI.
+ *  Тонкий пресентер поверх projectProgress: переводит undefined-поля в
+ *  null (UI-дружелюбно) и считает долю заполнения `pct` = current/target,
+ *  склампленную в [0,1]. Чистая функция (R-7) — без UI/БД, тестируется без них. */
+export type GoalProgressView = {
+  /** Текущее значение метрики; null при пустой истории (цель есть, истории нет). */
+  current: number | null;
+  /** Целевое значение (как задано). */
+  target: number;
+  /** Доля прогресса [0,1] для ширины полосы. 0 при отсутствии current/target≤0. */
+  pct: number;
+  /** Оценка недель до цели; null если темпа нет (застой/регресс) или цель достигнута даёт 0. */
+  etaWeeks: number | null;
+  /** Цель достигнута (current ≥ target). */
+  reached: boolean;
+};
+
+export function summarizeGoalProgress(
+  series: number[],
+  targetValue: number,
+  options: ProjectProgressOptions = {},
+): GoalProgressView {
+  const proj = projectProgress(series, targetValue, options);
+  const current = proj.current ?? null;
+  const reached = current !== null && current >= targetValue;
+  const pct =
+    current === null || targetValue <= 0
+      ? 0
+      : Math.min(1, Math.max(0, current / targetValue));
+  return {
+    current,
+    target: targetValue,
+    pct,
+    etaWeeks: proj.etaWeeks ?? null,
+    reached,
+  };
+}

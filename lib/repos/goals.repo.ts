@@ -46,6 +46,43 @@ export async function listGoals(userId: string): Promise<Goal[]> {
     .orderBy(desc(schema.goals.createdAt));
 }
 
+/** H18.2 — активная цель упражнения (свежайшая; null если не задана).
+ *  R-7: фильтр по userId — чужую цель не достанем. */
+export async function getExerciseGoal(
+  userId: string,
+  exerciseId: string,
+): Promise<Goal | null> {
+  const [row] = await db
+    .select()
+    .from(schema.goals)
+    .where(
+      and(
+        eq(schema.goals.userId, userId),
+        eq(schema.goals.exerciseId, exerciseId),
+      ),
+    )
+    .orderBy(desc(schema.goals.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/** H18.2 — снимает ВСЕ цели упражнения пользователя (постановка новой цели
+ *  заменяет прежнюю — один активный таргет на упражнение, без дублей строк).
+ *  R-7: только свои; чужие не трогаются. */
+export async function clearExerciseGoals(
+  userId: string,
+  exerciseId: string,
+): Promise<void> {
+  await db
+    .delete(schema.goals)
+    .where(
+      and(
+        eq(schema.goals.userId, userId),
+        eq(schema.goals.exerciseId, exerciseId),
+      ),
+    );
+}
+
 /** H18.1 — удаляет цель (R-7: только свою; чужая/несуществующая → no-op). */
 export async function deleteGoal(
   userId: string,

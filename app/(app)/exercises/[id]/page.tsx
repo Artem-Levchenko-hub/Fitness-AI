@@ -4,18 +4,28 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { MuscleBadges, muscleLabel } from "@/components/app/MuscleBadges";
+import { GoalTrackBar } from "@/components/progression/GoalTrackBar";
 import { Button } from "@/components/ui/button";
+import {
+  summarizeGoalProgress,
+  type GoalProgressView,
+} from "@/lib/domain/progression/goal-projection";
 import {
   detectStagnation,
   E1RM_STAGNATION_EPSILON_KG,
 } from "@/lib/domain/progression/stagnation";
 import { requireUser } from "@/lib/auth/require-user";
 import { getExerciseById } from "@/lib/repos/exercises.repo";
+import { getExerciseGoal } from "@/lib/repos/goals.repo";
 import {
   exerciseSetHistory,
   type ExerciseSession,
 } from "@/lib/repos/stats.repo";
 import { deleteCustomExerciseAction } from "@/server/actions/exercises";
+import {
+  clearExerciseGoalAction,
+  setExerciseGoalAction,
+} from "@/server/actions/goals";
 
 export const metadata: Metadata = { title: "Упражнение" };
 
@@ -40,6 +50,29 @@ export default async function ExerciseDetailPage({ params }: Props) {
   const stagnation = detectStagnation(e1rmSeries, 3, {
     epsilon: E1RM_STAGNATION_EPSILON_KG,
   });
+
+  // H18.2 — цель упражнения + проекция темпа. Серия зависит от вида цели:
+  // 1ПМ — та же e1RM-серия (что застой); вес — топ рабочего веса по сессиям,
+  // хронологически (новые снизу). Нет цели → блок не рендерится (R-37).
+  const goal = await getExerciseGoal(user.id, id);
+  let goalView: GoalProgressView | null = null;
+  if (goal && (goal.kind === "weight" || goal.kind === "1rm")) {
+    const series =
+      goal.kind === "1rm"
+        ? e1rmSeries
+        : history
+            .map((s) =>
+              Math.max(
+                0,
+                ...s.sets
+                  .filter((x) => x.setType === "working")
+                  .map((x) => x.weightKg),
+              ),
+            )
+            .filter((w) => w > 0)
+            .reverse();
+    goalView = summarizeGoalProgress(series, goal.targetValue);
+  }
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -101,6 +134,8 @@ export default async function ExerciseDetailPage({ params }: Props) {
         ) : null}
       </section>
 
+      <GoalSection exerciseId={id} kind={goal?.kind ?? null} view={goalView} />
+
       {exercise.isCustom && exercise.ownerUserId === user.id ? (
         <div className="flex gap-2">
           <Button asChild variant="outline" className="flex-1">
@@ -144,6 +179,77 @@ export default async function ExerciseDetailPage({ params }: Props) {
         )}
       </section>
     </main>
+  );
+}
+
+/** H18.2 — секция цели упражнения: read-only трек-бар (если цель есть) +
+ *  форма постановки/обновления и снятия. Нативные формы → Server Action
+ *  (без клиента, паттерн deleteCustomExerciseAction). Тапы ≥44px (R-41). */
+function GoalSection({
+  exerciseId,
+  kind,
+  view,
+}: {
+  exerciseId: string;
+  kind: "weight" | "1rm" | "frequency" | null;
+  view: GoalProgressView | null;
+}) {
+  const fieldLabel = "text-muted-foreground mb-1 block text-xs font-medium";
+  const control =
+    "border-border bg-background h-11 w-full rounded-lg border px-3 text-sm";
+
+  return (
+    <section className="bg-card border-border mt-4 space-y-4 rounded-2xl border p-5">
+      {view ? <GoalTrackBar view={view} /> : null}
+
+      <form
+        action={setExerciseGoalAction}
+        className="flex flex-wrap items-end gap-2"
+      >
+        <input type="hidden" name="exerciseId" value={exerciseId} />
+        <label className="min-w-[9rem] flex-1">
+          <span className={fieldLabel}>Тип цели</span>
+          <select
+            name="kind"
+            defaultValue={kind === "1rm" ? "1rm" : "weight"}
+            className={control}
+          >
+            <option value="weight">Рабочий вес</option>
+            <option value="1rm">1ПМ (расчётный)</option>
+          </select>
+        </label>
+        <label className="min-w-[7rem] flex-1">
+          <span className={fieldLabel}>Цель, кг</span>
+          <input
+            name="targetValue"
+            type="number"
+            inputMode="decimal"
+            step="0.5"
+            min="0.5"
+            required
+            placeholder="например, 100"
+            className={control}
+          />
+        </label>
+        <Button type="submit" className="h-11">
+          {view ? "Обновить цель" : "Поставить цель"}
+        </Button>
+      </form>
+
+      {view ? (
+        <form action={clearExerciseGoalAction}>
+          <input type="hidden" name="exerciseId" value={exerciseId} />
+          <Button
+            type="submit"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground -ml-2"
+          >
+            Убрать цель
+          </Button>
+        </form>
+      ) : null}
+    </section>
   );
 }
 
