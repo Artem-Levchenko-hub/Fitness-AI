@@ -4,13 +4,14 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  CloudOff,
   Frown,
   Meh,
   Smile,
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
@@ -21,6 +22,12 @@ import {
   FEELING_TAGS,
   type FeelingTagKey,
 } from "@/lib/domain/workouts/feeling";
+import {
+  groupPendingByExerciseId,
+  pendingSetsFromOutbox,
+  type PendingSet,
+} from "@/lib/domain/workouts/pending-sets";
+import { listPending } from "@/lib/storage/outbox";
 import type { PreviousSessionSummary } from "@/lib/domain/exercise/previous-session";
 import type { GoalProgressView } from "@/lib/domain/progression/goal-projection";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
@@ -37,15 +44,49 @@ type Props = {
   goalByExerciseId: Map<string, GoalProgressView>;
 };
 
+/** Стабильная пустая ссылка — не плодим новый [] на каждый рендер. */
+const EMPTY_PENDING: PendingSet[] = [];
+
 export function ActiveWorkoutView({
   workout,
   previousByExerciseId,
   goalByExerciseId,
 }: Props) {
+  // H15.3b-2 — оптимистичный слой офлайн-подходов. Активная тренировка
+  // рендерится сервером, но офлайн-записи лежат в IndexedDB-outbox; на маунте
+  // восстанавливаем их (переживают reload), а офлайн-сабвмит добавляет через
+  // onOfflineRecord. Дренаж/синк при реконнекте — H15.4.
+  const [pending, setPending] = useState<PendingSet[]>([]);
+  useEffect(() => {
+    let alive = true;
+    listPending().then((mutations) => {
+      if (alive) setPending(pendingSetsFromOutbox(mutations, workout.id));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [workout.id]);
+
+  const pendingByExerciseId = useMemo(
+    () => groupPendingByExerciseId(pending),
+    [pending],
+  );
+
+  const handleOfflineRecord = useCallback((set: PendingSet) => {
+    setPending((prev) => [
+      ...prev.filter((s) => s.clientId !== set.clientId),
+      set,
+    ]);
+  }, []);
+
   const completedExercises = useMemo(
     () =>
-      workout.exercises.filter((e) => e.sets.length >= e.targetSets).length,
-    [workout.exercises],
+      workout.exercises.filter(
+        (e) =>
+          e.sets.length + (pendingByExerciseId.get(e.id)?.length ?? 0) >=
+          e.targetSets,
+      ).length,
+    [workout.exercises, pendingByExerciseId],
   );
 
   /** H12.4 — «Прервать» прямо из активной сессии (зеркало круговой/кардио:
@@ -85,6 +126,8 @@ export function ActiveWorkoutView({
             index={idx}
             previous={previousByExerciseId.get(ex.exerciseId) ?? null}
             goal={goalByExerciseId.get(ex.exerciseId) ?? null}
+            pending={pendingByExerciseId.get(ex.id) ?? EMPTY_PENDING}
+            onOfflineRecord={handleOfflineRecord}
           />
         ))}
       </ul>
@@ -187,15 +230,23 @@ function ExerciseCard({
   index,
   previous,
   goal,
+  pending,
+  onOfflineRecord,
 }: {
   workoutId: string;
   exercise: ActiveWorkout["exercises"][number];
   index: number;
   previous: PreviousSessionSummary | null;
   goal: GoalProgressView | null;
+  pending: PendingSet[];
+  onOfflineRecord: (set: PendingSet) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const completed = exercise.sets.length >= exercise.targetSets;
+  // Офлайн-подходы (pending) считаются наравне с серверными: прогресс,
+  // завершённость и следующий индекс монотонны (line H15.3b-2 sharpen — иначе
+  // N офлайн-подходов слились бы на одном setIndex).
+  const totalDone = exercise.sets.length + pending.length;
+  const completed = totalDone >= exercise.targetSets;
   const lastSet = exercise.sets[exercise.sets.length - 1];
 
   return (
@@ -225,7 +276,7 @@ function ExerciseCard({
           </h3>
           <p className="text-muted-foreground tabular mt-0.5 text-xs">
             <span>
-              {exercise.sets.length}/{exercise.targetSets} ·{" "}
+              {totalDone}/{exercise.targetSets} ·{" "}
               {exercise.targetRepsMin}–{exercise.targetRepsMax} повт.
             </span>
             {exercise.targetWeightKg ? (
@@ -242,7 +293,7 @@ function ExerciseCard({
 
       {expanded ? (
         <div className="space-y-4 border-t px-4 pt-4 pb-4">
-          {exercise.sets.length > 0 ? (
+          {exercise.sets.length > 0 || pending.length > 0 ? (
             <ul className="space-y-1.5">
               {exercise.sets.map((s) => (
                 <li
@@ -273,6 +324,34 @@ function ExerciseCard({
                       <Trash2 className="size-3.5" />
                     </Button>
                   </form>
+                </li>
+              ))}
+              {/* H15.3b-2 — офлайн-подходы, ещё не синхронизированные. Отличимы
+                  НЕ только цветом (R-41): иконка-облако + текстовая метка
+                  «не синхр.». Удаления нет (нет серверного id; дренаж — H15.4). */}
+              {pending.map((s) => (
+                <li
+                  key={s.clientId}
+                  className="border-border/60 bg-muted/40 flex items-center gap-3 rounded-lg border border-dashed px-3 py-2"
+                >
+                  <span className="text-muted-foreground tabular w-6 text-center text-xs">
+                    {s.setIndex + 1}
+                  </span>
+                  <span className="tabular flex-1 text-sm font-medium">
+                    {s.weightKg} кг × {s.reps}
+                    {s.rpe != null ? (
+                      <span className="text-muted-foreground ml-2 text-xs font-normal">
+                        RPE {s.rpe}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className="text-muted-foreground inline-flex items-center gap-1 text-[10px] font-medium"
+                    title="Не синхронизировано — отправится при подключении"
+                  >
+                    <CloudOff className="size-3.5" aria-hidden />
+                    не синхр.
+                  </span>
                 </li>
               ))}
             </ul>
@@ -307,7 +386,7 @@ function ExerciseCard({
               <SetInput
                 workoutId={workoutId}
                 workoutExerciseId={exercise.id}
-                nextSetIndex={exercise.sets.length}
+                nextSetIndex={totalDone}
                 defaultWeightKg={
                   lastSet?.weightKg ??
                   previous?.prefillWeightKg ??
@@ -316,6 +395,7 @@ function ExerciseCard({
                 }
                 defaultRepsMax={exercise.targetRepsMax}
                 restSeconds={exercise.targetRestSeconds}
+                onOfflineRecord={onOfflineRecord}
               />
             </>
           ) : (
