@@ -29,6 +29,10 @@ export const muscleGroupKey = pgEnum("muscle_group_key", [
 
 export const muscleRole = pgEnum("muscle_role", ["primary", "secondary"]);
 
+/** H18.1 — вид цели атлета: целевой рабочий вес, оценка 1ПМ или частота
+ *  тренировок (раз/неделю). Все три — «больше = лучше». */
+export const goalKind = pgEnum("goal_kind", ["weight", "1rm", "frequency"]);
+
 export const workoutStatus = pgEnum("workout_status", [
   "active",
   "completed",

@@ -18,3 +18,4 @@ export * from "./cardio-templates";
 export * from "./knowledge";
 export * from "./schedule";
 export * from "./friends";
+export * from "./goals";

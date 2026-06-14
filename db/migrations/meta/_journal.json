@@ -120,6 +120,13 @@
       "when": 1781292930490,
       "tag": "0016_amazing_exodus",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781400062913,
+      "tag": "0017_short_loners",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ export * from "./progression/bodyweight-load";
 export * from "./progression/personal-records";
 export * from "./progression/sanity";
 export * from "./progression/trend";
+export * from "./progression/goal-projection";
 export * from "./workouts/active-session";
 export * from "./workouts/feeling";
 export * from "./schedule/adherence";
