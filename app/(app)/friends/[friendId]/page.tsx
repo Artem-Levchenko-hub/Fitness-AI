@@ -82,6 +82,13 @@ export default async function FriendWorkoutsPage({ params }: Props) {
       <HeatComparison
         mine={myAvatarData}
         theirs={avatarData}
+        theirData={avatarData.map((d) => ({
+          key: d.key,
+          label: d.label,
+          sets: d.sets,
+          volume7d: d.volume7d,
+          levelLabel: d.levelLabel,
+        }))}
         friendName={displayName(friend)}
       />
 

@@ -1,23 +1,29 @@
-import { BodySilhouette } from "@/components/avatar/BodySilhouette";
+import { HeatSilhouettes } from "@/components/friends/HeatSilhouettes";
 import {
   avatarHeatColors,
   type HeatColorPoint,
 } from "@/lib/domain/avatar/heat-colors";
+import type { FriendGroupDatum } from "@/lib/domain/friends/friend-group-aggregate";
 
-/** H3.5 (sub-slice A) — режим сравнения нагрузки на /friends/[friendId]: мой
- *  heat-силуэт рядом с силуэтом друга. ОБА — инлайн-SVG BodySilhouette (H9.2),
- *  НЕ второй three.js-канвас (два WebGL на мобиле = перф-самоубийство, critical
- *  concern 7). Цвет каждой группы — её абсолютный нагрев (avatarHeatColors), та
- *  же рампа, что 3D-аватар → различимо, чья группа горячее. Данные друга — уже
- *  за areFriends-гейтом страницы (R-7). Read-only; тапы (вход в данные) — sub-
- *  slice B. */
+/** H3.5 — режим сравнения нагрузки на /friends/[friendId]: мой heat-силуэт рядом
+ *  с силуэтом друга. ОБА — инлайн-SVG BodySilhouette (H9.2), НЕ второй three.js-
+ *  канвас (два WebGL на мобиле = перф-самоубийство, critical concern 7). Цвет
+ *  каждой группы — её абсолютный нагрев (avatarHeatColors), та же рампа, что 3D-
+ *  аватар → различимо, чья группа горячее. Данные друга — уже за areFriends-
+ *  гейтом страницы (R-7).
+ *
+ *  Сервер готовит цвета + узкий агрегат друга; тапы (вход в данные, sub-slice B)
+ *  несёт клиентский HeatSilhouettes. */
 export function HeatComparison({
   mine,
   theirs,
+  theirData,
   friendName,
 }: {
   mine: HeatColorPoint[];
   theirs: HeatColorPoint[];
+  /** Узкая сводка групп друга (без упражнений, R-7) для read-only панели тапа. */
+  theirData: FriendGroupDatum[];
   /** Имя друга для подписи под его силуэтом. */
   friendName: string;
 }) {
@@ -29,41 +35,12 @@ export function HeatComparison({
       <h2 className="mb-3 text-sm font-semibold tracking-tight">
         Сравнение нагрузки
       </h2>
-      <div className="bg-card/40 border-border grid grid-cols-2 gap-3 rounded-2xl border p-4">
-        <SilhouetteCell
-          colors={myColors}
-          caption="Вы"
-          ariaLabel="Ваша нагрузка по группам мышц за неделю"
-        />
-        <SilhouetteCell
-          colors={theirColors}
-          caption={friendName}
-          ariaLabel={`Нагрузка ${friendName} по группам мышц за неделю`}
-        />
-      </div>
-    </section>
-  );
-}
-
-function SilhouetteCell({
-  colors,
-  caption,
-  ariaLabel,
-}: {
-  colors: Record<string, string>;
-  caption: string;
-  ariaLabel: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <BodySilhouette
-        ariaLabel={ariaLabel}
-        className="h-24 w-full"
-        shapeFill={(key) => ({ fill: colors[key] })}
+      <HeatSilhouettes
+        myColors={myColors}
+        theirColors={theirColors}
+        theirData={theirData}
+        friendName={friendName}
       />
-      <p className="text-muted-foreground max-w-full truncate text-center text-xs font-medium">
-        {caption}
-      </p>
-    </div>
+    </section>
   );
 }
