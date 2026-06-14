@@ -26,6 +26,10 @@ import {
   combineActivityTotals,
   type ActivityTotals,
 } from "@/lib/domain/stats/activity-totals";
+import {
+  mergeVolumeBuckets,
+  type VolumeBucket,
+} from "@/lib/domain/stats/volume-merge";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 import { isoWeekKey } from "@/lib/domain/cycle/iso-week";
 import { addDaysIso, isoWeekStartIso } from "@/lib/datetime/iso-week";
@@ -44,19 +48,24 @@ export type DailyVolumePoint = {
   reps: number;
 };
 
-/** Объём по дням за период. Учитывает только working подходы. Дни
- *  бакетятся в `timeZone` юзера — РОВНО как история `/workouts` (G1): один и
- *  тот же instant попадает в тот же календарный день в графике и в истории. */
-export async function dailyVolume(
+/** Объём силовых working-подходов по бакету (день/неделя) в TZ юзера. Возвращает
+ *  нормализованные `VolumeBucket` (ключ = день 'YYYY-MM-DD' или понедельник
+ *  недели) для слияния с круговыми. Дни/недели бакетятся РОВНО как история
+ *  `/workouts` (G1). */
+async function strengthVolumeBuckets(
   userId: string,
-  range: StatsRange,
+  from: Date | null,
   timeZone: string,
-): Promise<DailyVolumePoint[]> {
-  const from = rangeToFromDate(range);
+  bucket: "day" | "week",
+): Promise<VolumeBucket[]> {
+  const keyExpr =
+    bucket === "week"
+      ? sql<string>`to_char(date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`
+      : sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`;
 
   const rows = await db
     .select({
-      day: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
+      key: keyExpr,
       volume: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
       sets: sql<number>`COUNT(${schema.workoutSets.id})`,
       reps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}), 0)`,
@@ -78,17 +87,85 @@ export async function dailyVolume(
         from ? gte(schema.workouts.startedAt, from) : undefined,
       ),
     )
-    // Группируем/сортируем по порядковому номеру select-колонки (день в TZ
-    // юзера = колонка 1). Параметр TZ в выражении нельзя повторять в GROUP BY:
-    // bound-плейсхолдеры ($1 vs $N) не считаются равными → ordinal надёжнее.
-    .groupBy(sql`1`)
-    .orderBy(sql`1`);
+    // Ordinal-группировка (бакет в TZ юзера = колонка 1): bound-параметр TZ
+    // нельзя повторять в GROUP BY ($1 vs $N не равны) → ordinal надёжнее.
+    .groupBy(sql`1`);
 
   return rows.map((r) => ({
-    date: r.day,
+    key: r.key,
     volume: Number(r.volume),
     sets: Number(r.sets),
     reps: Number(r.reps),
+  }));
+}
+
+/** Объём круговых по бакету (день/неделя) в TZ юзера: каждый невыполненный-
+ *  пропуск раунд завершённой circuit-сессии. Тоннаж = actualWeightKg·actualReps
+ *  (bodyweight → 0), подходы = COUNT раундов, повторы = SUM(actualReps). Бакетит
+ *  и фильтрует по circuitRoundLogs.completedAt (как muscleHeatProfile) — один
+ *  скан по логам без muscle-join, подход не задваивается. */
+async function circuitVolumeBuckets(
+  userId: string,
+  from: Date | null,
+  timeZone: string,
+  bucket: "day" | "week",
+): Promise<VolumeBucket[]> {
+  const keyExpr =
+    bucket === "week"
+      ? sql<string>`to_char(date_trunc('week', ${schema.circuitRoundLogs.completedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`
+      : sql<string>`to_char(${schema.circuitRoundLogs.completedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`;
+
+  const rows = await db
+    .select({
+      key: keyExpr,
+      volume: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}), 0)`,
+      sets: sql<number>`COUNT(${schema.circuitRoundLogs.id})`,
+      reps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}), 0)`,
+    })
+    .from(schema.circuitRoundLogs)
+    .innerJoin(
+      schema.circuitWorkouts,
+      eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+    )
+    .where(
+      and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "completed"),
+        eq(schema.circuitRoundLogs.skipped, false),
+        from ? gte(schema.circuitRoundLogs.completedAt, from) : undefined,
+      ),
+    )
+    .groupBy(sql`1`);
+
+  return rows.map((r) => ({
+    key: r.key,
+    volume: Number(r.volume),
+    sets: Number(r.sets),
+    reps: Number(r.reps),
+  }));
+}
+
+/** Объём по дням за период — силовые working-подходы И круговые раунды,
+ *  слитые по дню (`mergeVolumeBuckets`). Дни бакетятся в `timeZone` юзера —
+ *  РОВНО как история `/workouts` (G1). Раньше круговая тренировка не давала
+ *  столбика на графике объёма (и на week-strip дашборда). */
+export async function dailyVolume(
+  userId: string,
+  range: StatsRange,
+  timeZone: string,
+): Promise<DailyVolumePoint[]> {
+  const from = rangeToFromDate(range);
+
+  const [strength, circuit] = await Promise.all([
+    strengthVolumeBuckets(userId, from, timeZone, "day"),
+    circuitVolumeBuckets(userId, from, timeZone, "day"),
+  ]);
+
+  return mergeVolumeBuckets([strength, circuit]).map((b) => ({
+    date: b.key,
+    volume: b.volume,
+    sets: b.sets,
+    reps: b.reps,
   }));
 }
 
@@ -99,8 +176,8 @@ export type WeeklyVolumePoint = {
   reps: number;
 };
 
-/** Объём по неделям (ISO неделя, начало — понедельник). Границы недели
- *  считаются в `timeZone` юзера — РОВНО как история `/workouts` (G1). */
+/** Объём по неделям (ISO неделя, начало — понедельник) — силовые И круговые,
+ *  слитые по неделе. Границы недели считаются в `timeZone` юзера (G1). */
 export async function weeklyVolume(
   userId: string,
   range: StatsRange,
@@ -108,40 +185,16 @@ export async function weeklyVolume(
 ): Promise<WeeklyVolumePoint[]> {
   const from = rangeToFromDate(range);
 
-  const rows = await db
-    .select({
-      week: sql<string>`to_char(date_trunc('week', ${schema.workouts.startedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`,
-      volume: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
-      sets: sql<number>`COUNT(${schema.workoutSets.id})`,
-      reps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}), 0)`,
-    })
-    .from(schema.workoutSets)
-    .innerJoin(
-      schema.workoutExercises,
-      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
-    )
-    .innerJoin(
-      schema.workouts,
-      eq(schema.workouts.id, schema.workoutExercises.workoutId),
-    )
-    .where(
-      and(
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "completed"),
-        eq(schema.workoutSets.setType, "working"),
-        from ? gte(schema.workouts.startedAt, from) : undefined,
-      ),
-    )
-    // Ordinal-группировка (неделя в TZ юзера = колонка 1): bound-параметр TZ
-    // нельзя повторять в GROUP BY (см. dailyVolume).
-    .groupBy(sql`1`)
-    .orderBy(sql`1`);
+  const [strength, circuit] = await Promise.all([
+    strengthVolumeBuckets(userId, from, timeZone, "week"),
+    circuitVolumeBuckets(userId, from, timeZone, "week"),
+  ]);
 
-  return rows.map((r) => ({
-    weekStart: r.week,
-    volume: Number(r.volume),
-    sets: Number(r.sets),
-    reps: Number(r.reps),
+  return mergeVolumeBuckets([strength, circuit]).map((b) => ({
+    weekStart: b.key,
+    volume: b.volume,
+    sets: b.sets,
+    reps: b.reps,
   }));
 }
 
