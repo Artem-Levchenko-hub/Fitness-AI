@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -214,6 +214,10 @@ export type RecordSetInput = {
   rpe?: number | null;
   restSeconds?: number | null;
   setType?: SetTypeLiteral;
+  /** Стабильный client-UUID офлайн-подхода (H15.3 outbox). Передаётся при
+   *  реплее буферизованной записи — partial-unique делает повтор no-op
+   *  (онлайн-путь не передаёт → NULL → обычная вставка). */
+  clientSetId?: string | null;
 };
 
 export async function recordSet(
@@ -246,16 +250,26 @@ export async function recordSet(
       .limit(1);
     if (!we) throw new Error("Exercise not part of this workout");
 
-    await tx.insert(schema.workoutSets).values({
-      workoutExerciseId: input.workoutExerciseId,
-      setIndex: input.setIndex,
-      setType: input.setType ?? "working",
-      weightKg: input.weightKg,
-      reps: input.reps,
-      rpe: input.rpe ?? null,
-      restSeconds: input.restSeconds ?? null,
-      completedAt: new Date(),
-    });
+    await tx
+      .insert(schema.workoutSets)
+      .values({
+        workoutExerciseId: input.workoutExerciseId,
+        setIndex: input.setIndex,
+        setType: input.setType ?? "working",
+        weightKg: input.weightKg,
+        reps: input.reps,
+        rpe: input.rpe ?? null,
+        restSeconds: input.restSeconds ?? null,
+        clientSetId: input.clientSetId ?? null,
+        completedAt: new Date(),
+      })
+      // Реплей одного и того же офлайн-подхода (тот же clientSetId) — no-op:
+      // дренаж outbox идемпотентен (H15.4). Онлайн-путь даёт clientSetId=null,
+      // partial-unique его исключает → конфликта нет, обычная вставка.
+      .onConflictDoNothing({
+        target: schema.workoutSets.clientSetId,
+        where: sql`${schema.workoutSets.clientSetId} is not null`,
+      });
   });
 }
 

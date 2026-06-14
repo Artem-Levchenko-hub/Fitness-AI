@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   doublePrecision,
   index,
@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
@@ -87,6 +88,11 @@ export const workoutSets = pgTable(
     reps: integer("reps").notNull(),
     rpe: doublePrecision("rpe"),
     restSeconds: integer("rest_seconds"),
+    /** Стабильный client-generated UUID офлайн-подхода (H15.3 outbox). NULL для
+     *  всех онлайн/legacy-строк. Канонический ключ идемпотентности реплея:
+     *  partial-unique ниже отвергает дубль ТОЛЬКО среди non-null значений —
+     *  legacy-строки не трогаются (столп 4). */
+    clientSetId: text("client_set_id"),
     completedAt: timestamp("completed_at", {
       mode: "date",
       withTimezone: true,
@@ -95,6 +101,9 @@ export const workoutSets = pgTable(
   (t) => [
     index("workout_sets_we_idx").on(t.workoutExerciseId, t.setIndex),
     index("workout_sets_completed_idx").on(t.completedAt),
+    uniqueIndex("workout_sets_client_set_id_uq")
+      .on(t.clientSetId)
+      .where(sql`${t.clientSetId} is not null`),
   ],
 );
 

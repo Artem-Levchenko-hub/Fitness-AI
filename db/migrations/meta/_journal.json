@@ -127,6 +127,13 @@
       "when": 1781400062913,
       "tag": "0017_short_loners",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781434692855,
+      "tag": "0018_lonely_machine_man",
+      "breakpoints": true
     }
   ]
 }
