@@ -1,64 +1,26 @@
-import { cancelCardioAction } from "@/server/actions/cardio";
-import { cancelCircuitAction } from "@/server/actions/circuits";
-import { cancelWorkoutAction } from "@/server/actions/workouts";
-
-import type { ResumeCancel } from "./ResumeBanner";
-
-export type Resume = { href: string; label: string; cancel?: ResumeCancel };
+export type Resume = { href: string; label: string };
 
 /** Единая сборка resume-баннеров активных сессий (силовая / круговая / кардио)
- *  для дашборда и /workouts — одна правда о подписях и кнопке «Убрать»,
- *  чтобы тексты не разъезжались между двумя экранами. Все три формата несут
- *  «Убрать» (H2): зависшую активную сессию можно отменить прямо из баннера, не
- *  заходя в неё — иначе брошенный active-сеанс висел бы «фантомом» вечно. */
+ *  для дашборда, /workouts и глобальной полосы — одна правда о подписях, чтобы
+ *  тексты не разъезжались между экранами. Только навигация «Продолжить»:
+ *  отмена («Убрать») живёт в карточке самой сессии (H12.4 под-слайс 1), а не в
+ *  resume-баннере — поэтому модуль без зависимостей (server-actions не тащим). */
 export function buildResumes(opts: {
   activeId: string | null;
   activeCircuitId: string | null;
   activeCardioId: string | null;
 }): Resume[] {
   const { activeId, activeCircuitId, activeCardioId } = opts;
-  const cancelDescription =
-    "Сессия будет отменена. Прогресс не попадёт в историю и статистику.";
 
   const entries: (Resume | null)[] = [
     activeId
-      ? {
-          href: `/workouts/${activeId}`,
-          label: "Активная тренировка",
-          cancel: {
-            action: cancelWorkoutAction,
-            idField: "workoutId",
-            id: activeId,
-            title: "Убрать активную тренировку?",
-            description: cancelDescription,
-          },
-        }
+      ? { href: `/workouts/${activeId}`, label: "Активная тренировка" }
       : null,
     activeCircuitId
-      ? {
-          href: `/circuits/${activeCircuitId}`,
-          label: "Активная круговая",
-          cancel: {
-            action: cancelCircuitAction,
-            idField: "circuitId",
-            id: activeCircuitId,
-            title: "Убрать активную круговую?",
-            description: cancelDescription,
-          },
-        }
+      ? { href: `/circuits/${activeCircuitId}`, label: "Активная круговая" }
       : null,
     activeCardioId
-      ? {
-          href: `/cardio/${activeCardioId}`,
-          label: "Активная кардио-сессия",
-          cancel: {
-            action: cancelCardioAction,
-            idField: "cardioId",
-            id: activeCardioId,
-            title: "Убрать активную кардио-сессию?",
-            description: cancelDescription,
-          },
-        }
+      ? { href: `/cardio/${activeCardioId}`, label: "Активная кардио-сессия" }
       : null,
   ];
 
