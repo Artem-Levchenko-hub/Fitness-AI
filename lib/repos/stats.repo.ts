@@ -22,6 +22,10 @@ import {
   type WeeklyKeyMovement,
 } from "@/lib/ai/weekly-review";
 import { estimatedOneRepMax } from "@/lib/domain/progression/one-rep-max";
+import {
+  combineActivityTotals,
+  type ActivityTotals,
+} from "@/lib/domain/stats/activity-totals";
 import { rangeToFromDate, type StatsRange } from "@/lib/domain/stats/range";
 import { isoWeekKey } from "@/lib/domain/cycle/iso-week";
 import { addDaysIso, isoWeekStartIso } from "@/lib/datetime/iso-week";
@@ -481,10 +485,49 @@ async function countCompletedSessions(
   return Number(row?.count ?? 0);
 }
 
-/** Главные KPI-карточки на /stats. «Тренировок» считает ВСЕ форматы (силовые
- *  + круговые + кардио). Подходы/повторения/тоннаж — метрики взвешенных
- *  подходов, поэтому остаются по силовым (у круговой/кардио нет весового
- *  тоннажа; объём по группам мышц ниже уже включает круговые). */
+/** Вклад круговых тренировок в KPI-итоги за окно периода: каждый невыполненный-
+ *  пропуск раунд (circuit_round_logs.skipped=false завершённой circuit-сессии) =
+ *  один подход. Повторы = actualReps (duration-раунд без повторов → 0); тоннаж =
+ *  actualWeightKg·actualReps там где есть вес (bodyweight → 0). Окно — по
+ *  circuitWorkouts.startedAt (паритет с `countCompletedSessions`). Один скан по
+ *  логам без muscle-join → подход не задваивается по группам мышц. */
+async function circuitEffortTotals(
+  userId: string,
+  from: Date | null,
+): Promise<ActivityTotals> {
+  const [agg] = await db
+    .select({
+      sets: sql<number>`COUNT(${schema.circuitRoundLogs.id})`,
+      reps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}), 0)`,
+      tonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}), 0)`,
+    })
+    .from(schema.circuitRoundLogs)
+    .innerJoin(
+      schema.circuitWorkouts,
+      eq(schema.circuitWorkouts.id, schema.circuitRoundLogs.circuitWorkoutId),
+    )
+    .where(
+      and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "completed"),
+        eq(schema.circuitRoundLogs.skipped, false),
+        from ? gte(schema.circuitWorkouts.startedAt, from) : undefined,
+      ),
+    );
+
+  return {
+    sets: Number(agg?.sets ?? 0),
+    reps: Number(agg?.reps ?? 0),
+    tonnageKg: Number(agg?.tonnage ?? 0),
+  };
+}
+
+/** Главные KPI-карточки на /stats. Учитывает ВСЮ активность: «Тренировок»
+ *  считает все форматы (силовые + круговые + кардио), а Подходы/Повторения/
+ *  Тоннаж теперь складывают силовые рабочие подходы И круговые раунды
+ *  (`combineActivityTotals`) — раньше круговая тренировка давала противоречивую
+ *  карточку «N тренировок / 0 подходов». Кардио в подходы/тоннаж не входит (нет
+ *  подходов/веса) — оно учтено как сессия в «Тренировок». */
 export async function topLineKpi(
   userId: string,
   range: StatsRange,
@@ -518,7 +561,7 @@ export async function topLineKpi(
       ),
     );
 
-  const [circuitCount, cardioCount] = await Promise.all([
+  const [circuitCount, cardioCount, circuitEffort] = await Promise.all([
     countCompletedSessions(
       schema.circuitWorkouts,
       schema.circuitWorkouts.userId,
@@ -535,13 +578,23 @@ export async function topLineKpi(
       userId,
       from,
     ),
+    circuitEffortTotals(userId, from),
+  ]);
+
+  const totals = combineActivityTotals([
+    {
+      sets: Number(agg?.sets ?? 0),
+      reps: Number(agg?.reps ?? 0),
+      tonnageKg: Number(agg?.tonnage ?? 0),
+    },
+    circuitEffort,
   ]);
 
   return {
     workouts: Number(agg?.workouts ?? 0) + circuitCount + cardioCount,
-    totalSets: Number(agg?.sets ?? 0),
-    totalReps: Number(agg?.reps ?? 0),
-    totalTonnageKg: Number(agg?.tonnage ?? 0),
+    totalSets: totals.sets,
+    totalReps: totals.reps,
+    totalTonnageKg: totals.tonnageKg,
   };
 }
 
