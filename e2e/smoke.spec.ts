@@ -57,9 +57,14 @@ test("H12.3 нав-гигиена: /settings — заголовок «Настр
   ).toHaveCount(0);
 
   // (б) Back-link /friends ведёт на главную, не в настройки (артефакт эпохи
-  // «друзья погребены за 3 тапа в /settings»).
+  // «друзья погребены за 3 тапа в /settings»). Скоупим в <main>: BottomTabBar
+  // (nav «Главная навигация») несёт ПОСТОЯННУЮ вкладку «Главная» → /dashboard на
+  // каждом (app)-экране, поэтому глобальный getByRole('link', {name:'Главная'})
+  // даёт strict-mode-конфликт двух якорей; нам нужен именно in-page back-link.
   await page.goto("/friends");
-  const back = page.getByRole("link", { name: "Главная" });
+  const back = page
+    .getByRole("main")
+    .getByRole("link", { name: "Главная" });
   await expect(back).toHaveAttribute("href", "/dashboard");
   await back.click();
   await expect(page).toHaveURL(/\/dashboard/);
