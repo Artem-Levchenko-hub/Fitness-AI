@@ -3,11 +3,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import {
+  friendEventFormat,
+  friendEventMeta,
+} from "@/lib/domain/friends/friend-activity";
 import { requireUser } from "@/lib/auth/require-user";
 import {
-  listFriendsDetailed,
+  listFriendsActivity,
   listIncomingRequestsDetailed,
   listOutgoingRequestsDetailed,
+  type FriendActivity,
   type FriendshipWithUser,
 } from "@/lib/repos/friends.repo";
 import { acceptFriendRequestAction } from "@/server/actions/friends";
@@ -24,7 +29,7 @@ function displayName(u: FriendshipWithUser["user"]): string {
 export default async function FriendsPage() {
   const user = await requireUser();
   const [friends, incoming, outgoing] = await Promise.all([
-    listFriendsDetailed(user.id),
+    listFriendsActivity(user.id),
     listIncomingRequestsDetailed(user.id),
     listOutgoingRequestsDetailed(user.id),
   ]);
@@ -134,27 +139,8 @@ export default async function FriendsPage() {
         ) : (
           <ul className="space-y-3">
             {friends.map((f) => (
-              <li key={f.friendshipId}>
-                <Link
-                  href={`/friends/${f.user.id}`}
-                  className="bg-card hover:bg-accent/40 border-border flex min-h-14 items-center gap-3 rounded-2xl border p-4 transition-colors"
-                >
-                  <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-                    {displayName(f.user).charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold tracking-tight">
-                      {displayName(f.user)}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                      {f.user.email}
-                    </p>
-                  </div>
-                  <ChevronRight
-                    className="text-muted-foreground size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                </Link>
+              <li key={f.user.id}>
+                <FriendActivityCard activity={f} />
               </li>
             ))}
           </ul>
@@ -162,4 +148,57 @@ export default async function FriendsPage() {
       </section>
     </main>
   );
+}
+
+/** Карточка друга в ленте: аватар · имя · последнее событие любого формата
+ *  (бейдж формата + дата + метрика) ИЛИ строка «Пока нет тренировок» (R-37 —
+ *  без события строка, а не пустая карточка). Тап ≥56px (min-h-14, R-41). */
+function FriendActivityCard({ activity }: { activity: FriendActivity }) {
+  const { user, lastEvent } = activity;
+  return (
+    <Link
+      href={`/friends/${user.id}`}
+      className="bg-card hover:bg-accent/40 border-border flex min-h-14 items-center gap-3 rounded-2xl border p-4 transition-colors"
+    >
+      <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+        {displayName(user).charAt(0).toUpperCase()}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold tracking-tight">
+          {displayName(user)}
+        </p>
+        {lastEvent ? (
+          <>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="bg-muted/60 text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+                {friendEventFormat(lastEvent)}
+              </span>
+              <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+                {formatShortDate(lastEvent.startedAt)}
+              </span>
+            </div>
+            <p className="text-muted-foreground tabular mt-0.5 truncate text-xs">
+              {lastEvent.name} · {friendEventMeta(lastEvent)}
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground mt-0.5 truncate text-xs">
+            Пока нет тренировок
+          </p>
+        )}
+      </div>
+      <ChevronRight
+        className="text-muted-foreground size-4 shrink-0"
+        aria-hidden="true"
+      />
+    </Link>
+  );
+}
+
+function formatShortDate(d: Date): string {
+  return d.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "short",
+    weekday: "short",
+  });
 }

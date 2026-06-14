@@ -796,6 +796,24 @@ test("/workouts: три формата (силовая+круговая+кард
   ).toBeVisible();
 });
 
+test("H3.2 — лента /friends показывает последнее событие друга (формат + тоннаж)", async ({
+  page,
+}) => {
+  test.skip(
+    !friendId,
+    "E2E_FRIEND_ID не задан — засеять через scripts/e2e-seed.mjs на проде",
+  );
+  await page.goto("/friends");
+  // Карточка друга в списке = ссылка на его профиль; внутри — бейдж формата
+  // последнего события и метрика. Друг засеян завершённой силовой 100×5+80×5.
+  const card = page.locator(`a[href="/friends/${friendId}"]`).first();
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Силовая");
+  // Тоннаж рабочих подходов 100×5 + 80×5 = 900 kg·reps — совпадает со страницей
+  // друга (гейт H3.2 «тоннаж совпадает со страницей друга»).
+  await expect(card).toContainText("900 kg·reps");
+});
+
 test("/friends → переход в профиль друга", async ({ page }) => {
   test.skip(
     !friendId,

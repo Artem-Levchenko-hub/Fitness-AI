@@ -35,6 +35,9 @@ import { encode } from "next-auth/jwt";
 const VERIFY_EMAIL = "claude-verify@local.test";
 const FRIEND_EMAIL = "claude-friend@local.test";
 const WORKOUT_MARKER = "E2E Smoke — Жим";
+// H3.2 — завершённая силовая ДРУГА: носитель для ленты активности на /friends
+// (последнее событие друга + тоннаж, совпадающий с его страницей).
+const FRIEND_WORKOUT_MARKER = "E2E Smoke — Друг жим";
 // H13.5 — прошлая силовая (предшественник для блока «Прошлый совет»).
 const PREV_WORKOUT_MARKER = "E2E Smoke — Жим (прошлый)";
 // H7.4 — маркеры круговой и кардио для фида трёх форматов в одном списке.
@@ -151,6 +154,35 @@ try {
                                   weight_kg, reps, rpe, completed_at)
         values (${randomUUID()}, ${weId}, ${s.idx}, ${s.type}, ${s.w}, ${s.reps},
                 ${s.rpe}, ${finishedAt})`;
+    }
+
+    // H3.2 — ДРУГУ завершённую силовую: на /friends лента показывает его
+    // последнее событие. Тоннаж рабочих подходов (100×5 + 80×5 = 900 kg·reps)
+    // совпадает с тем, что считает его страница друга (гейт «тоннаж совпадает»).
+    await sql`
+      delete from workouts where user_id = ${friendId} and name = ${FRIEND_WORKOUT_MARKER}`;
+    const friendStarted = new Date(Date.now() - 50 * 60 * 1000); // 50 мин назад
+    const friendFinished = new Date(Date.now() - 25 * 60 * 1000);
+    const friendWorkoutId = randomUUID();
+    await sql`
+      insert into workouts (id, user_id, name, status, started_at, finished_at,
+                            total_duration_seconds)
+      values (${friendWorkoutId}, ${friendId}, ${FRIEND_WORKOUT_MARKER},
+              'completed', ${friendStarted}, ${friendFinished}, 1500)`;
+    const friendWeId = randomUUID();
+    await sql`
+      insert into workout_exercises (id, workout_id, exercise_id, position)
+      values (${friendWeId}, ${friendWorkoutId}, ${exerciseId}, 0)`;
+    const friendSets = [
+      { idx: 0, type: "working", w: 100, reps: 5, rpe: 8 },
+      { idx: 1, type: "working", w: 80, reps: 5, rpe: 9 },
+    ];
+    for (const s of friendSets) {
+      await sql`
+        insert into workout_sets (id, workout_exercise_id, set_index, set_type,
+                                  weight_kg, reps, rpe, completed_at)
+        values (${randomUUID()}, ${friendWeId}, ${s.idx}, ${s.type}, ${s.w},
+                ${s.reps}, ${s.rpe}, ${friendFinished})`;
     }
 
     // Детерминированный structured-разбор (форма TrainerResponse, проходит
@@ -521,6 +553,8 @@ try {
     console.log("STRENGTH_TEMPLATE_ID=" + strengthTemplateId);
     console.log("USER_ID=" + verifyId);
     console.log("FRIEND_ID=" + friendId);
+    console.log("FRIEND_WORKOUT_NAME=" + FRIEND_WORKOUT_MARKER);
+    console.log("FRIEND_WORKOUT_ID=" + friendWorkoutId);
     console.log("WORKOUT_ID=" + workoutId);
     console.log("PREV_WORKOUT_ID=" + prevWorkoutId);
     console.log("EXERCISE_ID=" + exerciseId);

@@ -2,6 +2,14 @@ import { and, eq, inArray, or } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import {
+  selectLastEvent,
+  sortFriendsByRecency,
+} from "@/lib/domain/friends/friend-activity";
+import type { HistoryItem } from "@/lib/domain/workouts/history";
+import { listRecentCardio } from "@/lib/repos/cardio.repo";
+import { listCircuits } from "@/lib/repos/circuits.repo";
+import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 /** Публичная карточка друга/заявителя — минимум для UI (без приватных полей). */
 export type FriendUser = { id: string; name: string | null; email: string };
@@ -226,6 +234,43 @@ export async function listFriendsDetailed(
   return attachPartner(rows, (r) =>
     r.requesterId === userId ? r.addresseeId : r.requesterId,
   );
+}
+
+/** Друг + его последнее завершённое событие любого формата (H3.2). */
+export type FriendActivity = {
+  user: FriendUser;
+  lastEvent: HistoryItem | null;
+};
+
+/** Лента активности друзей: для каждого принятого друга — последнее событие
+ *  среди всех трёх форматов (силовая+круговая+кардио). R-7: данные тянем ТОЛЬКО
+ *  для подтверждённых друзей (listFriendsDetailed уже отфильтровал accepted —
+ *  тот же гейт, что прямое чтение тренировок друга по friendId). Порядок —
+ *  лента (новые сверху, без событий в конец) через чистую sortFriendsByRecency.
+ *  Без realtime/websocket (YAGNI). */
+export async function listFriendsActivity(
+  userId: string,
+): Promise<FriendActivity[]> {
+  const friends = await listFriendsDetailed(userId);
+  if (friends.length === 0) return [];
+
+  const activity = await Promise.all(
+    friends.map(async (f): Promise<FriendActivity> => {
+      // Небольшой лимит на формат: последнее завершённое событие всегда среди
+      // самых свежих строк (active/cancelled отсеивает buildHistory внутри).
+      const [strength, circuits, cardio] = await Promise.all([
+        listRecentWorkouts(f.user.id, 8),
+        listCircuits(f.user.id, 8),
+        listRecentCardio(f.user.id, 8),
+      ]);
+      return {
+        user: f.user,
+        lastEvent: selectLastEvent(strength, circuits, cardio),
+      };
+    }),
+  );
+
+  return sortFriendsByRecency(activity);
 }
 
 /** Входящие заявки с карточкой отправителя (requester). R-7. */
