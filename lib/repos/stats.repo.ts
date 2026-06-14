@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { mergeDailyFrequency } from "@/lib/domain/stats/frequency-merge";
 import { MUSCLE_KEYS } from "@/lib/domain/avatar/heat";
 import {
   weeklyVolumeSeries,
@@ -374,8 +376,42 @@ export type FrequencyPoint = {
   count: number;
 };
 
-/** Календарная активность — сколько тренировок в каждый день
- *  (для heatmap-графика). Дни — в timezone юзера (G1, как `/workouts`). */
+/** Посуточный счётчик completed-сессий одного формата (один табличный
+ *  источник) в TZ юзера. Общий бакет-ключ ('YYYY-MM-DD' в TZ) у всех трёх
+ *  форматов — потому их потом можно слить `mergeDailyFrequency`. */
+async function dailyCompletedCounts(
+  table: PgTable,
+  userIdCol: PgColumn,
+  statusCol: PgColumn,
+  startedAtCol: PgColumn,
+  userId: string,
+  from: Date | null,
+  timeZone: string,
+): Promise<FrequencyPoint[]> {
+  const rows = await db
+    .select({
+      date: sql<string>`to_char(${startedAtCol} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(table)
+    .where(
+      and(
+        eq(userIdCol, userId),
+        eq(statusCol, "completed"),
+        from ? gte(startedAtCol, from) : undefined,
+      ),
+    )
+    // Ordinal-группировка (день в TZ юзера = колонка 1): bound-параметр TZ
+    // нельзя повторять в GROUP BY (см. dailyVolume).
+    .groupBy(sql`1`);
+
+  return rows.map((r) => ({ date: r.date, count: Number(r.count) }));
+}
+
+/** Календарная активность — сколько тренировок в каждый день (для
+ *  heatmap-графика). Считает ВСЕ форматы: силовые + круговые + кардио (как
+ *  счётчик WeekCard дашборда после H12.0 — день с любой тренировкой виден).
+ *  Дни — в timezone юзера (G1, как `/workouts`). */
 export async function workoutFrequency(
   userId: string,
   range: StatsRange,
@@ -383,27 +419,37 @@ export async function workoutFrequency(
 ): Promise<FrequencyPoint[]> {
   const from = rangeToFromDate(range);
 
-  const rows = await db
-    .select({
-      date: sql<string>`to_char(${schema.workouts.startedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
-      count: sql<number>`COUNT(*)`,
-    })
-    .from(schema.workouts)
-    .where(
-      and(
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "completed"),
-        from ? gte(schema.workouts.startedAt, from) : undefined,
-      ),
-    )
-    // Ordinal-группировка (день в TZ юзера = колонка 1): bound-параметр TZ
-    // нельзя повторять в GROUP BY (см. dailyVolume).
-    .groupBy(sql`1`);
+  const [strength, circuit, cardio] = await Promise.all([
+    dailyCompletedCounts(
+      schema.workouts,
+      schema.workouts.userId,
+      schema.workouts.status,
+      schema.workouts.startedAt,
+      userId,
+      from,
+      timeZone,
+    ),
+    dailyCompletedCounts(
+      schema.circuitWorkouts,
+      schema.circuitWorkouts.userId,
+      schema.circuitWorkouts.status,
+      schema.circuitWorkouts.startedAt,
+      userId,
+      from,
+      timeZone,
+    ),
+    dailyCompletedCounts(
+      schema.cardioWorkouts,
+      schema.cardioWorkouts.userId,
+      schema.cardioWorkouts.status,
+      schema.cardioWorkouts.startedAt,
+      userId,
+      from,
+      timeZone,
+    ),
+  ]);
 
-  return rows.map((r) => ({
-    date: r.date,
-    count: Number(r.count),
-  }));
+  return mergeDailyFrequency([strength, circuit, cardio]);
 }
 
 export type TopLineKpi = {
@@ -413,7 +459,32 @@ export type TopLineKpi = {
   totalTonnageKg: number;
 };
 
-/** Главные KPI-карточки на /stats. */
+/** Число completed-сессий одного формата (по своей таблице) в окне периода. */
+async function countCompletedSessions(
+  table: PgTable,
+  userIdCol: PgColumn,
+  statusCol: PgColumn,
+  startedAtCol: PgColumn,
+  userId: string,
+  from: Date | null,
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(table)
+    .where(
+      and(
+        eq(userIdCol, userId),
+        eq(statusCol, "completed"),
+        from ? gte(startedAtCol, from) : undefined,
+      ),
+    );
+  return Number(row?.count ?? 0);
+}
+
+/** Главные KPI-карточки на /stats. «Тренировок» считает ВСЕ форматы (силовые
+ *  + круговые + кардио). Подходы/повторения/тоннаж — метрики взвешенных
+ *  подходов, поэтому остаются по силовым (у круговой/кардио нет весового
+ *  тоннажа; объём по группам мышц ниже уже включает круговые). */
 export async function topLineKpi(
   userId: string,
   range: StatsRange,
@@ -447,8 +518,27 @@ export async function topLineKpi(
       ),
     );
 
+  const [circuitCount, cardioCount] = await Promise.all([
+    countCompletedSessions(
+      schema.circuitWorkouts,
+      schema.circuitWorkouts.userId,
+      schema.circuitWorkouts.status,
+      schema.circuitWorkouts.startedAt,
+      userId,
+      from,
+    ),
+    countCompletedSessions(
+      schema.cardioWorkouts,
+      schema.cardioWorkouts.userId,
+      schema.cardioWorkouts.status,
+      schema.cardioWorkouts.startedAt,
+      userId,
+      from,
+    ),
+  ]);
+
   return {
-    workouts: Number(agg?.workouts ?? 0),
+    workouts: Number(agg?.workouts ?? 0) + circuitCount + cardioCount,
     totalSets: Number(agg?.sets ?? 0),
     totalReps: Number(agg?.reps ?? 0),
     totalTonnageKg: Number(agg?.tonnage ?? 0),
