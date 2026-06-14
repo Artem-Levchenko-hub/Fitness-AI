@@ -1381,11 +1381,24 @@ async function buildCircuitFocusedContext(
     );
   }
 
+  // Сигнал нагрузки: максимальный рабочий вес среди выполненных слотов. Если
+  // есть существенный вес — это силовая работа в круговом формате (не кардио),
+  // и тренер обязан разбирать её по нагрузке, а не по плотности (анти-«добавь
+  // силовые», когда они уже есть).
+  const maxWorkingWeight = logs
+    .filter((l) => !l.skipped && l.actualWeightKg != null)
+    .reduce((m, l) => Math.max(m, l.actualWeightKg as number), 0);
+  const loadSignal =
+    maxWorkingWeight > 0
+      ? `Рабочий вес в кругах: до ${maxWorkingWeight} кг — это НАГРУЖЕННАЯ (силовая) работа в круговом формате. Разбирай по нагрузке и прогрессии движений, как силовую, не как кардио; не советуй «добавить силовые» — они уже здесь.`
+      : "";
+
   return [
     `# Сегодняшняя круговая\n`,
     `**${w.name}** · ${formatDate(w.startedAt)}`,
     `Кругов план: ${w.totalRounds} · упражнений: ${exercises.length} · слотов всего: ${totalSlots}`,
     `Выполнено: ${completedSlots} · пропущено: ${skippedSlots}`,
+    loadSignal,
     `Отдых: ${w.restBetweenExercisesSec}с между упр., ${w.restBetweenRoundsSec}с между кругами`,
     durationMin != null ? `Длительность: ${durationMin} мин` : "",
     w.status !== "completed" ? `_статус: ${w.status}_` : "",

@@ -32,7 +32,7 @@ export const JSON_SHAPE_INSTRUCTION = `Верни ТОЛЬКО валидный 
   "trainingQuality": { "score": <целое 0..100>, "comment": <строка, 1-2 предложения на русском> },
   "recoveryContext": { "score": <целое 0..100 ИЛИ null если нет данных о сне>, "comment": <строка> },
   "nutritionContext": { "score": <целое 0..100 ИЛИ null если нет данных о КБЖУ>, "comment": <строка> },
-  "exerciseComparisons": [ { "name": <упражнение>, "prevTopSet": <"60×5" ИЛИ null если раньше не было>, "curTopSet": <"60×6">, "deltaReps": <число ИЛИ null>, "deltaWeightKg": <число ИЛИ null>, "status": <"improved"|"regressed"|"stagnant"|"new"> } ] (3-6 ключевых упр. сегодняшней силовой; [] если не силовая),
+  "exerciseComparisons": [ { "name": <упражнение>, "prevTopSet": <"60×5" ИЛИ null если раньше не было>, "curTopSet": <"60×6">, "deltaReps": <число ИЛИ null>, "deltaWeightKg": <число ИЛИ null>, "status": <"improved"|"regressed"|"stagnant"|"new"> } ] (3-6 ключевых нагруженных движений сессии — включая движения круговой с весом; [] только если нагруженных движений не было),
   "recommendations": [<строка>, ...] (3-5 элементов),
   "nextSessionFocus": <строка — ОДНА конкретная корректировка на след. сессию с цифрой>,
   "missingDataAdvice": <строка ИЛИ null>,
