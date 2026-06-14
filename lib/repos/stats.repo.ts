@@ -4,6 +4,10 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { MUSCLE_KEYS } from "@/lib/domain/avatar/heat";
 import {
+  weeklyVolumeSeries,
+  type WeeklyVolumeContribution,
+} from "@/lib/domain/avatar/weekly-volume";
+import {
   topMuscleRecords,
   type MuscleRecord,
 } from "@/lib/domain/avatar/muscle-records";
@@ -190,6 +194,72 @@ export async function volumeByMuscle(
   return Array.from(acc.entries())
     .map(([muscleKey, volume]) => ({ muscleKey, volume }))
     .sort((a, b) => b.volume - a.volume);
+}
+
+/** Тоннаж каждой группы мышц по последним `weeks` ISO-неделям (H17.1 «нагрев по
+ *  неделям» — тело→время в панели мышцы). Один скан силовых working-сетов с
+ *  role-fold (primary 1.0 / secondary 0.5) — та же семантика и источник, что
+ *  `volumeByMuscle` (круговые НЕ считаются — паритет с барами /stats). Бакетит
+ *  чистой `weeklyVolumeSeries` (срез пустых краёв). Группы без истории в Map
+ *  отсутствуют → datum получает []. */
+export async function muscleWeeklyVolume(
+  userId: string,
+  now: Date,
+  timeZone: string,
+  weeks: number,
+): Promise<Map<string, number[]>> {
+  // Окно с запасом ±2 дня — точную принадлежность недели решает чистая функция
+  // по TZ-границе; запрос лишь грубо отсекает старое.
+  const from = new Date(now.getTime() - (weeks * 7 + 2) * DAY_MS);
+
+  const rows = await db
+    .select({
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      role: schema.exerciseMuscleGroups.role,
+      weight: schema.workoutSets.weightKg,
+      reps: schema.workoutSets.reps,
+      at: schema.workouts.startedAt,
+    })
+    .from(schema.workoutSets)
+    .innerJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.id, schema.workoutSets.workoutExerciseId),
+    )
+    .innerJoin(
+      schema.workouts,
+      eq(schema.workouts.id, schema.workoutExercises.workoutId),
+    )
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.workoutExercises.exerciseId,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+        eq(schema.workoutSets.setType, "working"),
+        gte(schema.workouts.startedAt, from),
+      ),
+    );
+
+  const byMuscle = new Map<string, WeeklyVolumeContribution[]>();
+  for (const r of rows) {
+    if (r.weight == null || r.reps == null) continue;
+    const factor = r.role === "primary" ? 1 : 0.5;
+    const list = byMuscle.get(r.muscle) ?? [];
+    list.push({ at: r.at, volume: r.weight * r.reps * factor });
+    byMuscle.set(r.muscle, list);
+  }
+
+  const out = new Map<string, number[]>();
+  for (const [muscle, contribs] of byMuscle) {
+    const series = weeklyVolumeSeries(contribs, now, timeZone, weeks);
+    if (series.length > 0) out.set(muscle, series);
+  }
+  return out;
 }
 
 export type RepRangePoint = {

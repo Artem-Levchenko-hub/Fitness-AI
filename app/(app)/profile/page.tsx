@@ -14,7 +14,11 @@ import {
   muscleGroupRecords,
   muscleHeatProfile,
   muscleLastTrained,
+  muscleWeeklyVolume,
 } from "@/lib/repos/stats.repo";
+
+/** Сколько ISO-недель тоннажа показывает шаг «по неделям» в панели мышцы. */
+const WEEKLY_VOLUME_WEEKS = 6;
 
 export const metadata: Metadata = { title: "Профиль" };
 
@@ -27,15 +31,20 @@ export default async function ProfilePage({
   const now = new Date();
   const initialMuscle = parseMuscleParam((await searchParams).muscle);
 
-  const [heat, records, lastTrained, profile, measurement] = await Promise.all([
-    muscleHeatProfile(user.id, now),
-    muscleGroupRecords(user.id),
-    muscleLastTrained(user.id),
-    getUserProfile(user.id),
-    getLatestMeasurement(user.id),
-  ]);
+  // Профиль грузим первым — из него TZ для ISO-недельных бакетов (как dashboard).
+  const profile = await getUserProfile(user.id);
+  const tz = profile?.timezone ?? "Europe/Moscow";
 
-  const data = buildAvatarData(heat, now, records, lastTrained);
+  const [heat, records, lastTrained, weeklyVolume, measurement] =
+    await Promise.all([
+      muscleHeatProfile(user.id, now),
+      muscleGroupRecords(user.id),
+      muscleLastTrained(user.id),
+      muscleWeeklyVolume(user.id, now, tz, WEEKLY_VOLUME_WEEKS),
+      getLatestMeasurement(user.id),
+    ]);
+
+  const data = buildAvatarData(heat, now, records, lastTrained, weeklyVolume);
   const hasData = hasTrainingData(heat);
 
   const displayName = user.name?.trim() || user.email;

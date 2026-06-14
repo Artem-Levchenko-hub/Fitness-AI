@@ -8,13 +8,15 @@ import { forgottenLabel } from "@/lib/domain/avatar/forgotten";
 import type { AvatarMuscleDatum } from "./types";
 
 /** Оверлей-панель при тапе на мышцу. Прогрессивный цикл: тоннаж → подходы →
- *  последняя тренировка → топ-3 упражнения. Повторный тап (по мышце или по
- *  панели) листает цикл; все данные уже в datum — без сетевых запросов.
- *  Обычный DOM поверх canvas (легче и доступнее drei <Html>). */
+ *  последняя тренировка → топ-3 → рекорды → тоннаж по неделям (H17.1). Повторный
+ *  тап (по мышце или по панели) листает цикл; все данные уже в datum — без
+ *  сетевых запросов. Обычный DOM поверх canvas (легче и доступнее drei <Html>). */
 
 /** Число показателей в цикле панели. Экспортируется как единственный источник
- *  правды — обёртка (ProfileAvatar) берёт его же для модуля счётчика тапов. */
-export const CYCLE_LEN = 5;
+ *  правды — обёртка (ProfileAvatar) берёт его же для модуля счётчика тапов.
+ *  Шаги: 0 тоннаж 7д · 1 подходы · 2 последняя тренировка · 3 топ-3 ·
+ *  4 рекорды · 5 тоннаж по неделям (H17.1). */
+export const CYCLE_LEN = 6;
 
 type Props = {
   datum: AvatarMuscleDatum | null;
@@ -76,7 +78,7 @@ export function MuscleInfoPanel({
         </button>
       </div>
 
-      {step <= 2 ? (
+      {step <= 2 || step === 5 ? (
         <button
           type="button"
           onClick={onAdvance}
@@ -153,9 +155,62 @@ function CycleField({
       </div>
     );
   }
-  // step 0..2 здесь; списки упражнений (3 — топ за неделю, 4 — рекорды)
+  if (step === 5) {
+    return <WeeklyVolumeField series={datum.weeklyVolume} />;
+  }
+  // step 0..2 и 5 здесь; списки упражнений (3 — топ за неделю, 4 — рекорды)
   // рендерит ExerciseListField (строки-ссылки на /exercises/[id]).
   return null;
+}
+
+/** H17.1 — тоннаж группы по последним ISO-неделям (тело→время). Компактные
+ *  столбики высотой ∝ значению + подписи тоннажа под крайними неделями. Пустой
+ *  ряд (нет недельной истории) → пустое состояние (R-37). Только числа/высоты —
+ *  headless-верифицируемо, без 3D и без анимации (YAGNI). */
+function WeeklyVolumeField({ series }: { series: number[] }) {
+  if (series.length === 0) {
+    return (
+      <div>
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          Тоннаж по неделям
+        </p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Нет недельной истории.
+        </p>
+      </div>
+    );
+  }
+
+  const max = Math.max(...series);
+  const first = Math.round(series[0]).toLocaleString("ru");
+  const last = Math.round(series[series.length - 1]).toLocaleString("ru");
+
+  return (
+    <div>
+      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+        Тоннаж по неделям
+      </p>
+      <div
+        className="mt-2 flex h-12 items-end gap-1"
+        data-weekly-volume={series.map((v) => Math.round(v)).join(",")}
+      >
+        {series.map((v, i) => (
+          <span
+            key={i}
+            className="bg-foreground/70 min-h-0.5 flex-1 rounded-sm"
+            style={{ height: max > 0 ? `${(v / max) * 100}%` : "2px" }}
+            aria-hidden="true"
+          />
+        ))}
+      </div>
+      <p className="text-muted-foreground mt-1 flex items-center justify-between text-xs">
+        <span>{series.length} нед.</span>
+        <span className="tabular">
+          {first} → {last} кг·повт
+        </span>
+      </p>
+    </div>
+  );
 }
 
 /** Списки упражнений группы: топ-3 за неделю (step 3) или all-time рекорды

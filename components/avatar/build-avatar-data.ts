@@ -19,6 +19,9 @@ export function buildAvatarData(
   /** Всевременная дата последней нагрузки на группу (muscleLastTrained). Только
    *  свой /profile передаёт её — у друга «забытость» не показываем. */
   lastTrained?: Map<string, Date>,
+  /** H17.1 — тоннаж группы по ISO-неделям (muscleWeeklyVolume). Только свой
+   *  /profile передаёт его; без него шаг «по неделям» пуст (друг/дашборд). */
+  weeklyVolume?: Map<string, number[]>,
 ): AvatarMuscleDatum[] {
   return heat.map((m) => {
     const h = heatFromSets(m.weeklySets);
@@ -35,6 +38,7 @@ export function buildAvatarData(
       forgottenWeeks: forgottenWeeks(lastTrained?.get(m.muscleKey) ?? null, now),
       top3: m.top3,
       records: records?.get(m.muscleKey) ?? [],
+      weeklyVolume: weeklyVolume?.get(m.muscleKey) ?? [],
     };
   });
 }

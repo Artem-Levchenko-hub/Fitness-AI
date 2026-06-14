@@ -27,6 +27,10 @@ export type AvatarMuscleDatum = {
   forgottenWeeks: number | null;
   /** Топ-3 упражнения по вкладу за 7 дней. */
   top3: Array<{ exerciseId: string; name: string; volume: number }>;
+  /** H17.1 — тоннаж группы по последним ISO-неделям (oldest→newest), пустые края
+   *  срезаны (см. `weeklyVolumeSeries`). Пусто = нет недельной истории → шаг
+   *  «Тоннаж по неделям» в панели показывает пустое состояние. */
+  weeklyVolume: number[];
   /** All-time PR-рекорды группы: топ упражнений по 1ПМ с рекордным подходом
    *  (вес × повторы). Пусто, если силовых рекордов с весом нет. */
   records: Array<{
