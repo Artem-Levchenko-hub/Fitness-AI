@@ -28,7 +28,9 @@ export async function sendOtpEmail({
   const result = await resendClient().emails.send({
     from: env.EMAIL_FROM,
     to: email,
-    subject: `${formatCode(token)} — код входа в ${APP_NAME}`,
+    // Бренд в начале темы, код после: ведущие цифры в Subject — слабый
+    // спам-сигнал (улучшает попадание в инбокс вместе с DMARC).
+    subject: `Код для входа в ${APP_NAME}: ${formatCode(token)}`,
     text: textBody(token, url),
     html: htmlBody(token, url),
   });
