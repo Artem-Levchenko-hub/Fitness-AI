@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import {
   copyLibraryProgramToUser,
   deleteProgram,
+  setProgramActive,
   wrapTemplatesIntoProgram,
 } from "@/lib/repos/training-programs.repo";
 
@@ -67,6 +68,33 @@ export async function wrapTemplatesAction(
   revalidatePath("/programs");
   revalidatePath("/templates");
   redirect(`/programs/${id}`);
+}
+
+/** «Начать тренироваться» — активировать систему: её дни-шаблоны появляются в
+ *  общем списке «Шаблоны». Уводим туда же, чтобы атлет сразу их увидел. */
+export async function activateProgramAction(formData: FormData) {
+  const user = await requireUser();
+  const programId = String(formData.get("programId") ?? "");
+  if (!programId) throw new Error("Missing programId");
+
+  await setProgramActive(user.id, programId, true);
+  revalidatePath("/templates");
+  revalidatePath("/library");
+  revalidatePath(`/programs/${programId}`);
+  redirect("/templates");
+}
+
+/** Снять систему с активной — её дни прячутся из «Шаблонов» обратно на полку. */
+export async function deactivateProgramAction(formData: FormData) {
+  const user = await requireUser();
+  const programId = String(formData.get("programId") ?? "");
+  if (!programId) throw new Error("Missing programId");
+
+  await setProgramActive(user.id, programId, false);
+  revalidatePath("/templates");
+  revalidatePath("/library");
+  revalidatePath(`/programs/${programId}`);
+  redirect(`/programs/${programId}`);
 }
 
 export async function deleteProgramAction(formData: FormData) {

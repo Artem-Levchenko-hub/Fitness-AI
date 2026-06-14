@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -59,10 +59,20 @@ export async function listTemplates(
       schema.templateExercises,
       eq(schema.templateExercises.templateId, schema.workoutTemplates.id),
     )
+    // День системы виден в общем списке «Шаблоны» только когда система активна
+    // (activatedAt != null). Одиночные шаблоны (programId = null) — всегда.
+    .leftJoin(
+      schema.trainingPrograms,
+      eq(schema.trainingPrograms.id, schema.workoutTemplates.programId),
+    )
     .where(
       and(
         eq(schema.workoutTemplates.userId, userId),
         isNull(schema.workoutTemplates.archivedAt),
+        or(
+          isNull(schema.workoutTemplates.programId),
+          isNotNull(schema.trainingPrograms.activatedAt),
+        ),
       ),
     )
     .groupBy(schema.workoutTemplates.id)

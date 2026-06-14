@@ -23,6 +23,11 @@ export const trainingPrograms = pgTable(
     /** slug пресета из библиотеки, если программа скопирована оттуда; null —
      *  собрана вручную из своих шаблонов. Для бейджа «из библиотеки». */
     librarySlug: text("library_slug"),
+    /** Активна ли система: её дни-шаблоны показываются в общем списке «Шаблоны»
+     *  ТОЛЬКО когда активна. Библиотечная копия создаётся неактивной (на полке),
+     *  «Начать тренироваться» активирует; обёртка своих шаблонов — сразу активна
+     *  (они уже были в «Шаблонах»). null = на полке (только в Библиотеке). */
+    activatedAt: timestamp("activated_at", { mode: "date", withTimezone: true }),
     archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()

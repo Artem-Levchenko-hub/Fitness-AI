@@ -22,6 +22,8 @@ export type ProgramListItem = {
   /** Откуда программа: slug пресета библиотеки или null (собрана из своих). */
   librarySlug: string | null;
   dayCount: number;
+  /** Активна ли — её дни видны в «Шаблонах». */
+  active: boolean;
   updatedAt: Date;
 };
 
@@ -39,6 +41,8 @@ export type ProgramWithDays = {
   name: string;
   description: string | null;
   librarySlug: string | null;
+  /** Активна ли — её дни видны в «Шаблонах» (после «Начать тренироваться»). */
+  active: boolean;
   createdAt: Date;
   days: ProgramDay[];
 };
@@ -150,6 +154,9 @@ export async function wrapTemplatesIntoProgram(
       userId,
       name: input.name,
       description: input.description ?? null,
+      // Обёртка своих шаблонов — система активна сразу: эти шаблоны уже были в
+      // «Шаблонах», обёртка не должна их прятать.
+      activatedAt: new Date(),
     });
 
     // Порядок дней = порядок templateIds (источник истины — выбор пользователя).
@@ -172,11 +179,12 @@ export async function wrapTemplatesIntoProgram(
 export async function listPrograms(
   userId: string,
 ): Promise<ProgramListItem[]> {
-  return db
+  const rows = await db
     .select({
       id: schema.trainingPrograms.id,
       name: schema.trainingPrograms.name,
       librarySlug: schema.trainingPrograms.librarySlug,
+      activatedAt: schema.trainingPrograms.activatedAt,
       updatedAt: schema.trainingPrograms.updatedAt,
       dayCount: count(schema.workoutTemplates.id),
     })
@@ -193,6 +201,11 @@ export async function listPrograms(
     )
     .groupBy(schema.trainingPrograms.id)
     .orderBy(desc(schema.trainingPrograms.updatedAt));
+
+  return rows.map(({ activatedAt, ...r }) => ({
+    ...r,
+    active: activatedAt != null,
+  }));
 }
 
 export async function getProgramWithDays(
@@ -234,6 +247,7 @@ export async function getProgramWithDays(
     name: program.name,
     description: program.description,
     librarySlug: program.librarySlug,
+    active: program.activatedAt != null,
     createdAt: program.createdAt,
     days: rows.map((r) => ({
       templateId: r.templateId,
@@ -271,6 +285,25 @@ export async function deleteProgram(
         ),
       );
   });
+}
+
+/** Активировать / снять с активной систему: её дни-шаблоны появляются в общем
+ *  списке «Шаблоны» (active=true) или прячутся обратно на полку Библиотеки
+ *  (active=false). Сами шаблоны не трогаются — только видимость в /templates. */
+export async function setProgramActive(
+  userId: string,
+  programId: string,
+  active: boolean,
+): Promise<void> {
+  await db
+    .update(schema.trainingPrograms)
+    .set({ activatedAt: active ? new Date() : null })
+    .where(
+      and(
+        eq(schema.trainingPrograms.id, programId),
+        eq(schema.trainingPrograms.userId, userId),
+      ),
+    );
 }
 
 /** Текущие элементы шаблона-дня в форме доменной адаптации (без имён упражнений
