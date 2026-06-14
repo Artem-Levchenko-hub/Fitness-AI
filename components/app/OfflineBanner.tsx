@@ -141,7 +141,10 @@ export function OfflineBanner() {
           </>
         ) : syncing ? (
           <>
-            <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+            <Loader2
+              className="size-4 shrink-0 motion-safe:animate-spin"
+              aria-hidden
+            />
             <span>Синхронизация…</span>
           </>
         ) : (

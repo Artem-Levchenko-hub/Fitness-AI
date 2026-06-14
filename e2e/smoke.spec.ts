@@ -920,3 +920,35 @@ test("H15.5 — airplane-mode: офлайн-подход переживает re
   ).toBeVisible();
   await expect(page.getByText("не синхр.")).toHaveCount(0);
 });
+
+test("H15.5 — reduced-motion: спиннер синхронизации не крутится (motion-safe)", async ({
+  page,
+}) => {
+  // OfflineBanner-спиннер «Синхронизация…» несёт `motion-safe:animate-spin` →
+  // под prefers-reduced-motion анимация подавляется (R-41 / critical-concern-7:
+  // анимации уважают reduced-motion; статус несёт ещё и текст, не только движение).
+  // Детерминированный CSS-ассерт без ловли транзиентного syncing-кадра: вставляем
+  // элемент с тем же классом и читаем computed animation-name под двумя режимами.
+  // Утилита `motion-safe:*` = `@media (prefers-reduced-motion: no-preference)`,
+  // поэтому при reduce правило не применяется → animationName = 'none'. Тест
+  // КРАСНЫЙ против прода без этой утилиты в скомпилированном CSS → ловит регресс.
+  const animationName = () =>
+    page.evaluate(() => {
+      const el = document.createElement("div");
+      el.className = "motion-safe:animate-spin";
+      document.body.appendChild(el);
+      const name = getComputedStyle(el).animationName;
+      el.remove();
+      return name;
+    });
+
+  // /login публичен (CSS-бандл globals.css общий на все роуты) → ассерт не зависит
+  // от сессии/seed и не флапает.
+  await page.goto("/login");
+
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  expect(await animationName()).not.toBe("none");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await animationName()).toBe("none");
+});
