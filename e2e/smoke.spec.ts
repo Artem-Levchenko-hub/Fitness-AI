@@ -42,6 +42,35 @@ test("/friends открывается со списком/empty-state", async ({
   ).toBeVisible();
 });
 
+test("H12.3 нав-гигиена: /settings — заголовок «Настройки», /friends ведёт назад на «Главная»", async ({
+  page,
+}) => {
+  // (а) Страница настроек больше не озаглавлена «Профиль» (это отдельный
+  // экран /profile) — h1 = «Настройки», совпадает с eyebrow.
+  await page.goto("/settings");
+  await expect(page).toHaveURL(/\/settings/);
+  await expect(
+    page.getByRole("heading", { name: "Настройки", level: 1 }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Профиль", level: 1 }),
+  ).toHaveCount(0);
+
+  // (б) Back-link /friends ведёт на главную, не в настройки (артефакт эпохи
+  // «друзья погребены за 3 тапа в /settings»).
+  await page.goto("/friends");
+  const back = page.getByRole("link", { name: "Главная" });
+  await expect(back).toHaveAttribute("href", "/dashboard");
+  await back.click();
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  // /profile остаётся отдельным экраном с заголовком «Профиль».
+  await page.goto("/profile");
+  await expect(
+    page.getByRole("heading", { name: "Настройки", level: 1 }),
+  ).toHaveCount(0);
+});
+
 test("/profile: аватар рендерится и его легенда тапабельна", async ({
   page,
 }) => {

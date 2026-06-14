@@ -11,7 +11,7 @@ import { SignOutButton } from "@/components/auth/SignOutButton";
 
 import { ProfileForm } from "./profile-form";
 
-export const metadata: Metadata = { title: "Профиль" };
+export const metadata: Metadata = { title: "Настройки" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -24,7 +24,7 @@ export default async function SettingsPage() {
           Настройки
         </p>
         <h1 className="font-serif mt-1 text-3xl font-normal tracking-tight md:text-4xl">
-          Профиль
+          Настройки
         </h1>
       </header>
 
