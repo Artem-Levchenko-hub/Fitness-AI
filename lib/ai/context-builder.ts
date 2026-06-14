@@ -30,8 +30,23 @@ import {
   E1RM_STAGNATION_EPSILON_KG,
 } from "@/lib/domain/progression/stagnation";
 import { muscleLabelRu } from "@/lib/domain/avatar/heat";
+import {
+  getExerciseGoal,
+  getMuscleGroupGoals,
+} from "@/lib/repos/goals.repo";
+import { goalSeries } from "@/lib/domain/progression/goal-series";
+import {
+  summarizeGoalProgress,
+  type GoalProgressView,
+} from "@/lib/domain/progression/goal-projection";
+import { frequencyGoalView } from "@/lib/domain/progression/frequency-goal";
 import { formatAvatarHeatBlock } from "./avatar-heat";
 import { formatFlagsBlock } from "./flags";
+import {
+  formatGoalsBlock,
+  type ExerciseGoalLine,
+  type MuscleGoalLine,
+} from "./goals-block";
 import {
   formatExerciseComparison,
   type ExerciseComparisonPoint,
@@ -137,6 +152,7 @@ export async function buildCoachContext(
   );
   const volumeByMuscle = await loadVolumeByMuscle(userId, since);
   const flagsBlock = await loadFlagsBlock(userId, todayWorkout.exercises);
+  const goalsBlock = await loadGoalsBlock(userId, todayWorkout.exercises);
 
   const sections: string[] = [];
 
@@ -148,6 +164,11 @@ export async function buildCoachContext(
   // салиентность приоритетов): застойные упражнения + перегруженные группы.
   // null → секция не добавляется (R-37: без пустого заголовка).
   if (flagsBlock) sections.push(flagsBlock);
+
+  // H18.3 — блок «# Цель» сразу после флагов: тренер видит активные цели на
+  // упражнения/группы СЕГОДНЯШНЕЙ сессии и ведёт к следующей (milestone).
+  // null → не добавляем (R-37).
+  if (goalsBlock) sections.push(goalsBlock);
 
   if (comparisons.length > 0) {
     sections.push(
@@ -718,6 +739,93 @@ async function loadFlagsBlock(
   }
 
   return formatFlagsBlock({ stagnant, overloaded });
+}
+
+/** H18.3 — «# Цель» для per-workout контекста: тренер ВИДИТ активные цели на
+ *  упражнения/группы СЕГОДНЯШНЕЙ сессии и ВЕДЁТ к следующей (столп 1, третья
+ *  нога H18). Точное зеркало session-JOIN «# Флаги»: в блок попадают РОВНО цели,
+ *  привязанные к упражнениям сегодняшней тренировки + цели частоты их групп
+ *  мышц — цель на упражнении, которого сегодня не было, в блок не идёт.
+ *  Прогресс берётся из готовых чистых fn (`summarizeGoalProgress`/`frequencyGoalView`,
+ *  R-04 — тот же расчёт, что трек-бары /exercises и /profile). Fail-soft (R-10):
+ *  сбой любого источника не валит разбор. Пусто → null (R-37). */
+async function loadGoalsBlock(
+  userId: string,
+  exercises: { exerciseId: string; nameRu: string }[],
+): Promise<string | null> {
+  try {
+    const byId = new Map<string, string>();
+    for (const e of exercises) byId.set(e.exerciseId, e.nameRu);
+    const exerciseIds = [...byId.keys()];
+    if (exerciseIds.length === 0) return null;
+
+    // (1) Цели упражнений сегодняшней сессии (kind weight|1rm; частота крепится
+    //     к группе мышц — ветка 2). Серия по виду цели — единый источник правила
+    //     goalSeries (тот же, что трек-бар /exercises/[id], DRY-знание H18.2-B1).
+    const exerciseGoals: ExerciseGoalLine[] = [];
+    await Promise.all(
+      exerciseIds.map(async (exerciseId) => {
+        try {
+          const goal = await getExerciseGoal(userId, exerciseId);
+          if (!goal || (goal.kind !== "weight" && goal.kind !== "1rm")) return;
+          const history = await exerciseSetHistory(userId, exerciseId);
+          const view: GoalProgressView = summarizeGoalProgress(
+            goalSeries(history, goal.kind),
+            goal.targetValue,
+          );
+          exerciseGoals.push({
+            nameRu: byId.get(exerciseId) ?? "?",
+            kind: goal.kind,
+            view,
+          });
+        } catch {
+          // одно упражнение не загрузилось → молча пропускаем (R-10)
+        }
+      }),
+    );
+
+    // (2) Цели частоты групп мышц, ТРЕНИРОВАННЫХ СЕГОДНЯ. Метрика частоты =
+    //     текущее окно `sets` из heat-профиля (тот же источник, что панель
+    //     дрилла мышцы H18.2-B2; одно окно → темп не выдумывается).
+    const muscleGoals: MuscleGoalLine[] = [];
+    try {
+      const muscleGoalMap = await getMuscleGroupGoals(userId);
+      if (muscleGoalMap.size > 0) {
+        const todaysGroups = await loadTodaysMuscleGroups(exerciseIds);
+        const heat = await muscleHeatProfile(userId, new Date());
+        const setsByKey = new Map(heat.map((h) => [h.muscleKey, h.sets]));
+        for (const key of todaysGroups) {
+          const goal = muscleGoalMap.get(key);
+          if (!goal || goal.kind !== "frequency") continue;
+          muscleGoals.push({
+            label: muscleLabelRu(key),
+            view: frequencyGoalView(setsByKey.get(key) ?? 0, goal.targetValue),
+          });
+        }
+      }
+    } catch {
+      // цели частоты недоступны → опускаем, разбор продолжается (R-10)
+    }
+
+    return formatGoalsBlock({ exerciseGoals, muscleGoals });
+  } catch {
+    return null;
+  }
+}
+
+/** Уникальные ключи групп мышц, задетых упражнениями сегодняшней сессии (любая
+ *  роль — primary/secondary; «тренировалась сегодня» = ≥1 упражнение её задело).
+ *  Зеркало JOIN heat/volume (exerciseMuscleGroups). R-7 не нужен: фильтр по
+ *  exerciseIds, которые уже принадлежат userId (тренировка проверена выше). */
+async function loadTodaysMuscleGroups(
+  exerciseIds: string[],
+): Promise<Set<string>> {
+  if (exerciseIds.length === 0) return new Set();
+  const rows = await db
+    .select({ muscleKey: schema.exerciseMuscleGroups.muscleGroupKey })
+    .from(schema.exerciseMuscleGroups)
+    .where(inArray(schema.exerciseMuscleGroups.exerciseId, exerciseIds));
+  return new Set(rows.map((r) => r.muscleKey));
 }
 
 /** H5.6 — блок нагрева аватара (14 групп, абсолютные недельные подходы) в
