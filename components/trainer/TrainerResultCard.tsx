@@ -1,8 +1,10 @@
 import { ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 
+import { BalanceSilhouette } from "@/components/trainer/BalanceSilhouette";
 import { resolveExerciseHref } from "@/lib/ai/exercise-links";
 import { resolveLifeFactorHref } from "@/lib/ai/life-factor-links";
+import type { MuscleKey } from "@/lib/domain/avatar/heat";
 import type { TrendStatus } from "@/lib/domain/progression/trend";
 import { TREND_TONE } from "@/lib/ui/trend-tone";
 import { cn } from "@/lib/utils/index";
@@ -30,6 +32,9 @@ export type TrainerResultData = {
   followUpQuestion?: string;
   pastAdviceFollowUp?: string;
   muscleBalanceNote?: string;
+  /** H17.0-B — ключи групп, названных в muscleBalanceNote: под кликабельный
+   *  силуэт (текст→тело). Пусто/нет → силуэт не рендерится (R-37). */
+  balanceMuscleKeys?: MuscleKey[];
 };
 
 function scoreColor(score: number | null): string {
@@ -167,6 +172,9 @@ export function TrainerResultCard({
           <p className="text-foreground mt-1 text-sm leading-relaxed">
             {data.muscleBalanceNote}
           </p>
+          {data.balanceMuscleKeys && data.balanceMuscleKeys.length > 0 ? (
+            <BalanceSilhouette muscleKeys={data.balanceMuscleKeys} />
+          ) : null}
         </section>
       ) : null}
 

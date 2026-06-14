@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { MUSCLE_KEYS, type MuscleKey } from "@/lib/domain/avatar/heat";
 import type { TrendStatus } from "@/lib/domain/progression/trend";
 
 /** Чистый парс/рендер structured-разбора тренера — БЕЗ импортов ai/deepseek/env,
@@ -41,7 +42,34 @@ export type TrainerResponse = {
    *  только когда в контексте есть блок «Аватар: недельная нагрузка»; legacy
    *  не несут (safeParse не должен их валить). */
   muscleBalanceNote?: string;
+  /** H17.0-B «петля текст→тело»: ключи групп мышц, которые тренер назвал в
+   *  muscleBalanceNote (перегретая/недогруженная). Несут СТРУКТУРНЫЙ якорь под
+   *  кликабельный силуэт (muscleBalanceNote — свободная проза без ключей).
+   *  Optional — заполняется вместе с muscleBalanceNote; legacy/прочие разборы
+   *  не несут. Выдуманные/невалидные ключи отсеяны normalizeBalanceKeys. */
+  balanceMuscleKeys?: MuscleKey[];
 };
+
+const MUSCLE_KEY_SET = new Set<string>(MUSCLE_KEYS);
+
+/** Нормализует сырой массив ключей мышц от LLM в валидные MuscleKey[]:
+ *  отбрасывает неизвестные/null/дубли (R-10 fail-soft — выдуманный ключ не
+ *  валит весь разбор), пусто/null/absent → undefined (силуэт не рендерится,
+ *  R-37). Вынесено для прямого юнит-теста. */
+export function normalizeBalanceKeys(
+  raw: (string | null)[] | null | undefined,
+): MuscleKey[] | undefined {
+  if (!raw) return undefined;
+  const seen = new Set<string>();
+  const out: MuscleKey[] = [];
+  for (const v of raw) {
+    if (typeof v === "string" && MUSCLE_KEY_SET.has(v) && !seen.has(v)) {
+      seen.add(v);
+      out.push(v as MuscleKey);
+    }
+  }
+  return out.length ? out : undefined;
+}
 
 /** Optional-строка, переживающая `null` от LLM. DeepSeek нондетерминированно
  *  эмитит `"field": null` вместо опускания ключа; `.nullish()` принимает и
@@ -89,6 +117,13 @@ export const trainerSchema = z.object({
   followUpQuestion: llmOptionalString,
   pastAdviceFollowUp: llmOptionalString,
   muscleBalanceNote: llmOptionalString,
+  // H17.0-B — массив ключей мышц баланса. `.nullish()` ловит null/absent
+  // (ловушка DeepSeek), элемент `.nullable()` терпит null внутри массива,
+  // transform фильтрует к валидным MuscleKey (выдуманные ключи не валят разбор).
+  balanceMuscleKeys: z
+    .array(z.string().nullable())
+    .nullish()
+    .transform(normalizeBalanceKeys),
 });
 
 /** Достаёт JSON-объект из ответа: срезает ```-ограждение и reasoning-текст

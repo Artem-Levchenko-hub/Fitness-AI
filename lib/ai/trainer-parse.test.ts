@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractJson,
+  normalizeBalanceKeys,
   parseTrainerJson,
   renderTrainerMarkdown,
   type TrainerResponse,
@@ -149,6 +150,65 @@ describe("parseTrainerJson", () => {
     expect(() => parseTrainerJson(JSON.stringify(bad))).toThrow(
       /не прошёл валидацию схемы/,
     );
+  });
+});
+
+describe("normalizeBalanceKeys (H17.0-B — ключи мышц баланса под силуэт)", () => {
+  it("валидные ключи сохраняются по порядку", () => {
+    expect(normalizeBalanceKeys(["chest", "quads"])).toEqual(["chest", "quads"]);
+  });
+
+  it("невалидный ключ отсеивается, валидные остаются (fail-soft R-10)", () => {
+    // LLM может выдумать «legs» (нет в MUSCLE_KEYS) — не реджектим весь разбор,
+    // тихо отбрасываем неизвестный ключ.
+    expect(normalizeBalanceKeys(["chest", "legs"])).toEqual(["chest"]);
+  });
+
+  it("null (ловушка DeepSeek) → undefined", () => {
+    expect(normalizeBalanceKeys(null)).toBeUndefined();
+  });
+
+  it("отсутствие (legacy-разбор) → undefined", () => {
+    expect(normalizeBalanceKeys(undefined)).toBeUndefined();
+  });
+
+  it("дубли схлопываются", () => {
+    expect(normalizeBalanceKeys(["chest", "chest", "back_lats"])).toEqual([
+      "chest",
+      "back_lats",
+    ]);
+  });
+
+  it("все ключи невалидны → undefined (силуэт не рендерится, R-37)", () => {
+    expect(normalizeBalanceKeys(["legs", "abs"])).toBeUndefined();
+  });
+
+  it("null-элементы внутри массива игнорируются", () => {
+    expect(normalizeBalanceKeys([null, "glutes", null])).toEqual(["glutes"]);
+  });
+});
+
+describe("parseTrainerJson — balanceMuscleKeys (H17.0-B)", () => {
+  it("валидные ключи проходят схему и нормализуются", () => {
+    const withKeys = { ...VALID, balanceMuscleKeys: ["chest", "quads"] };
+    const result = parseTrainerJson(JSON.stringify(withKeys));
+    expect(result.balanceMuscleKeys).toEqual(["chest", "quads"]);
+  });
+
+  it("null balanceMuscleKeys → undefined (не валит разбор)", () => {
+    const withNull = { ...VALID, balanceMuscleKeys: null };
+    const result = parseTrainerJson(JSON.stringify(withNull));
+    expect(result.balanceMuscleKeys).toBeUndefined();
+  });
+
+  it("отсутствие поля (legacy) → undefined", () => {
+    expect(parseTrainerJson(JSON.stringify(VALID)).balanceMuscleKeys).toBeUndefined();
+  });
+
+  it("выдуманный ключ отсеивается, разбор не падает", () => {
+    const withBad = { ...VALID, balanceMuscleKeys: ["back_lats", "legs"] };
+    const result = parseTrainerJson(JSON.stringify(withBad));
+    expect(result.balanceMuscleKeys).toEqual(["back_lats"]);
   });
 });
 
