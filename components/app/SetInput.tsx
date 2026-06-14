@@ -11,6 +11,7 @@ import {
   loadSetDraft,
   saveSetDraft,
 } from "@/lib/storage/set-input-draft";
+import { makeClientId } from "@/lib/storage/outbox";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -109,6 +110,11 @@ export function SetInput({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    // H15.3b — свежий канонический ключ идемпотентности на КАЖДЫЙ сабмит. Не
+    // храним в ref/hidden-input (stale-DOM после reset → коллизия → второй
+    // подход стал бы no-op). Офлайн-путь (H15.3b-2) переиспользует тот же
+    // makeClientId для стабильного ключа оптимистичной строки.
+    fd.set("clientSetId", makeClientId());
     startTransition(() => formAction(fd));
   }
 

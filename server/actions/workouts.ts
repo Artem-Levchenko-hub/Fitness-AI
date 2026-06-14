@@ -19,6 +19,7 @@ import {
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
+import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
 
 const startSchema = z.object({
   templateId: z.string().uuid(),
@@ -80,6 +81,12 @@ export async function recordSetAction(
     };
   }
 
+  // H15.3b — канонический ключ идемпотентности подхода. Онлайн-сабмит шлёт
+  // свежий UUID; офлайн-реплей (H15.4) повторит ТОТ ЖЕ ключ → onConflictDoNothing
+  // в recordSet делает дубль no-op. Мусор/отсутствие → null (legacy-вставка,
+  // fail-soft R-10) — запись не падает из-за битого ключа.
+  const clientSetId = parseClientSetId(formData.get("clientSetId"));
+
   await recordSet(user.id, parsed.data.workoutId, {
     workoutExerciseId: parsed.data.workoutExerciseId,
     setIndex: parsed.data.setIndex,
@@ -87,6 +94,7 @@ export async function recordSetAction(
     reps: parsed.data.reps,
     rpe: parsed.data.rpe,
     restSeconds: parsed.data.restSeconds,
+    clientSetId,
   });
   revalidatePath(`/workouts/${parsed.data.workoutId}`);
   return { status: "idle" };
