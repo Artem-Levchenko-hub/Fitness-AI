@@ -20,6 +20,7 @@ import {
 } from "@/lib/repos/workouts.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
+import { parseClientWorkoutId } from "@/lib/domain/workouts/client-workout-id";
 
 const startSchema = z.object({
   templateId: z.string().uuid(),
@@ -32,7 +33,14 @@ export async function startWorkoutFromTemplateAction(formData: FormData) {
   });
   if (!parsed.success) throw new Error("Invalid templateId");
 
-  const { id } = await startWorkoutFromTemplate(user.id, parsed.data.templateId);
+  // H15.3c-2 — канонический ключ идемпотентного старта. Онлайн-форма шлёт свежий
+  // makeClientId() на каждый сабмит; отсутствует/мусор → null → старый онлайн-путь
+  // (clientWorkoutId NULL, столп 4). Под этим же ключом дренаж офлайн-старта (H15.4)
+  // найдёт уже созданную тренировку и не сплодит дубль.
+  const clientWorkoutId = parseClientWorkoutId(formData.get("clientWorkoutId"));
+  const { id } = await startWorkoutFromTemplate(user.id, parsed.data.templateId, {
+    clientWorkoutId,
+  });
   revalidatePath("/dashboard");
   revalidatePath("/workouts");
   redirect(`/workouts/${id}`);

@@ -1,9 +1,10 @@
-import { ChevronLeft, Pencil, Play } from "lucide-react";
+import { ChevronLeft, Pencil } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
+import { StartWorkoutButton } from "@/components/templates/StartWorkoutButton";
 import { TemplateFocusHint } from "@/components/templates/TemplateFocusHint";
 import { Button } from "@/components/ui/button";
 import { extractPastAdvice } from "@/lib/ai/trainer-memory";
@@ -11,7 +12,6 @@ import { requireUser } from "@/lib/auth/require-user";
 import { getTemplateWithItems } from "@/lib/repos/templates.repo";
 import { getLastTemplateAnalysis } from "@/lib/repos/workouts.repo";
 import { deleteTemplateAction } from "@/server/actions/templates";
-import { startWorkoutFromTemplateAction } from "@/server/actions/workouts";
 
 export const metadata: Metadata = { title: "Шаблон" };
 
@@ -48,13 +48,7 @@ export default async function TemplateDetailPage({ params }: Props) {
         <TemplateFocusHint focus={lastFocus} analysisId={lastAnalysis.id} />
       ) : null}
 
-      <form action={startWorkoutFromTemplateAction} className="mb-6">
-        <input type="hidden" name="templateId" value={tpl.id} />
-        <Button type="submit" size="xl" className="w-full">
-          <Play className="size-5" />
-          Начать тренировку
-        </Button>
-      </form>
+      <StartWorkoutButton templateId={tpl.id} />
 
       <ol className="space-y-2">
         {tpl.items.map((item, idx) => (

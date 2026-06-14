@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { makeClientId } from "../../storage/outbox";
 import { parseClientWorkoutId } from "./client-workout-id";
 
 describe("parseClientWorkoutId", () => {
@@ -37,5 +38,16 @@ describe("parseClientWorkoutId", () => {
       parseClientWorkoutId("zzzzzzzz-4f50-41a2-8c0d-1e2f3a4b5c6d"),
     ).toBeNull();
     expect(parseClientWorkoutId("9b1c2d3e4f5041a28c0d1e2f3a4b5c6d")).toBeNull();
+  });
+
+  // H15.3c-2 онлайн-плумбинг: ключ, который клиент генерит для офлайн-старта
+  // (makeClientId), ОБЯЗАН пройти серверный parseClientWorkoutId без потерь —
+  // иначе реплей старта при реконнекте упадёт в NULL и идемпотентность сломается.
+  // Контракт генератор↔парсер (ловит дрейф формата makeClientId).
+  it("makeClientId() round-trips через parseClientWorkoutId (producer↔consumer)", () => {
+    for (let i = 0; i < 20; i += 1) {
+      const id = makeClientId();
+      expect(parseClientWorkoutId(id)).toBe(id);
+    }
   });
 });
