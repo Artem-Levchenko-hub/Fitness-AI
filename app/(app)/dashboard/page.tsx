@@ -13,6 +13,7 @@ import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
 import { DashboardAvatarTile } from "@/components/dashboard/DashboardAvatarTile";
 import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
+import { FriendsActivityPreview } from "@/components/dashboard/FriendsActivityPreview";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
@@ -28,8 +29,10 @@ import {
 import { requireUser } from "@/lib/auth/require-user";
 import { isoWeekStartIso } from "@/lib/datetime/iso-week";
 import { buildTrainerVoice } from "@/lib/ai/trainer-voice";
+import { selectTopFriendActivity } from "@/lib/domain/friends/friend-activity";
 import { buildWeekStrip } from "@/lib/domain/stats/week-strip";
 import { getUserProfile } from "@/lib/repos/body.repo";
+import { listFriendsActivity } from "@/lib/repos/friends.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
 import {
@@ -68,6 +71,7 @@ export default async function DashboardPage() {
     frequency,
     latestAnalysis,
     weeklyReview,
+    friendsActivity,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     listRecentCardio(user.id, 10),
@@ -80,6 +84,9 @@ export default async function DashboardPage() {
     workoutFrequency(user.id, "30d", tz),
     getLatestPerWorkoutAnalysis(user.id, voiceSince),
     getLatestWeeklyReview(user.id),
+    // Лента активности друзей — тот же источник, что /friends (H3.2). Превью
+    // тайла берёт ровно её топ, чтобы строка не разошлась с верхней карточкой.
+    listFriendsActivity(user.id),
   ]);
 
   // Голос тренера: focus последнего разбора + ссылка на сам разбор. null →
@@ -110,6 +117,11 @@ export default async function DashboardPage() {
   const weekCount = countWeekSessions(history, weekStartIso, tz);
   const recentHistory = history.slice(0, 3);
   const latestSession = history[0] ?? null;
+
+  // Превью тайла «Друзья» (H3.1): самое свежее событие среди всех друзей,
+  // выбранное ТЕМ ЖЕ модулем, что лента /friends (H3.2) — null при 0 друзей /
+  // 0 событий, тогда тайл показывает свой hint как раньше (R-37).
+  const topFriendActivity = selectTopFriendActivity(friendsActivity);
 
   // Единый вход: один CTA «Начать тренировку» → /create (пикер формата) вместо
   // трёх формат-тайлов. Возобновление активной сессии любого формата — теперь
@@ -149,7 +161,8 @@ export default async function DashboardPage() {
 
       {/* Бюджет компоновки (H9.1): входы «Статистика»/«Друзья» — один ряд
           компактных tile-вход, не отдельные секции. Тут же материализуются
-          C1 (H4.1 week-strip /stats, H3.1 лента /friends). */}
+          C1: week-strip /stats (H4.1) и превью последнего события друга в тайле
+          (H3.1) — лента самих друзей живёт на /friends (H3.2). */}
       <section className="mt-3 grid grid-cols-2 gap-3">
         <DashboardNavTile href="/stats" label="Статистика" icon={BarChart3}>
           <WeekStripPreview strip={weekStrip} />
@@ -159,7 +172,11 @@ export default async function DashboardPage() {
           label="Друзья"
           icon={Users}
           hint="Лента и профили"
-        />
+        >
+          {topFriendActivity ? (
+            <FriendsActivityPreview activity={topFriendActivity} />
+          ) : null}
+        </DashboardNavTile>
       </section>
 
       {/* H9.2: мини-аватар-витрина — текущий heat-силуэт, тап → полный 3D на

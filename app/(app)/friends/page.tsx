@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import {
+  friendDisplayName,
   friendEventFormat,
   friendEventMeta,
 } from "@/lib/domain/friends/friend-activity";
@@ -13,18 +14,12 @@ import {
   listIncomingRequestsDetailed,
   listOutgoingRequestsDetailed,
   type FriendActivity,
-  type FriendshipWithUser,
 } from "@/lib/repos/friends.repo";
 import { acceptFriendRequestAction } from "@/server/actions/friends";
 
 import { AddFriendForm } from "./add-friend-form";
 
 export const metadata: Metadata = { title: "Друзья" };
-
-/** Имя для показа: name если есть, иначе email. */
-function displayName(u: FriendshipWithUser["user"]): string {
-  return u.name?.trim() || u.email;
-}
 
 export default async function FriendsPage() {
   const user = await requireUser();
@@ -69,7 +64,7 @@ export default async function FriendsPage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold tracking-tight">
-                    {displayName(f.user)}
+                    {friendDisplayName(f.user)}
                   </p>
                   <p className="text-muted-foreground mt-0.5 truncate text-xs">
                     {f.user.email}
@@ -108,7 +103,7 @@ export default async function FriendsPage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold tracking-tight">
-                    {displayName(f.user)}
+                    {friendDisplayName(f.user)}
                   </p>
                   <p className="text-muted-foreground mt-0.5 truncate text-xs">
                     {f.user.email}
@@ -161,11 +156,11 @@ function FriendActivityCard({ activity }: { activity: FriendActivity }) {
       className="bg-card hover:bg-accent/40 border-border flex min-h-14 items-center gap-3 rounded-2xl border p-4 transition-colors"
     >
       <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-        {displayName(user).charAt(0).toUpperCase()}
+        {friendDisplayName(user).charAt(0).toUpperCase()}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold tracking-tight">
-          {displayName(user)}
+          {friendDisplayName(user)}
         </p>
         {lastEvent ? (
           <>

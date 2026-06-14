@@ -72,3 +72,26 @@ export function sortFriendsByRecency<T extends { lastEvent: HistoryItem | null }
     return tb - ta;
   });
 }
+
+/** Единственное самое свежее событие среди ВСЕХ друзей — носитель строки-превью
+ *  тайла «Друзья» на дашборде (H3.1). По построению совпадает с верхней карточкой
+ *  ленты /friends: тот же sortFriendsByRecency + первый друг с событием (урок H4.3
+ *  — превью и лента читают РОВНО один источник, не расходятся). Сам пере-сортирует
+ *  вход, поэтому не зависит от того, отдал ли вызывающий уже отсортированный список.
+ *  Нет ни одного события (0 друзей / 0 завершённых сессий) → null (R-37). */
+export function selectTopFriendActivity<
+  T extends { lastEvent: HistoryItem | null },
+>(list: T[]): T | null {
+  return sortFriendsByRecency(list).find((f) => f.lastEvent !== null) ?? null;
+}
+
+/** Имя друга для показа: name (триммленный) либо email как фолбэк. ЕДИНСТВЕННЫЙ
+ *  носитель этого правила — и карточка ленты /friends, и превью дашборда читают
+ *  отсюда (урок H4.3). Структурный параметр (не импорт FriendUser) — домен
+ *  остаётся листом графа зависимостей (R-7), без цикла с friends.repo. */
+export function friendDisplayName(user: {
+  name: string | null;
+  email: string;
+}): string {
+  return user.name?.trim() || user.email;
+}

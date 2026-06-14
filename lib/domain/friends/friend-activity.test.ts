@@ -6,9 +6,11 @@ import type { HistoryItem } from "@/lib/domain/workouts/history";
 import type { RecentWorkout } from "@/lib/repos/workouts.repo";
 
 import {
+  friendDisplayName,
   friendEventFormat,
   friendEventMeta,
   selectLastEvent,
+  selectTopFriendActivity,
   sortFriendsByRecency,
 } from "./friend-activity";
 
@@ -158,5 +160,53 @@ describe("sortFriendsByRecency", () => {
     const sorted = sortFriendsByRecency(input);
     expect(input).toEqual([b, a]);
     expect(sorted).not.toBe(input);
+  });
+});
+
+describe("selectTopFriendActivity", () => {
+  const item = (startedAt: Date): HistoryItem => ({
+    kind: "strength",
+    id: "x",
+    name: "x",
+    startedAt,
+    finishedAt: null,
+    setCount: 1,
+    tonnageKg: 1,
+    hasAnalysis: false,
+  });
+
+  it("returns null for an empty list (0 friends)", () => {
+    expect(selectTopFriendActivity([])).toBeNull();
+  });
+
+  it("returns null when no friend has any event (0 events)", () => {
+    const a = { user: "a", lastEvent: null };
+    const b = { user: "b", lastEvent: null };
+    expect(selectTopFriendActivity([a, b])).toBeNull();
+  });
+
+  it("picks the single most recent event among all friends, even unsorted", () => {
+    const a = { user: "a", lastEvent: item(d("2026-06-01T10:00:00Z")) };
+    const b = { user: "b", lastEvent: item(d("2026-06-05T10:00:00Z")) };
+    const c = { user: "c", lastEvent: null };
+    // Input order does NOT match recency — must still surface b (newest).
+    expect(selectTopFriendActivity([a, c, b])?.user).toBe("b");
+  });
+
+  it("skips no-event friends and returns the most recent that has one", () => {
+    const a = { user: "a", lastEvent: null };
+    const b = { user: "b", lastEvent: item(d("2026-06-02T10:00:00Z")) };
+    expect(selectTopFriendActivity([a, b])?.user).toBe("b");
+  });
+});
+
+describe("friendDisplayName", () => {
+  it("uses the name when present (trimmed)", () => {
+    expect(friendDisplayName({ name: "  Alex  ", email: "a@x.io" })).toBe("Alex");
+  });
+
+  it("falls back to email when name is null or blank", () => {
+    expect(friendDisplayName({ name: null, email: "a@x.io" })).toBe("a@x.io");
+    expect(friendDisplayName({ name: "   ", email: "a@x.io" })).toBe("a@x.io");
   });
 });
