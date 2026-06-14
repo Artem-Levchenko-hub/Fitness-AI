@@ -1,14 +1,29 @@
 import { muscleLabelRu } from "../domain/avatar/heat";
 import type { PastAdvice } from "./trainer-memory";
 
-/** Агрегаты одной недели (силовые completed-сессии). Тоннаж = вес×повт
- *  working-подходов; muscleVolumes — role-взвешенный тоннаж по группам
- *  (primary 1.0 / secondary 0.5), как на /stats. */
+/** Агрегаты одной недели по ВСЕМ форматам активности (тренер — «олимпийский»,
+ *  следит за всем, не только за силовыми). Силовые: sessions/tonnage/sets +
+ *  muscleVolumes (role-взвешенный тоннаж primary 1.0/secondary 0.5, как /stats).
+ *  Круговые: circuitSessions + circuitRounds (раунды=подходы) + circuitTonnage.
+ *  Кардио: cardioSessions + cardioMinutes (активные work-минуты). */
 export type WeekAgg = {
+  /** Силовые completed-сессии. */
   sessions: number;
+  /** Тоннаж силовых working-подходов (вес×повт). */
   tonnage: number;
+  /** Силовые working-подходы. */
   sets: number;
   muscleVolumes: { muscleKey: string; volume: number }[];
+  /** Круговые completed-сессии. */
+  circuitSessions: number;
+  /** Невыполненные-пропуск раунды круговых (раунд = подход). */
+  circuitRounds: number;
+  /** Тоннаж круговых раундов (вес×повт; bodyweight → 0). */
+  circuitTonnage: number;
+  /** Кардио completed-сессии. */
+  cardioSessions: number;
+  /** Активные минуты кардио (сумма work-блоков). */
+  cardioMinutes: number;
 };
 
 /** Одна ночь сна за разбираемую неделю. */
@@ -72,12 +87,19 @@ export type WeeklyReviewInput = {
 /** Сколько движений показать в блоке «ключевые движения недели». */
 const MAX_KEY_MOVEMENTS = 3;
 
-/** Есть ли что разбирать: хотя бы одна силовая сессия на этой ИЛИ прошлой
- *  неделе. Единый источник правила «разбор недели имеет смысл» — и для
- *  кнопки «по запросу» (H8.1), и для авто-воркера (H8.2). Пустые обе недели →
- *  не жжём LLM. Чистая (R-7), юнит-тестируема. */
+/** Сколько сессий ВСЕХ форматов было за неделю (силовые + круговые + кардио). */
+function weekActivityCount(w: WeekAgg): number {
+  return w.sessions + w.circuitSessions + w.cardioSessions;
+}
+
+/** Есть ли что разбирать: хотя бы одна сессия ЛЮБОГО формата (силовая,
+ *  круговая ИЛИ кардио) на этой ИЛИ прошлой неделе. Тренер следит за всей
+ *  активностью, а не только за силовыми — круговая/кардио-неделя тоже
+ *  разбирается. Единый источник правила и для кнопки «по запросу» (H8.1), и
+ *  для авто-воркера (H8.2). Пустые обе недели по всем форматам → не жжём LLM.
+ *  Чистая (R-7), юнит-тестируема. */
 export function hasWeeklyData(data: WeeklyReviewInput): boolean {
-  return data.current.sessions > 0 || data.previous.sessions > 0;
+  return weekActivityCount(data.current) > 0 || weekActivityCount(data.previous) > 0;
 }
 
 /** Сколько групп показать в блоке (бюджет промпта — самые нагруженные). */
@@ -151,9 +173,37 @@ export function formatWeeklyMovementsBlock(
   return lines.join("\n");
 }
 
-/** Markdown-блок «итог недели» для промпта тренера: эта неделя vs прошлая по
- *  объёму, сессиям, группам мышц + заметка недели. Чистая функция — числа
- *  даёт репо, тон задаёт WEEKLY_SYSTEM_PROMPT. */
+/** Markdown-блок «Активность недели» — все форматы одной строкой каждый
+ *  (силовые / круговые / кардио), эта неделя vs прошлая. Так тренер видит ВСЮ
+ *  тренировочную неделю, а не только силовые. Круговые/кардио-строка опускается,
+ *  если формата не было ни в одну из недель (R-37: не упоминаем пустое). Чистая
+ *  функция — числа даёт репо. */
+function formatActivityBlock(current: WeekAgg, previous: WeekAgg): string[] {
+  const lines = [
+    "## Активность недели (все форматы)",
+    `- Силовые: ${current.sessions} (прошлая ${previous.sessions})`,
+  ];
+  if (current.circuitSessions > 0 || previous.circuitSessions > 0) {
+    const tonnage =
+      current.circuitTonnage > 0
+        ? `, ${round(current.circuitTonnage)} кг·повт`
+        : "";
+    lines.push(
+      `- Круговые: ${current.circuitSessions} (прошлая ${previous.circuitSessions}) — ${current.circuitRounds} раундов${tonnage}`,
+    );
+  }
+  if (current.cardioSessions > 0 || previous.cardioSessions > 0) {
+    lines.push(
+      `- Кардио: ${current.cardioSessions} (прошлая ${previous.cardioSessions}) — ${current.cardioMinutes} мин`,
+    );
+  }
+  lines.push("");
+  return lines;
+}
+
+/** Markdown-блок «итог недели» для промпта тренера: активность всех форматов,
+ *  объём, сессии, группы мышц + заметка недели. Чистая функция — числа даёт
+ *  репо, тон задаёт WEEKLY_SYSTEM_PROMPT. */
 export function formatWeeklyReviewBlock(
   data: WeeklyReviewInput,
   memory = "",
@@ -162,6 +212,7 @@ export function formatWeeklyReviewBlock(
   const lines: string[] = [
     `# Итог недели (ISO-неделя с ${data.weekStart}; прошлая — с ${data.prevWeekStart})`,
     "",
+    ...formatActivityBlock(current, previous),
     "## Объём",
   ];
 

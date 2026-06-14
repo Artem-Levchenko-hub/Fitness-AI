@@ -1429,6 +1429,16 @@ export type WeeklyAgg = {
   tonnage: number;
   sets: number;
   muscleVolumes: { muscleKey: string; volume: number }[];
+  /** Круговые completed-сессии недели. */
+  circuitSessions: number;
+  /** Невыполненные-пропуск раунды круговых недели (раунд = подход). */
+  circuitRounds: number;
+  /** Тоннаж круговых раундов недели (вес×повт; bodyweight → 0). */
+  circuitTonnage: number;
+  /** Кардио completed-сессии недели. */
+  cardioSessions: number;
+  /** Активные work-минуты кардио недели. */
+  cardioMinutes: number;
 };
 
 export type WeeklyReviewData = {
@@ -1530,8 +1540,60 @@ export async function weeklyReviewData(
       schema.exerciseMuscleGroups.role,
     );
 
+  // (C) Круговые: сессии + раунды + тоннаж по неделям (бакет по
+  //     circuitWorkouts.startedAt). Тренер видит круговые недели.
+  const circuitWeekExpr = sql<string>`to_char(date_trunc('week', ${schema.circuitWorkouts.startedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`;
+  const circuitRows = await db
+    .select({
+      week: circuitWeekExpr,
+      sessions: sql<number>`COUNT(DISTINCT ${schema.circuitWorkouts.id})`,
+      rounds: sql<number>`COUNT(${schema.circuitRoundLogs.id})`,
+      tonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}), 0)`,
+    })
+    .from(schema.circuitWorkouts)
+    .leftJoin(
+      schema.circuitRoundLogs,
+      and(
+        eq(schema.circuitRoundLogs.circuitWorkoutId, schema.circuitWorkouts.id),
+        eq(schema.circuitRoundLogs.skipped, false),
+      ),
+    )
+    .where(
+      and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "completed"),
+        gte(schema.circuitWorkouts.startedAt, from),
+      ),
+    )
+    .groupBy(sql`1`);
+
+  // (D) Кардио: сессии + активные work-минуты по неделям (бакет по
+  //     cardioWorkouts.startedAt). work-блоки несут реальное время нагрузки.
+  const cardioWeekExpr = sql<string>`to_char(date_trunc('week', ${schema.cardioWorkouts.startedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`;
+  const cardioRows = await db
+    .select({
+      week: cardioWeekExpr,
+      sessions: sql<number>`COUNT(DISTINCT ${schema.cardioWorkouts.id})`,
+      seconds: sql<number>`COALESCE(SUM(${schema.cardioBlocks.actualDurationSec}) FILTER (WHERE ${schema.cardioBlocks.kind} = 'work'), 0)`,
+    })
+    .from(schema.cardioWorkouts)
+    .leftJoin(
+      schema.cardioBlocks,
+      eq(schema.cardioBlocks.cardioWorkoutId, schema.cardioWorkouts.id),
+    )
+    .where(
+      and(
+        eq(schema.cardioWorkouts.userId, userId),
+        eq(schema.cardioWorkouts.status, "completed"),
+        gte(schema.cardioWorkouts.startedAt, from),
+      ),
+    )
+    .groupBy(sql`1`);
+
   const buildAgg = (weekKey: string): WeeklyAgg => {
     const t = totalsRows.find((r) => r.week === weekKey);
+    const c = circuitRows.find((r) => r.week === weekKey);
+    const cardio = cardioRows.find((r) => r.week === weekKey);
     const byMuscle = new Map<string, number>();
     for (const r of muscleRows) {
       if (r.week !== weekKey) continue;
@@ -1548,6 +1610,11 @@ export async function weeklyReviewData(
       muscleVolumes: Array.from(byMuscle.entries())
         .map(([muscleKey, volume]) => ({ muscleKey, volume }))
         .sort((a, b) => b.volume - a.volume),
+      circuitSessions: Number(c?.sessions ?? 0),
+      circuitRounds: Number(c?.rounds ?? 0),
+      circuitTonnage: Number(c?.tonnage ?? 0),
+      cardioSessions: Number(cardio?.sessions ?? 0),
+      cardioMinutes: Math.round(Number(cardio?.seconds ?? 0) / 60),
     };
   };
 

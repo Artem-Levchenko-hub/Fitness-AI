@@ -6,6 +6,7 @@ import {
   formatWeeklyReviewBlock,
   hasWeeklyData,
   selectKeyMovements,
+  type WeekAgg,
   type WeeklyKeyMovement,
   type WeeklyReviewInput,
 } from "./weekly-review";
@@ -13,11 +14,28 @@ import type { PastAdvice } from "./trainer-memory";
 
 const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
+/** Полный WeekAgg с нулями по умолчанию — тесты переопределяют нужные поля.
+ *  Все форматы (силовые + круговые + кардио) обнулены, кроме заданных. */
+function agg(over: Partial<WeekAgg> = {}): WeekAgg {
+  return {
+    sessions: 0,
+    tonnage: 0,
+    sets: 0,
+    muscleVolumes: [],
+    circuitSessions: 0,
+    circuitRounds: 0,
+    circuitTonnage: 0,
+    cardioSessions: 0,
+    cardioMinutes: 0,
+    ...over,
+  };
+}
+
 function base(): WeeklyReviewInput {
   return {
     weekStart: "2026-06-08",
     prevWeekStart: "2026-06-01",
-    current: {
+    current: agg({
       sessions: 3,
       tonnage: 12000,
       sets: 45,
@@ -25,13 +43,13 @@ function base(): WeeklyReviewInput {
         { muscleKey: "chest", volume: 5000 },
         { muscleKey: "triceps", volume: 2000 },
       ],
-    },
-    previous: {
+    }),
+    previous: agg({
       sessions: 2,
       tonnage: 10000,
       sets: 36,
       muscleVolumes: [{ muscleKey: "chest", volume: 4000 }],
-    },
+    }),
     cycleNote: null,
     sleep: [],
     nutrition: [],
@@ -72,7 +90,7 @@ describe("formatWeeklyReviewBlock", () => {
 
   it("при нулевой прошлой неделе не печатает NaN/−100%, а словесный фолбэк", () => {
     const d = base();
-    d.previous = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    d.previous = agg();
     const out = formatWeeklyReviewBlock(d);
     expect(out).not.toContain("NaN");
     expect(out).not.toContain("%)"); // нет процентной дельты
@@ -81,7 +99,7 @@ describe("formatWeeklyReviewBlock", () => {
 
   it("при нулевой текущей неделе помечает разгрузку/отдых", () => {
     const d = base();
-    d.current = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    d.current = agg();
     const out = formatWeeklyReviewBlock(d);
     expect(out).toContain("Силовых сессий на этой неделе: 0");
     expect(out).toContain("разгрузка или отдых");
@@ -104,21 +122,74 @@ describe("formatWeeklyReviewBlock", () => {
 
   it("hasWeeklyData: есть сессии на этой неделе → true", () => {
     const d = base();
-    d.previous = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    d.previous = agg();
     expect(hasWeeklyData(d)).toBe(true);
   });
 
   it("hasWeeklyData: сессии только на прошлой неделе → true", () => {
     const d = base();
-    d.current = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    d.current = agg();
     expect(hasWeeklyData(d)).toBe(true);
   });
 
   it("hasWeeklyData: обе недели пусты → false (не жжём LLM)", () => {
     const d = base();
-    d.current = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
-    d.previous = { sessions: 0, tonnage: 0, sets: 0, muscleVolumes: [] };
+    d.current = agg();
+    d.previous = agg();
     expect(hasWeeklyData(d)).toBe(false);
+  });
+
+  it("hasWeeklyData: ТОЛЬКО круговые на этой неделе (0 силовых) → true", () => {
+    const d = base();
+    d.current = agg({ circuitSessions: 2, circuitRounds: 18, circuitTonnage: 600 });
+    d.previous = agg();
+    expect(hasWeeklyData(d)).toBe(true);
+  });
+
+  it("hasWeeklyData: ТОЛЬКО кардио на прошлой неделе → true", () => {
+    const d = base();
+    d.current = agg();
+    d.previous = agg({ cardioSessions: 1, cardioMinutes: 25 });
+    expect(hasWeeklyData(d)).toBe(true);
+  });
+
+  it("блок «Активность недели» перечисляет все форматы; круговые/кардио — только если были", () => {
+    const d = base();
+    d.current = agg({
+      sessions: 1,
+      circuitSessions: 2,
+      circuitRounds: 18,
+      circuitTonnage: 600,
+      cardioSessions: 1,
+      cardioMinutes: 25,
+    });
+    d.previous = agg({ sessions: 0, circuitSessions: 1, cardioSessions: 0 });
+    const out = formatWeeklyReviewBlock(d);
+    expect(out).toContain("## Активность недели");
+    expect(out).toContain("Силовые: 1 (прошлая 0)");
+    expect(out).toContain("Круговые: 2 (прошлая 1)");
+    expect(out).toContain("18 раундов");
+    expect(out).toContain("600 кг·повт");
+    expect(out).toContain("Кардио: 1 (прошлая 0)");
+    expect(out).toContain("25 мин");
+  });
+
+  it("блок «Активность недели»: круговые/кардио опущены, если их не было ни в одну неделю", () => {
+    const out = formatWeeklyReviewBlock(base()); // only strength
+    expect(out).toContain("## Активность недели");
+    expect(out).toContain("Силовые: 3 (прошлая 2)");
+    expect(out).not.toContain("Круговые:");
+    expect(out).not.toContain("Кардио:");
+  });
+
+  it("разбор не пуст для круговой недели без силовых (есть что показать)", () => {
+    const d = base();
+    d.current = agg({ circuitSessions: 3, circuitRounds: 27, circuitTonnage: 900 });
+    d.previous = agg();
+    expect(hasWeeklyData(d)).toBe(true);
+    const out = formatWeeklyReviewBlock(d);
+    expect(out).toContain("Круговые: 3");
+    expect(out).toContain("27 раундов");
   });
 
   it("рендерит блок сна за неделю с часами, когда есть ночи", () => {
@@ -167,7 +238,9 @@ describe("formatWeeklyReviewBlock", () => {
       volume: 1000 - i,
     }));
     const out = formatWeeklyReviewBlock(d);
-    const rows = out.split("\n").filter((l) => l.startsWith("- "));
+    // Строки групп мышц — те, что в формате «← X кг·повт» (не строки блока
+    // «Активность недели», которые тоже начинаются с "- ").
+    const rows = out.split("\n").filter((l) => l.startsWith("- ") && l.includes("←"));
     expect(rows.length).toBeLessThanOrEqual(8);
   });
 
