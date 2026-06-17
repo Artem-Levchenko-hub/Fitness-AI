@@ -59,19 +59,18 @@ export async function listTemplates(
       schema.templateExercises,
       eq(schema.templateExercises.templateId, schema.workoutTemplates.id),
     )
-    // День системы виден в общем списке «Шаблоны» только когда система активна
-    // (activatedAt != null). Одиночные шаблоны (programId = null) — всегда.
-    .leftJoin(
-      schema.trainingPrograms,
-      eq(schema.trainingPrograms.id, schema.workoutTemplates.programId),
-    )
+    // «Шаблоны» = только то, по чему реально тренируешься: одиночные шаблоны
+    // (programId = null) — всегда; дни систем — лишь ПОСЛЕ первой тренировки
+    // (lastAdaptedWorkoutId != null, тренер их уже подправил на месте).
+    // Неотренированные пресет-дни активной системы живут в Библиотеке, а не
+    // засоряют список «Шаблоны».
     .where(
       and(
         eq(schema.workoutTemplates.userId, userId),
         isNull(schema.workoutTemplates.archivedAt),
         or(
           isNull(schema.workoutTemplates.programId),
-          isNotNull(schema.trainingPrograms.activatedAt),
+          isNotNull(schema.workoutTemplates.lastAdaptedWorkoutId),
         ),
       ),
     )

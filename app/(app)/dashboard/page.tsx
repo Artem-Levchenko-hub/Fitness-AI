@@ -18,7 +18,6 @@ import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
-import { TrainerVoiceBanner } from "@/components/dashboard/TrainerVoiceBanner";
 import { WeekStripPreview } from "@/components/dashboard/WeekStripPreview";
 import {
   buildHistory,
@@ -28,7 +27,6 @@ import {
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
 import { isoWeekStartIso } from "@/lib/datetime/iso-week";
-import { buildTrainerVoice } from "@/lib/ai/trainer-voice";
 import { selectTopFriendActivity } from "@/lib/domain/friends/friend-activity";
 import { buildWeekStrip } from "@/lib/domain/stats/week-strip";
 import { getUserProfile } from "@/lib/repos/body.repo";
@@ -40,11 +38,7 @@ import {
   muscleHeatProfile,
   workoutFrequency,
 } from "@/lib/repos/stats.repo";
-import {
-  getLatestPerWorkoutAnalysis,
-  getLatestWeeklyReview,
-  listRecentWorkouts,
-} from "@/lib/repos/workouts.repo";
+import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "Главная" };
 
@@ -58,10 +52,6 @@ export default async function DashboardPage() {
   const profile = await getUserProfile(user.id);
   const tz = profile?.timezone ?? "Europe/Moscow";
 
-  // H11.2 «голос тренера»: свежий per-workout разбор (≤7 дней) приоритетен,
-  // недельный — fallback. Окно свежести — чтобы старый совет не висел вечно.
-  const voiceSince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
   const [
     recent,
     recentCardio,
@@ -69,8 +59,6 @@ export default async function DashboardPage() {
     heat,
     daily,
     frequency,
-    latestAnalysis,
-    weeklyReview,
     friendsActivity,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
@@ -82,16 +70,10 @@ export default async function DashboardPage() {
     // покрывает текущую + прошлую ISO-неделю.
     dailyVolume(user.id, "30d", tz),
     workoutFrequency(user.id, "30d", tz),
-    getLatestPerWorkoutAnalysis(user.id, voiceSince),
-    getLatestWeeklyReview(user.id),
     // Лента активности друзей — тот же источник, что /friends (H3.2). Превью
     // тайла берёт ровно её топ, чтобы строка не разошлась с верхней карточкой.
     listFriendsActivity(user.id),
   ]);
-
-  // Голос тренера: focus последнего разбора + ссылка на сам разбор. null →
-  // секция не рендерится вовсе (анти-фантом R-37). Без нового AI-вызова.
-  const trainerVoice = buildTrainerVoice(latestAnalysis, weeklyReview);
 
   // Понедельник текущей ISO-недели в TZ юзера — общая граница для week-strip
   // tile и честного счётчика WeekCard (тот же ключ, что группирует /workouts).
@@ -137,14 +119,6 @@ export default async function DashboardPage() {
           Привет, {name}
         </h1>
       </header>
-
-      {trainerVoice ? (
-        <TrainerVoiceBanner
-          focus={trainerVoice.focus}
-          analysisId={trainerVoice.analysisId}
-          href={trainerVoice.href}
-        />
-      ) : null}
 
       <TodayScheduleCard userId={user.id} />
 

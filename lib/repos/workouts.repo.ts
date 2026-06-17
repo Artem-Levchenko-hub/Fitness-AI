@@ -680,7 +680,7 @@ export async function getLastTemplateAnalysis(
 /** H11.2 «голос тренера на /dashboard»: свежайший per-workout разбор атлета
  *  (силовой `workoutId` ЛИБО круговой `circuitWorkoutId`), созданный не раньше
  *  `since` (окно «свежести», обычно 7 дней). Возвращает сырой resultJson + FK —
- *  focus и ссылку резолвит buildTrainerVoice (R-7: repo не знает AI-формат).
+ *  focus и ссылку резолвит вызывающий (R-7: repo не знает AI-формат).
  *  null, если свежего per-workout разбора нет → вызывающий падает на недельный
  *  fallback. fail-soft (R-10): сбой → null, дашборд не падает. */
 export async function getLatestPerWorkoutAnalysis(

@@ -3,9 +3,8 @@
  *  localStorage как id того разбора, что закрыли → новый разбор (новый id)
  *  всплывает снова. Логику держим здесь, чтобы юнит-тестировать без jsdom.
  *
- *  Переиспользуется на ДВУХ поверхностях (R-04, не копипаст):
- *   - H5.7 экран старта тренировки по шаблону ([TemplateFocusHint]);
- *   - H11.2 голос тренера на /dashboard ([TrainerVoiceBanner]). */
+ *  Источник предиката строки-совета на экране старта тренировки по шаблону
+ *  ([TemplateFocusHint], H5.7). */
 export function shouldShowFocusHint(
   focus: string | null,
   analysisId: string | null,
