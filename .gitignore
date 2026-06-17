@@ -73,3 +73,6 @@ scripts/issue-session.mjs
 
 # Playwright MCP run artifacts
 .playwright-mcp/
+
+# exercise-demo fetch cache (re-fetchable from the OSS API) — local only
+scripts/.cache/
