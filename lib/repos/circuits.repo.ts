@@ -21,6 +21,7 @@ export type CircuitSummary = {
 
 export type CircuitExerciseWithName = schema.CircuitExercise & {
   exerciseNameRu: string;
+  exerciseSlug: string;
 };
 
 export type CircuitWithDetails = {
@@ -151,6 +152,7 @@ export async function getCircuitForUser(
       targetWeightKg: schema.circuitExercises.targetWeightKg,
       notes: schema.circuitExercises.notes,
       exerciseNameRu: schema.exercises.nameRu,
+      exerciseSlug: schema.exercises.slug,
     })
     .from(schema.circuitExercises)
     .innerJoin(

@@ -11,6 +11,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { Textarea } from "@/components/ui/textarea";
@@ -632,7 +633,13 @@ function CurrentExerciseCard({
         : "—";
 
   return (
-    <div className="bg-primary text-primary-foreground border-primary rounded-2xl border p-6 text-center">
+    <div className="bg-primary text-primary-foreground border-primary relative isolate overflow-hidden rounded-2xl border p-6 text-center">
+      <ExerciseDemo
+        slug={exercise.exerciseSlug}
+        alt=""
+        variant="background"
+        className="-z-10"
+      />
       <p className="text-[10px] font-medium tracking-[0.2em] uppercase opacity-70">
         Текущее упражнение
       </p>

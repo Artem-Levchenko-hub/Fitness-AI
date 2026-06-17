@@ -3,6 +3,7 @@
 import { Pause, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,9 +15,12 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 export function RestTimer({
   targetSeconds,
   startedAt,
+  demoSlug,
 }: {
   targetSeconds: number;
   startedAt: Date;
+  /** Слаг текущего упражнения — тусклая демо-гифка фоном за таймером. */
+  demoSlug?: string;
 }) {
   const startedAtMs = startedAt.getTime();
   const [now, setNow] = useState(() => Date.now());
@@ -57,7 +61,10 @@ export function RestTimer({
   const seconds = remaining % 60;
 
   return (
-    <div className="bg-card border-border flex items-center gap-3 rounded-xl border p-3">
+    <div className="bg-card border-border relative isolate flex items-center gap-3 overflow-hidden rounded-xl border p-3">
+      {demoSlug ? (
+        <ExerciseDemo slug={demoSlug} alt="" variant="background" className="-z-10" />
+      ) : null}
       <div className="relative size-16 shrink-0">
         <svg
           viewBox="0 0 64 64"

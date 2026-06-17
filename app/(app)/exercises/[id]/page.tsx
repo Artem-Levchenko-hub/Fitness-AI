@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { MuscleBadges, muscleLabel } from "@/components/app/MuscleBadges";
 import { GoalTrackBar } from "@/components/progression/GoalTrackBar";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import {
   summarizeGoalProgress,
   type GoalProgressView,
 } from "@/lib/domain/progression/goal-projection";
+import { getExerciseDemo } from "@/lib/domain/exercises/demos";
 import { goalSeries } from "@/lib/domain/progression/goal-series";
 import {
   detectStagnation,
@@ -87,6 +89,16 @@ export default async function ExerciseDetailPage({ params }: Props) {
         </div>
         <p className="text-muted-foreground mt-1 text-sm">{exercise.nameEn}</p>
       </header>
+
+      {getExerciseDemo(exercise.slug) ? (
+        <div className="mb-6 flex justify-center">
+          <ExerciseDemo
+            slug={exercise.slug}
+            alt={`Демонстрация: ${exercise.nameRu}`}
+            variant="hero"
+          />
+        </div>
+      ) : null}
 
       <section className="bg-card border-border mb-4 space-y-4 rounded-2xl border p-5">
         <div>

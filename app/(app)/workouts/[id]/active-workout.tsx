@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
 import { GoalTrackBar } from "@/components/progression/GoalTrackBar";
@@ -331,6 +332,11 @@ function ExerciseCard({
         >
           {index + 1}
         </span>
+        <ExerciseDemo
+          slug={exercise.exerciseSlug}
+          alt={exercise.exerciseNameRu}
+          variant="thumb"
+        />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold">
             {exercise.exerciseNameRu}
@@ -441,6 +447,7 @@ function ExerciseCard({
                 <RestTimer
                   targetSeconds={exercise.targetRestSeconds}
                   startedAt={lastSet.completedAt}
+                  demoSlug={exercise.exerciseSlug}
                 />
               ) : null}
 

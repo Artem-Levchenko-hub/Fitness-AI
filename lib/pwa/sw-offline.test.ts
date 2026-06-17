@@ -185,16 +185,16 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     // версионные кэши прошлого деплоя + текущие (имена держит сам sw.js)
     await caches.open("static-v1");
     await caches.open("runtime-v1");
-    await caches.open("static-v3");
-    await caches.open("runtime-v3");
+    await caches.open("static-v4");
+    await caches.open("runtime-v4");
     const evt = makeEvent("/activate");
     listeners.activate(evt);
     await new Promise((r) => setTimeout(r, 0));
     const remaining = await caches.keys();
     expect(remaining).not.toContain("static-v1");
     expect(remaining).not.toContain("runtime-v1");
-    expect(remaining).toContain("static-v3");
-    expect(remaining).toContain("runtime-v3");
+    expect(remaining).toContain("static-v4");
+    expect(remaining).toContain("runtime-v4");
     expect(claim).toHaveBeenCalled();
   });
 

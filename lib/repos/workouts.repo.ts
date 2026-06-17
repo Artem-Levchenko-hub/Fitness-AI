@@ -28,6 +28,7 @@ export type ActiveWorkoutExercise = {
   position: number;
   exerciseNameRu: string;
   exerciseNameEn: string;
+  exerciseSlug: string;
   targetSets: number;
   targetRepsMin: number;
   targetRepsMax: number;
@@ -150,6 +151,7 @@ export async function getActiveWorkoutForUser(
       position: schema.workoutExercises.position,
       exerciseNameRu: schema.exercises.nameRu,
       exerciseNameEn: schema.exercises.nameEn,
+      exerciseSlug: schema.exercises.slug,
     })
     .from(schema.workoutExercises)
     .innerJoin(

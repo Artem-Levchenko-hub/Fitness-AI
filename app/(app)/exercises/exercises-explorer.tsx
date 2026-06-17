@@ -4,6 +4,7 @@ import { Search, Sparkles, User } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { MuscleBadges, muscleLabel } from "@/components/app/MuscleBadges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,7 +139,12 @@ function ExerciseList({ items }: { items: ExerciseListItem[] }) {
             href={`/exercises/${ex.id}`}
             className="bg-card hover:bg-accent border-border block rounded-xl border p-4 transition-colors"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <ExerciseDemo
+                slug={ex.slug}
+                alt={ex.nameRu}
+                variant="thumb"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="truncate text-sm font-semibold">
@@ -153,13 +159,13 @@ function ExerciseList({ items }: { items: ExerciseListItem[] }) {
                 <p className="text-muted-foreground truncate text-xs">
                   {ex.nameEn}
                 </p>
+                <div className="mt-2">
+                  <MuscleBadges
+                    primary={ex.primaryMuscles}
+                    secondary={ex.secondaryMuscles}
+                  />
+                </div>
               </div>
-            </div>
-            <div className="mt-3">
-              <MuscleBadges
-                primary={ex.primaryMuscles}
-                secondary={ex.secondaryMuscles}
-              />
             </div>
           </Link>
         </li>
