@@ -1,4 +1,4 @@
-import { ChevronRight, Library, Pencil, Play, Plus, Sparkles } from "lucide-react";
+import { ChevronRight, Library, Pencil, Play, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -26,7 +26,12 @@ export default async function TemplatesPage() {
     listCircuitTemplates(user.id),
     listCardioTemplates(user.id),
   ]);
-  const templates = mergeTemplateList(strength, circuit, cardio);
+  // Вкладка «Шаблоны» = только то, что атлет собрал/сохранил сам. Авто-«следующая
+  // тренировка» от тренера (source="trainer") сюда не попадает — она живёт как
+  // подсказка на дашборде и не засоряет список ручных шаблонов.
+  const templates = mergeTemplateList(strength, circuit, cardio).filter(
+    (tpl) => tpl.source !== "trainer",
+  );
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -119,12 +124,6 @@ export default async function TemplatesPage() {
 function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
   return (
     <div className="min-w-0 flex-1">
-      {tpl.source === "trainer" ? (
-        <p className="text-primary mb-1 inline-flex items-center gap-1 text-[10px] font-semibold tracking-[0.1em] uppercase">
-          <Sparkles className="size-3" />
-          Составил тренер
-        </p>
-      ) : null}
       <h2 className="truncate text-sm font-semibold">{tpl.name}</h2>
       <p className="text-muted-foreground mt-0.5 text-xs">
         {formatTemplateMeta(tpl)}
