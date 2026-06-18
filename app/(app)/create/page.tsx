@@ -5,6 +5,7 @@ import {
   Play,
   Plus,
   Repeat,
+  Sparkles,
   Zap,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -67,6 +68,34 @@ export default async function CreateWorkoutPage() {
       </header>
 
       <section className="space-y-3">
+        {/* Персональный план от ИИ-тренера — отдельный вход «над форматами»:
+            тренер подбирает упражнения под цель/травмы, в отличие от ручной
+            сборки шаблона ниже. */}
+        <Link
+          href="/programs/ai"
+          className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5 hover:to-primary/10 flex items-start gap-4 rounded-2xl border p-5 transition-colors"
+        >
+          <div className="bg-primary/15 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
+            <Sparkles className="size-5" aria-hidden="true" />
+          </div>
+          <div className="flex-1">
+            <p className="text-primary text-[10px] font-medium tracking-[0.18em] uppercase">
+              ИИ-тренер
+            </p>
+            <h2 className="mt-0.5 text-base font-semibold tracking-tight">
+              Составить план под себя
+            </h2>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              Ответь на пару вопросов о цели и травмах — тренер соберёт
+              персональную программу: рост мышц, сила, выносливость, колени.
+            </p>
+          </div>
+          <ChevronRight
+            className="text-muted-foreground mt-1 size-5 shrink-0"
+            aria-hidden="true"
+          />
+        </Link>
+
         {strengthRows.length > 0 ? (
           <FormatTemplateCard
             icon={Dumbbell}

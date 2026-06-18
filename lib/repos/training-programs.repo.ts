@@ -8,6 +8,7 @@ import {
   type AdaptItem,
   type SubstituteCandidate,
 } from "@/lib/domain/programs/adapt";
+import type { AiPlan } from "@/lib/domain/programs/ai-plan";
 import { getLibraryProgram } from "@/lib/domain/programs/library";
 import type { WorkoutExerciseInput } from "@/lib/domain/templates/next-template";
 import {
@@ -118,6 +119,65 @@ export async function copyLibraryProgramToUser(
           })),
         );
       }
+    }
+
+    return { id: programId };
+  });
+}
+
+/** Записывает план, составленный ИИ-тренером, в строки пользователя: программа +
+ *  по шаблону-дню на каждый день + их упражнения. exerciseSlug резолвятся в id
+ *  СИСТЕМНЫХ упражнений (план уже отфильтрован санитайзером по каталогу, но на
+ *  всякий случай дропаем не-резолвнутые). Программа активна сразу (составлена
+ *  под клиента — без «полки»): дни тренируются со страницы программы, после
+ *  первого прохода тренер адаптирует их на месте. Вес целевой = null (атлет
+ *  подбирает на первой тренировке, как в библиотеке). */
+export async function createAiProgramForUser(
+  userId: string,
+  plan: AiPlan,
+): Promise<{ id: string }> {
+  const slugs = [
+    ...new Set(plan.days.flatMap((d) => d.items.map((i) => i.exerciseSlug))),
+  ];
+  const idBySlug = await resolveSystemExerciseIds(slugs);
+
+  return db.transaction(async (tx) => {
+    const programId = crypto.randomUUID();
+    await tx.insert(schema.trainingPrograms).values({
+      id: programId,
+      userId,
+      name: plan.name,
+      description: plan.description || null,
+      activatedAt: new Date(),
+    });
+
+    for (const [dayOrder, day] of plan.days.entries()) {
+      const resolved = day.items.filter((it) => idBySlug.has(it.exerciseSlug));
+      if (resolved.length === 0) continue; // день без резолвнутых упражнений — пропускаем
+
+      const templateId = crypto.randomUUID();
+      await tx.insert(schema.workoutTemplates).values({
+        id: templateId,
+        userId,
+        name: day.name,
+        description: day.focus || null,
+        programId,
+        dayOrder,
+        source: "manual",
+      });
+      await tx.insert(schema.templateExercises).values(
+        resolved.map((it, i) => ({
+          templateId,
+          exerciseId: idBySlug.get(it.exerciseSlug)!,
+          position: i,
+          targetSets: it.sets,
+          targetRepsMin: it.repsMin,
+          targetRepsMax: it.repsMax,
+          targetWeightKg: null,
+          targetRestSeconds: it.restSeconds,
+          notes: it.note,
+        })),
+      );
     }
 
     return { id: programId };

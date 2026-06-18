@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Plus,
   Settings2,
+  Sparkles,
   Users,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -205,7 +206,7 @@ function StartCard() {
         Готовы тренироваться?
       </h2>
       <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-        Один вход для всех форматов — силовая, круговая, кардио и интервалы.
+        Попроси ИИ-тренера собрать персональный план — или начни тренировку сам.
       </p>
 
       {/*
@@ -220,6 +221,12 @@ function StartCard() {
        */}
       <div className="mt-5 flex flex-col gap-3">
         <Button asChild size="xl" className="w-full">
+          <Link href="/programs/ai" data-testid="dashboard-ai-plan">
+            <Sparkles className="size-5" />
+            Составить план с ИИ-тренером
+          </Link>
+        </Button>
+        <Button asChild size="xl" variant="outline" className="w-full">
           <Link href="/create">
             <Plus className="size-5" />
             Начать тренировку
