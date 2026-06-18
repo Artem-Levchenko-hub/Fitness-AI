@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   aiPlanRawSchema,
   buildPlanComposerPrompt,
+  PLAN_SYSTEM_INSTRUCTION,
   sanitizeAiPlan,
   type AiPlanRaw,
   type PlanIntake,
@@ -116,21 +117,21 @@ describe("sanitizeAiPlan", () => {
 
 describe("buildPlanComposerPrompt", () => {
   const intake: PlanIntake = {
-    goals: ["knee_rehab"],
-    experience: "beginner",
-    daysPerWeek: 3,
-    sessionMinutes: 45,
-    equipment: "full_gym",
+    goal: "восстановить колено и набрать мышцы",
+    experience: "новичок",
+    schedule: "3 раза в неделю по часу",
+    equipment: "зал",
     limitations: "болит левое колено",
     notes: "",
   };
 
-  it("включает гайд по реабилитации коленей и травму клиента", () => {
+  it("включает свободные ответы клиента и каталог", () => {
     const prompt = buildPlanComposerPrompt(intake, [
       { slug: "glute-bridge", nameRu: "Ягодичный мост", primaryMuscles: ["glutes"] },
     ]);
-    expect(prompt).toContain("ВОССТАНОВЛЕНИЕ КОЛЕНЕЙ");
+    expect(prompt).toContain("восстановить колено и набрать мышцы");
     expect(prompt).toContain("болит левое колено");
+    expect(prompt).toContain("3 раза в неделю по часу");
     expect(prompt).toContain("glute-bridge | Ягодичный мост | glutes");
   });
 
@@ -139,6 +140,23 @@ describe("buildPlanComposerPrompt", () => {
       { slug: "leg-press", nameRu: "Жим ногами", primaryMuscles: ["quads"] },
     ]);
     expect(prompt).toContain("выбирай slug ТОЛЬКО отсюда");
+  });
+
+  it("незаполненные открытые поля помечаются «не указан»", () => {
+    const prompt = buildPlanComposerPrompt(
+      { ...intake, experience: "", schedule: "" },
+      [{ slug: "leg-press", nameRu: "Жим ногами", primaryMuscles: ["quads"] }],
+    );
+    expect(prompt).toContain("не указан");
+  });
+});
+
+describe("PLAN_SYSTEM_INSTRUCTION", () => {
+  it("несёт гайд по всем целям, включая реабилитацию коленей", () => {
+    expect(PLAN_SYSTEM_INSTRUCTION).toContain("Восстановление коленей");
+    expect(PLAN_SYSTEM_INSTRUCTION).toContain("береги коленный сустав");
+    expect(PLAN_SYSTEM_INSTRUCTION).toContain("Сила:");
+    expect(PLAN_SYSTEM_INSTRUCTION).toContain("Выносливость:");
   });
 });
 

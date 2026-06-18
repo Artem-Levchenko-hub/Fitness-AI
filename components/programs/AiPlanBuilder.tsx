@@ -6,40 +6,19 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  DAYS_PER_WEEK_OPTIONS,
-  EQUIPMENT_LABELS,
-  EXPERIENCE_LABELS,
-  GOAL_LABELS,
-  PLAN_GOALS,
-  SESSION_MINUTES_OPTIONS,
-  type PlanEquipment,
-  type PlanExperience,
-  type PlanGoal,
-} from "@/lib/domain";
-import { cn } from "@/lib/utils";
-import {
   composeAiPlanAction,
   type AiPlanActionState,
 } from "@/server/actions/ai-plan";
 
-const EXPERIENCES: PlanExperience[] = ["beginner", "intermediate", "advanced"];
-const EQUIPMENTS: PlanEquipment[] = [
-  "full_gym",
-  "free_weights",
-  "dumbbells_only",
-  "bodyweight",
-];
-
-/** Интервью ИИ-тренера: тренер задаёт вопросы (цель, опыт, частота, время,
- *  инвентарь, травмы), затем составляет персональный план. В отличие от готовых
- *  пресетов — тонко под клиента (повторы/отдых/подбор под цель, безопасные
- *  альтернативы при травмах). Payload — JSON для серверного экшена. */
+/** Интервью ИИ-тренера: тренер задаёт ОТКРЫТЫЕ вопросы, клиент отвечает
+ *  свободным текстом. Тренер читает ответы и составляет персональный план —
+ *  тонко под клиента (повторы/отдых/подбор под цель, безопасные альтернативы
+ *  при травмах). Payload — JSON для серверного экшена. */
 export function AiPlanBuilder() {
-  const [goals, setGoals] = useState<PlanGoal[]>([]);
-  const [experience, setExperience] = useState<PlanExperience>("beginner");
-  const [daysPerWeek, setDaysPerWeek] = useState(3);
-  const [sessionMinutes, setSessionMinutes] = useState(60);
-  const [equipment, setEquipment] = useState<PlanEquipment>("full_gym");
+  const [goal, setGoal] = useState("");
+  const [experience, setExperience] = useState("");
+  const [schedule, setSchedule] = useState("");
+  const [equipment, setEquipment] = useState("");
   const [limitations, setLimitations] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -48,19 +27,12 @@ export function AiPlanBuilder() {
     FormData
   >(composeAiPlanAction, { status: "idle" });
 
-  function toggleGoal(g: PlanGoal) {
-    setGoals((prev) =>
-      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
-    );
-  }
-
-  const valid = goals.length >= 1;
+  const valid = goal.trim().length >= 2;
   const payload = JSON.stringify({
-    goals,
-    experience,
-    daysPerWeek,
-    sessionMinutes,
-    equipment,
+    goal: goal.trim(),
+    experience: experience.trim(),
+    schedule: schedule.trim(),
+    equipment: equipment.trim(),
     limitations: limitations.trim(),
     notes: notes.trim(),
   });
@@ -72,63 +44,62 @@ export function AiPlanBuilder() {
       <Question
         n={1}
         title="Какая у тебя цель?"
-        hint="Можно выбрать несколько — тренер совместит их в плане."
+        hint="Чего хочешь достичь: набрать мышцы, стать сильнее, похудеть, восстановить колено, выносливость… Опиши своими словами."
+        required
       >
-        <div className="flex flex-wrap gap-2">
-          {PLAN_GOALS.map((g) => (
-            <Chip key={g} on={goals.includes(g)} onClick={() => toggleGoal(g)}>
-              {GOAL_LABELS[g]}
-            </Chip>
-          ))}
-        </div>
-      </Question>
-
-      <Question n={2} title="Какой у тебя опыт?">
-        <div className="flex flex-wrap gap-2">
-          {EXPERIENCES.map((e) => (
-            <Chip key={e} on={experience === e} onClick={() => setExperience(e)}>
-              {EXPERIENCE_LABELS[e]}
-            </Chip>
-          ))}
-        </div>
-      </Question>
-
-      <Question n={3} title="Сколько дней в неделю готов тренироваться?">
-        <div className="flex flex-wrap gap-2">
-          {DAYS_PER_WEEK_OPTIONS.map((d) => (
-            <Chip key={d} on={daysPerWeek === d} onClick={() => setDaysPerWeek(d)}>
-              {d}
-            </Chip>
-          ))}
-        </div>
-      </Question>
-
-      <Question n={4} title="Сколько времени на одну тренировку?">
-        <div className="flex flex-wrap gap-2">
-          {SESSION_MINUTES_OPTIONS.map((m) => (
-            <Chip
-              key={m}
-              on={sessionMinutes === m}
-              onClick={() => setSessionMinutes(m)}
-            >
-              {m} мин
-            </Chip>
-          ))}
-        </div>
-      </Question>
-
-      <Question n={5} title="Какой инвентарь доступен?">
-        <div className="flex flex-wrap gap-2">
-          {EQUIPMENTS.map((eq) => (
-            <Chip key={eq} on={equipment === eq} onClick={() => setEquipment(eq)}>
-              {EQUIPMENT_LABELS[eq]}
-            </Chip>
-          ))}
-        </div>
+        <Textarea
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          placeholder="Например: хочу набрать мышцы и подтянуть ягодицы"
+          maxLength={600}
+          rows={3}
+        />
       </Question>
 
       <Question
-        n={6}
+        n={2}
+        title="Какой у тебя опыт?"
+        hint="Как давно тренируешься, что уже умеешь."
+      >
+        <Textarea
+          value={experience}
+          onChange={(e) => setExperience(e.target.value)}
+          placeholder="Например: год в зале, базовые упражнения знаю"
+          maxLength={600}
+          rows={2}
+        />
+      </Question>
+
+      <Question
+        n={3}
+        title="Сколько раз в неделю и сколько времени готов тренироваться?"
+        hint="Сколько дней в неделю и примерно сколько минут на одну тренировку."
+      >
+        <Textarea
+          value={schedule}
+          onChange={(e) => setSchedule(e.target.value)}
+          placeholder="Например: 3 раза в неделю, по часу"
+          maxLength={600}
+          rows={2}
+        />
+      </Question>
+
+      <Question
+        n={4}
+        title="Где и с чем тренируешься?"
+        hint="Зал, дом, какой инвентарь доступен (штанга, гантели, тренажёры, только вес тела)."
+      >
+        <Textarea
+          value={equipment}
+          onChange={(e) => setEquipment(e.target.value)}
+          placeholder="Например: полный зал / дома гантели до 20 кг"
+          maxLength={600}
+          rows={2}
+        />
+      </Question>
+
+      <Question
+        n={5}
         title="Есть травмы или ограничения?"
         hint="Например: болят колени, грыжа в пояснице, больное плечо. Тренер подберёт безопасные движения."
       >
@@ -136,13 +107,13 @@ export function AiPlanBuilder() {
           value={limitations}
           onChange={(e) => setLimitations(e.target.value)}
           placeholder="Колени, спина, плечо… или оставь пустым"
-          maxLength={500}
-          rows={3}
+          maxLength={600}
+          rows={2}
         />
       </Question>
 
       <Question
-        n={7}
+        n={6}
         title="Особые пожелания?"
         hint="Например: упор на ягодицы, без становой тяги, хочу подтянуться 10 раз."
       >
@@ -150,8 +121,8 @@ export function AiPlanBuilder() {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Любые пожелания… или оставь пустым"
-          maxLength={500}
-          rows={3}
+          maxLength={600}
+          rows={2}
         />
       </Question>
 
@@ -183,11 +154,13 @@ function Question({
   n,
   title,
   hint,
+  required,
   children,
 }: {
   n: number;
   title: string;
   hint?: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -196,7 +169,10 @@ function Question({
         <span className="text-primary text-xs font-semibold tabular-nums">
           {n}
         </span>
-        <span className="text-base font-semibold tracking-tight">{title}</span>
+        <span className="text-base font-semibold tracking-tight">
+          {title}
+          {required ? <span className="text-destructive"> *</span> : null}
+        </span>
       </p>
       {hint ? (
         <p className="text-muted-foreground mt-1 mb-3 text-xs leading-relaxed">
@@ -207,31 +183,5 @@ function Question({
       )}
       {children}
     </section>
-  );
-}
-
-function Chip({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={cn(
-        "min-h-[44px] rounded-xl border px-4 py-2 text-sm font-medium transition-colors",
-        on
-          ? "border-primary bg-primary/10 text-foreground"
-          : "border-border bg-background text-muted-foreground hover:bg-accent",
-      )}
-    >
-      {children}
-    </button>
   );
 }
