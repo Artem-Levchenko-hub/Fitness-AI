@@ -159,3 +159,39 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Стикман-лоадер ожидания разбора (TrainerWaiting): атлет жмёт / приседает /
+   подтягивается. Анимируем transform одной группы SVG — GPU-friendly, 60fps.
+   transform-box: fill-box → transform-origin считается от bbox группы.
+   prefers-reduced-motion гасит длительность выше → статичная поза (без дёрганья). */
+.stickman-move {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes stickman-squat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(13px);
+  }
+}
+@keyframes stickman-press {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-13px);
+  }
+}
+@keyframes stickman-pull {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+}

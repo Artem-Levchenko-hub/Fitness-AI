@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { WAITING_STAGES, stageStates } from "@/lib/trainer/waiting-stages";
@@ -59,7 +59,7 @@ export function TrainerStages() {
               {state === "done" ? (
                 <Check className="text-success size-4" />
               ) : state === "active" ? (
-                <Loader2 className="text-primary size-4 animate-spin motion-reduce:animate-none" />
+                <span className="bg-primary size-2 animate-pulse rounded-full motion-reduce:animate-none" />
               ) : (
                 <span className="bg-border size-1.5 rounded-full" />
               )}
