@@ -48,7 +48,7 @@ export function TrainerSkeleton({ text }: { text: string }) {
       className="bg-card border-border space-y-6 rounded-2xl border p-6"
     >
       <div className="flex flex-col items-center gap-4">
-        <StickmanLoader className="size-24" />
+        <StickmanLoader className="size-28" />
         <div className="w-full space-y-2">
           <TrainerStages />
           <p className="text-muted-foreground text-xs leading-relaxed">{text}</p>
