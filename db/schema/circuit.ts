@@ -32,6 +32,11 @@ export const circuitWorkouts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** Круговой шаблон, из которого стартовала сессия (snapshot-копия).
+     *  null — ad-hoc круговая (без шаблона). Плоский text (зеркало
+     *  sourceWorkoutId у силовых) — нужен, чтобы после finish тренер знал,
+     *  какой шаблон адаптировать на месте под факт. */
+    sourceTemplateId: text("source_template_id"),
     totalRounds: integer("total_rounds").notNull().default(3),
     restBetweenRoundsSec: integer("rest_between_rounds_sec")
       .notNull()

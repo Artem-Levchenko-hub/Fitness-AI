@@ -1,8 +1,10 @@
 import { and, asc, desc, eq, inArray, lte, or } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { buildTrainerContext } from "@/lib/ai/context-builder";
+import { adaptCircuitTemplateFromWorkout } from "@/lib/repos/circuit-templates.repo";
 import {
   generateTrainerResponse,
   renderTrainerMarkdown,
@@ -134,7 +136,10 @@ async function processJob(
   // успевает стартовать. Если разбор по этой тренировке уже есть — НЕ
   // перегенерируем (нет двойного вызова LLM), просто привязываем существующий.
   const existing = await findExistingAnalysis(job);
-  if (existing) return existing;
+  if (existing) {
+    await maybeAdaptCircuitTemplate(job);
+    return existing;
+  }
 
   const context = await buildTrainerContext(job.userId, job.workoutId, {
     kind: job.kind,
@@ -192,7 +197,30 @@ ${context.prompt}`;
     .returning({ id: schema.aiAnalyses.id });
 
   if (!analysis) throw new Error("Не удалось сохранить ai_analyses");
+  await maybeAdaptCircuitTemplate(job);
   return { analysisId: analysis.id, result: result.json };
+}
+
+/** ПОСЛЕ анализа круговой тренер адаптирует шаблон-источник на месте под факт
+ *  (повторы/время/вес, отдыхи, круги, изредка свап). Fail-soft (R-10): любая
+ *  ошибка НЕ валит job (анализ уже сохранён). Идемпотентно в самом репо. */
+async function maybeAdaptCircuitTemplate(
+  job: typeof schema.aiJobs.$inferSelect,
+): Promise<void> {
+  if (job.kind !== "circuit_post_workout" || !job.circuitWorkoutId) return;
+  try {
+    const res = await adaptCircuitTemplateFromWorkout(
+      job.userId,
+      job.circuitWorkoutId,
+    );
+    if (res?.adapted) {
+      revalidatePath("/templates");
+      revalidatePath("/circuits");
+      revalidatePath(`/circuits/${job.circuitWorkoutId}`);
+    }
+  } catch (e) {
+    console.error("[circuit-adapt] failed:", e);
+  }
 }
 
 /** Уже сохранённый разбор по этой тренировке (силовой/круговой) — для

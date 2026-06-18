@@ -1,4 +1,11 @@
-import { ChevronRight, Library, Pencil, Play, Plus } from "lucide-react";
+import {
+  ChevronRight,
+  Library,
+  Pencil,
+  Play,
+  Plus,
+  Wand2,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -129,6 +136,14 @@ function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
         {formatTemplateMeta(tpl)}
         {tpl.description ? ` · ${tpl.description}` : ""}
       </p>
+      {tpl.adapted ? (
+        // Тренер подогнал шаблон под факт последней тренировки (R-41 — не только
+        // цвет: иконка + текст).
+        <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+          <Wand2 className="size-3" aria-hidden="true" />
+          обновлён тренером
+        </span>
+      ) : null}
     </div>
   );
 }

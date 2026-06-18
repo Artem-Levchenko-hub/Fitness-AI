@@ -15,5 +15,6 @@ export * from "./cardio/cardio-template-preset";
 export * from "./cardio/cardio-template-summary";
 export * from "./cardio/cardio-edit-initial";
 export * from "./circuits/circuit-template-preset";
+export * from "./circuits/adapt-circuit";
 export * from "./templates/template-list";
 export * from "./programs/ai-plan";

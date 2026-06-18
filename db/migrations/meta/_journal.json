@@ -162,6 +162,13 @@
       "when": 1781468375108,
       "tag": "0022_foamy_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781793387383,
+      "tag": "0023_unique_viper",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,8 @@ export type TemplateListItem = {
   updatedAt: Date;
   /** Авторство шаблона — для бейджа «Тренер» (H-T1). */
   source: TemplateSource;
+  /** Тренер уже адаптировал шаблон-день под факт (бейдж «обновлён тренером»). */
+  adapted: boolean;
 };
 
 export type TemplateItemInput = {
@@ -52,6 +54,7 @@ export async function listTemplates(
       description: schema.workoutTemplates.description,
       updatedAt: schema.workoutTemplates.updatedAt,
       source: schema.workoutTemplates.source,
+      lastAdaptedWorkoutId: schema.workoutTemplates.lastAdaptedWorkoutId,
       exerciseCount: count(schema.templateExercises.id),
     })
     .from(schema.workoutTemplates)
@@ -77,7 +80,10 @@ export async function listTemplates(
     .groupBy(schema.workoutTemplates.id)
     .orderBy(desc(schema.workoutTemplates.updatedAt));
 
-  return rows;
+  return rows.map(({ lastAdaptedWorkoutId, ...r }) => ({
+    ...r,
+    adapted: lastAdaptedWorkoutId != null,
+  }));
 }
 
 /** Уже есть trainer-шаблон «следующая», составленный по этой тренировке?

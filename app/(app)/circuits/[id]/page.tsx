@@ -68,6 +68,23 @@ export default async function CircuitPage({ params }: Props) {
     await getPreviousAnalysisRef(user.id, "circuit", { circuitWorkoutId: id }),
   );
 
+  // Тренер адаптировал шаблон-источник ИМЕННО по этой круговой? (после анализа,
+  // в worker). Маркер для баннера «тренер обновил план» на завершённом экране.
+  let templateAdapted = false;
+  if (c.workout.sourceTemplateId) {
+    const [t] = await db
+      .select({ last: schema.circuitTemplates.lastAdaptedCircuitWorkoutId })
+      .from(schema.circuitTemplates)
+      .where(
+        and(
+          eq(schema.circuitTemplates.id, c.workout.sourceTemplateId),
+          eq(schema.circuitTemplates.userId, user.id),
+        ),
+      )
+      .limit(1);
+    templateAdapted = t?.last === id;
+  }
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -100,6 +117,7 @@ export default async function CircuitPage({ params }: Props) {
           jobStatus={job?.status ?? null}
           jobId={job?.id ?? null}
           pastAdviceHref={pastAdviceHref}
+          templateAdapted={templateAdapted}
         />
       )}
     </main>

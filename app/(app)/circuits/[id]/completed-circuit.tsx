@@ -1,4 +1,4 @@
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { CheckCircle2, Sparkles, Wand2 } from "lucide-react";
 
 import { TrainerJobPoller } from "@/components/trainer/TrainerJobPoller";
 import {
@@ -18,6 +18,7 @@ export function CompletedCircuit({
   jobStatus,
   jobId,
   pastAdviceHref,
+  templateAdapted,
 }: {
   workout: CircuitWorkout;
   exercises: CircuitExerciseWithName[];
@@ -33,6 +34,8 @@ export function CompletedCircuit({
   jobId: string | null;
   /** H13.6 — ссылка на прошлый разбор круговой (own-view); null → статика. */
   pastAdviceHref?: string | null;
+  /** Тренер обновил шаблон-источник по этой круговой (после анализа) → баннер. */
+  templateAdapted?: boolean;
 }) {
   const isCancelled = workout.status === "cancelled";
   const totalSlots = workout.totalRounds * exercises.length;
@@ -113,6 +116,24 @@ export function CompletedCircuit({
         circuitWorkoutId={workout.id}
         pastAdviceHref={pastAdviceHref}
       />
+
+      {templateAdapted ? (
+        <section className="border-primary/30 bg-primary/5 rounded-2xl border p-4">
+          <div className="flex items-start gap-3">
+            <div className="bg-primary/15 text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full">
+              <Wand2 className="size-4" aria-hidden="true" />
+            </div>
+            <div className="text-sm">
+              <p className="font-semibold">Тренер обновил твой шаблон</p>
+              <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                Повторы, отдых и число кругов подогнаны под то, как прошла
+                тренировка. В следующий раз просто стартуй этот шаблон — он уже
+                под тебя.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="bg-card border-border rounded-2xl border p-4">
         <h3 className="mb-3 text-sm font-semibold tracking-tight">

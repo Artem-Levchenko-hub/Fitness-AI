@@ -35,6 +35,12 @@ export const circuitTemplates = pgTable(
     restBetweenExercisesSec: integer("rest_between_exercises_sec")
       .notNull()
       .default(15),
+    /** Последняя круговая, по которой тренер адаптировал шаблон на месте под
+     *  факт (повторы/время/отдыхи/круги, изредка свап). Ключ идемпотентности
+     *  (повторный прогон job = no-op) И маркер «обновлён тренером» для бейджа
+     *  в /templates (non-null = адаптирован). Плоский text (зеркало
+     *  lastAdaptedWorkoutId у силовых) — без FK, чтобы не плодить цикл схем. */
+    lastAdaptedCircuitWorkoutId: text("last_adapted_circuit_workout_id"),
     archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()

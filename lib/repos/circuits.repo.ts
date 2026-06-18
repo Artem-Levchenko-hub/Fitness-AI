@@ -32,6 +32,9 @@ export type CircuitWithDetails = {
 
 export type StartCircuitInput = {
   name: string;
+  /** Круговой шаблон-источник (snapshot-копия) — для адаптации шаблона тренером
+   *  после finish. null/undefined — ad-hoc круговая (нечего адаптировать). */
+  sourceTemplateId?: string | null;
   totalRounds: number;
   restBetweenRoundsSec: number;
   restBetweenExercisesSec: number;
@@ -73,6 +76,7 @@ export async function startCircuit(
       id,
       userId,
       name: input.name,
+      sourceTemplateId: input.sourceTemplateId ?? null,
       totalRounds: input.totalRounds,
       restBetweenRoundsSec: input.restBetweenRoundsSec,
       restBetweenExercisesSec: input.restBetweenExercisesSec,
@@ -110,6 +114,9 @@ export async function cloneCircuit(
 
   return startCircuit(userId, {
     name: src.workout.name,
+    // Повтор по-прежнему тянет шаблон-источник: тренер продолжает подгонять
+    // шаблон под факт КАЖДОЙ сессии (не только первой) — «отдаться тренеру».
+    sourceTemplateId: src.workout.sourceTemplateId,
     totalRounds: src.workout.totalRounds,
     restBetweenRoundsSec: src.workout.restBetweenRoundsSec,
     restBetweenExercisesSec: src.workout.restBetweenExercisesSec,
