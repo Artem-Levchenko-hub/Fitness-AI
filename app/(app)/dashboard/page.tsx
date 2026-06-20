@@ -20,10 +20,10 @@ import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
 import { WeekStripPreview } from "@/components/dashboard/WeekStripPreview";
+import { SwipeableHistoryCard } from "@/components/workouts/swipeable-history-card";
 import {
   buildHistory,
   countWeekSessions,
-  HistoryCard,
   LastSessionMini,
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
@@ -189,7 +189,7 @@ export default async function DashboardPage() {
           <ul className="space-y-2">
             {recentHistory.map((it) => (
               <li key={`${it.kind}-${it.id}`}>
-                <HistoryCard item={it} />
+                <SwipeableHistoryCard item={it} />
               </li>
             ))}
           </ul>

@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { extractPartialTrainer } from "./trainer-stream-parse";
+import {
+  extractPartialTrainer,
+  FRAME_REASONING,
+  FRAME_TEXT,
+  splitTrainerStream,
+  STREAM_FRAME,
+} from "./trainer-stream-parse";
+
+const T = (s: string) => STREAM_FRAME + FRAME_TEXT + s;
+const R = (s: string) => STREAM_FRAME + FRAME_REASONING + s;
 
 describe("extractPartialTrainer", () => {
   it("returns empty object when there is no JSON yet", () => {
@@ -59,5 +68,44 @@ describe("extractPartialTrainer", () => {
     const p = extractPartialTrainer(raw);
     expect(p.overallScore).toBeUndefined();
     expect(p.motivation).toBeUndefined();
+  });
+});
+
+describe("splitTrainerStream", () => {
+  it("treats an unframed stream as pure JSON (back-compat)", () => {
+    const raw = `{"overallScore": 80}`;
+    expect(splitTrainerStream(raw)).toEqual({ thinking: "", json: raw });
+  });
+
+  it("separates reasoning and text channels", () => {
+    const acc = R("Смотрю подходы…") + T(`{"overallScore":`) + T(" 90}");
+    expect(splitTrainerStream(acc)).toEqual({
+      thinking: "Смотрю подходы…",
+      json: `{"overallScore": 90}`,
+    });
+  });
+
+  it("reassembles interleaved frames in arrival order", () => {
+    const acc =
+      R("думаю ") + T(`{"motiv`) + R("ещё думаю ") + T(`ation":"Молодец"}`);
+    expect(splitTrainerStream(acc)).toEqual({
+      thinking: "думаю ещё думаю ",
+      json: `{"motivation":"Молодец"}`,
+    });
+  });
+
+  it("feeds the JSON channel into extractPartialTrainer", () => {
+    const acc = R("прикидываю оценку") + T(`{"overallScore": 72, "motivation": "Ок`);
+    const { json } = splitTrainerStream(acc);
+    expect(extractPartialTrainer(json).overallScore).toBe(72);
+    expect(extractPartialTrainer(json).motivation).toBe("Ок");
+  });
+
+  it("ignores a trailing incomplete frame (sentinel with no channel yet)", () => {
+    const acc = T(`{"overallScore": 50}`) + STREAM_FRAME;
+    expect(splitTrainerStream(acc)).toEqual({
+      thinking: "",
+      json: `{"overallScore": 50}`,
+    });
   });
 });

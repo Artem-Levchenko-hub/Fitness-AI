@@ -321,3 +321,20 @@ export async function listRecentCardio(
     };
   });
 }
+
+/** Удаляет кардио-сеанс целиком. Дочерние блоки (`cardioBlocks`) уходят по
+ *  ON DELETE CASCADE. Фильтр по userId (R-7) — чужой сеанс удалить нельзя
+ *  (0 строк). Зеркало `deleteWorkout` / `deleteCircuit`. */
+export async function deleteCardio(
+  userId: string,
+  cardioId: string,
+): Promise<void> {
+  await db
+    .delete(schema.cardioWorkouts)
+    .where(
+      and(
+        eq(schema.cardioWorkouts.id, cardioId),
+        eq(schema.cardioWorkouts.userId, userId),
+      ),
+    );
+}

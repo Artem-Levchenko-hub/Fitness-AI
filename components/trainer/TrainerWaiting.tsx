@@ -11,18 +11,21 @@ import { TrainerTips } from "./TrainerTips";
  *
  *  Компоновка (GoFundMe «Did you know?»): силуэт нагруженных мышц + карусель
  *  коротких советов/ликбезов — слой ПОВЕРХ живого скелета. Скелет ведёт
- *  стикман-лоадер (атлет жмёт/приседает/подтягивается). Силуэт зависит от RAG
- *  (нужен workoutId) и fail-soft скрывается; советы статичны и есть всегда. */
+ *  векторный штанга-лоадер + подписанные стадии. `thinking` (live-стрим) — хвост
+ *  «мыслей» модели вместо статичной подписи; без него остаётся статичный text. */
 export function TrainerWaiting({
   text,
   workoutId,
   circuitWorkoutId,
+  thinking,
 }: {
   text: string;
   /** Силовая — мышцы её упражнений для силуэта. Без id силуэт скрыт. */
   workoutId?: string;
   /** Круговая (H16.3) — мышцы её упражнений; передаётся вместо workoutId. */
   circuitWorkoutId?: string;
+  /** Live-стрим (силовая): хвост reasoning модели для тикера «тренер размышляет». */
+  thinking?: string;
 }) {
   const hasFacts = Boolean(workoutId || circuitWorkoutId);
   return (
@@ -31,15 +34,22 @@ export function TrainerWaiting({
         <InsightCards workoutId={workoutId} circuitWorkoutId={circuitWorkoutId} />
       ) : null}
       <TrainerTips />
-      <TrainerSkeleton text={text} />
+      <TrainerSkeleton text={text} thinking={thinking} />
     </div>
   );
 }
 
 /** Скелетон в форме будущей карточки разбора. Стрим не отдаёт Content-Length,
  *  поэтому честный индикатор — каркас того, что вот-вот появится, а сверху —
- *  «живой» стикман-лоадер (вместо зависшего спиннера) + подписанные стадии. */
-export function TrainerSkeleton({ text }: { text: string }) {
+ *  «живой» штанга-лоадер (вместо зависшего спиннера) + подписанные стадии.
+ *  Под ними — тикер «мыслей» модели (live) либо статичный статус-текст. */
+export function TrainerSkeleton({
+  text,
+  thinking,
+}: {
+  text: string;
+  thinking?: string;
+}) {
   return (
     <div
       role="status"
@@ -51,14 +61,11 @@ export function TrainerSkeleton({ text }: { text: string }) {
         <StickmanLoader className="size-28" />
         <div className="w-full space-y-2">
           <TrainerStages />
-          <p className="text-muted-foreground text-xs leading-relaxed">{text}</p>
+          <ThinkingLine thinking={thinking} fallback={text} />
         </div>
       </div>
 
-      <div
-        aria-hidden="true"
-        className="animate-pulse space-y-6 motion-reduce:animate-none"
-      >
+      <div aria-hidden="true" className="trainer-shimmer space-y-6 rounded-xl">
         {/* Оценка + иконка */}
         <div className="flex items-start justify-between gap-4">
           <Bar className="h-12 w-28" />
@@ -97,6 +104,38 @@ export function TrainerSkeleton({ text }: { text: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Подпись под лоадером: live-хвост «мыслей» модели (с плавной кареткой) либо
+ *  статичный статус-текст. Чисто презентационно (без хуков) — безопасно в любом
+ *  дереве. Длинный reasoning показываем хвостом, чтобы видеть свежую мысль. */
+function ThinkingLine({
+  thinking,
+  fallback,
+}: {
+  thinking?: string;
+  fallback: string;
+}) {
+  const text = (thinking ?? "").replace(/\s+/g, " ").trim();
+  if (!text) {
+    return (
+      <p className="text-muted-foreground text-xs leading-relaxed">{fallback}</p>
+    );
+  }
+  const tail = text.length > 150 ? `…${text.slice(-150)}` : text;
+  return (
+    <p
+      aria-live="polite"
+      className="text-muted-foreground text-xs leading-relaxed"
+    >
+      <span className="text-foreground/70 font-medium">Тренер размышляет: </span>
+      {tail}
+      <span
+        aria-hidden="true"
+        className="bg-muted-foreground/70 trainer-caret ml-0.5 inline-block h-3 w-px align-middle"
+      />
+    </p>
   );
 }
 

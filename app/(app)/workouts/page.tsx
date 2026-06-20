@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { SwipeableHistoryCard } from "@/components/workouts/swipeable-history-card";
 import {
   buildHistory,
-  HistoryCard,
   type HistoryItem,
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
@@ -58,7 +58,7 @@ export default async function WorkoutsPage() {
               <ul className="space-y-2">
                 {g.items.map((it) => (
                   <li key={`${it.kind}-${it.id}`}>
-                    <HistoryCard item={it} />
+                    <SwipeableHistoryCard item={it} />
                   </li>
                 ))}
               </ul>

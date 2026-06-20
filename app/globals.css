@@ -150,6 +150,45 @@ body {
   font-feature-settings: "tnum";
 }
 
+/* Разбор тренера: мягкий shimmer на скелете ожидания (вместо резкого pulse) и
+   плавная каретка живой печати. Цвета — токены через color-mix(oklch) (R-36),
+   без hex в разметке. prefers-reduced-motion гасит их глобальным правилом ниже. */
+@keyframes trainer-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.trainer-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.trainer-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--foreground) 7%, transparent),
+    transparent
+  );
+  animation: trainer-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes trainer-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.1;
+  }
+}
+.trainer-caret {
+  animation: trainer-caret 1.05s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

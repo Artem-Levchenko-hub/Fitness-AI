@@ -1,10 +1,12 @@
 "use client";
 
+import { animate, motion, useMotionValue, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
   extractPartialTrainer,
+  splitTrainerStream,
   type PartialTrainer,
 } from "@/lib/ai/trainer-stream-parse";
 
@@ -13,14 +15,16 @@ import {
   type TrainerResultData,
 } from "./TrainerResultCard";
 import { TrainerWaiting } from "./TrainerWaiting";
+import { useTypewriter } from "./use-typewriter";
 
 type Phase = "streaming" | "loading-result" | "done" | "error";
 
 /** F8-B / H-LIVE: живой стрим разбора. POST /api/ai/trainer/stream генерирует
- *  inline (без cron/poll) и льёт сырой JSON. Мы копим текст и через толерантный
- *  парсер показываем РОЖДАЮЩИЙСЯ разбор в реальном времени (как тренер пишет) —
- *  оценка, мотивация, «что хорошо», рекомендации проступают по мере печати. До
- *  первого поля сверху живут книжные факты (TrainerWaiting). По завершении —
+ *  inline (без cron/poll) и льёт кадрированный поток: JSON разбора + «мысли»
+ *  модели (reasoning). Через толерантный парсер показываем РОЖДАЮЩИЙСЯ разбор в
+ *  реальном времени (как тренер пишет) — оценка считается вверх, мотивация,
+ *  «что хорошо», рекомендации печатаются ровным ритмом. До первого поля сверху —
+ *  лоадер + тикер «тренер размышляет» (живой reasoning). По завершении —
  *  перечитываем сохранённый structured-разбор (цветные дельты F4). */
 export function TrainerStreamConsumer({
   workoutId,
@@ -37,6 +41,7 @@ export function TrainerStreamConsumer({
   const [result, setResult] = useState<TrainerResultData | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [partial, setPartial] = useState<PartialTrainer>({});
+  const [thinking, setThinking] = useState("");
   const [attempt, setAttempt] = useState(0);
 
   const startedRef = useRef(false);
@@ -54,6 +59,7 @@ export function TrainerStreamConsumer({
     const run = async () => {
       setPhase("streaming");
       setPartial({});
+      setThinking("");
       setErrorText(null);
 
       let res: Response;
@@ -84,7 +90,8 @@ export function TrainerStreamConsumer({
         return;
       }
 
-      // Копим текст потока и достаём готовые поля для живой «печати».
+      // Копим текст потока, делим на дорожки (JSON разбора / reasoning) и достаём
+      // готовые поля для живой «печати».
       const reader = res.body?.getReader();
       if (reader) {
         const decoder = new TextDecoder();
@@ -94,7 +101,11 @@ export function TrainerStreamConsumer({
             const { done, value } = await reader.read();
             if (done) break;
             acc += decoder.decode(value, { stream: true });
-            if (!cancelled) setPartial(extractPartialTrainer(acc));
+            if (!cancelled) {
+              const { thinking: th, json } = splitTrainerStream(acc);
+              setThinking(th);
+              setPartial(extractPartialTrainer(json));
+            }
           }
         } catch {
           // Стрим оборвался — onFinish на сервере всё равно мог сохранить.
@@ -171,7 +182,7 @@ export function TrainerStreamConsumer({
   }
 
   // Есть уже хоть одно готовое поле → показываем живой черновик; до первого
-  // слова — книжные факты + скелет (TrainerWaiting).
+  // слова — лоадер + книжные факты + тикер «мыслей» (TrainerWaiting).
   const hasDraft =
     partial.overallScore != null ||
     Boolean(partial.motivation) ||
@@ -184,6 +195,7 @@ export function TrainerStreamConsumer({
       <TrainerWaiting
         workoutId={workoutId}
         text="Тренер анализирует тренировку…"
+        thinking={thinking}
       />
     );
   }
@@ -191,8 +203,9 @@ export function TrainerStreamConsumer({
   return <LiveTrainerDraft partial={partial} streaming={phase === "streaming"} />;
 }
 
-/** Живой черновик разбора: поля проступают по мере печати, с мигающим курсором
- *  (motion-safe). Это «как тренер пишет в реальном времени». */
+/** Живой черновик разбора: поля проступают (Framer) и печатаются ровным ритмом,
+ *  оценка считается вверх, в конце активного поля — плавная каретка. Это «как
+ *  тренер пишет в реальном времени». */
 function LiveTrainerDraft({
   partial,
   streaming,
@@ -200,105 +213,153 @@ function LiveTrainerDraft({
   partial: PartialTrainer;
   streaming: boolean;
 }) {
-  const caret = streaming ? (
-    <span
-      aria-hidden="true"
-      className="bg-primary ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle motion-reduce:animate-none"
-    />
-  ) : null;
+  const reduced = useReducedMotion() ?? false;
+  const hasRecs = (partial.recommendations?.length ?? 0) > 0;
 
   return (
-    <div
+    <motion.div
+      layout={!reduced}
       role="status"
       aria-busy={streaming}
       aria-live="polite"
       className="bg-card border-border space-y-5 rounded-2xl border p-6"
     >
       <p className="text-muted-foreground flex items-center gap-2 text-[11px] font-medium tracking-[0.14em] uppercase">
-        <span className="bg-primary size-1.5 animate-pulse rounded-full motion-reduce:animate-none" />
+        <span className="bg-primary trainer-caret size-1.5 rounded-full" />
         Тренер пишет разбор
       </p>
 
       {partial.overallScore != null ? (
-        <Field>
+        <Field reduced={reduced}>
           <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
             Оценка тренера
           </p>
           <p className="font-serif tabular text-3xl font-normal">
-            {partial.overallScore}
+            <ScoreCountUp value={partial.overallScore} reduced={reduced} />
             <span className="text-muted-foreground text-lg">/100</span>
           </p>
         </Field>
       ) : null}
 
       {partial.motivation ? (
-        <Field>
+        <Field reduced={reduced}>
           <p className="border-l-primary/40 border-l-2 pl-4 text-sm leading-relaxed font-medium">
-            {partial.motivation}
-            {caret}
+            <TypingText text={partial.motivation} />
+            {streaming && !partial.qualityComment ? <Caret /> : null}
           </p>
         </Field>
       ) : null}
 
       {partial.qualityComment ? (
-        <Field>
+        <Field reduced={reduced}>
           <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
             Качество тренировки
           </p>
           <p className="text-sm leading-relaxed">
-            {partial.qualityComment}
-            {!partial.whatWorked ? caret : null}
+            <TypingText text={partial.qualityComment} />
+            {streaming && !partial.whatWorked ? <Caret /> : null}
           </p>
         </Field>
       ) : null}
 
       {partial.whatWorked ? (
-        <Field>
+        <Field reduced={reduced}>
           <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
             Что хорошо
           </p>
           <p className="text-sm leading-relaxed">
-            {partial.whatWorked}
-            {!partial.recommendations?.length ? caret : null}
+            <TypingText text={partial.whatWorked} />
+            {streaming && !hasRecs ? <Caret /> : null}
           </p>
         </Field>
       ) : null}
 
       {partial.recommendations?.length ? (
-        <Field>
+        <Field reduced={reduced}>
           <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
             Рекомендации
           </p>
           <ul className="mt-1 space-y-1.5">
             {partial.recommendations.map((rec, i) => (
-              <li key={i} className="flex gap-2 text-sm leading-relaxed">
+              <motion.li
+                key={i}
+                initial={reduced ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="flex gap-2 text-sm leading-relaxed"
+              >
                 <span className="text-primary">•</span>
                 <span>{rec}</span>
-              </li>
+              </motion.li>
             ))}
           </ul>
         </Field>
       ) : null}
 
       {partial.nextSessionFocus ? (
-        <Field>
+        <Field reduced={reduced}>
           <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
             Фокус на следующую
           </p>
           <p className="text-sm leading-relaxed italic">
-            {partial.nextSessionFocus}
+            <TypingText text={partial.nextSessionFocus} />
           </p>
         </Field>
       ) : null}
-    </div>
+    </motion.div>
   );
 }
 
-/** Обёртка-поле с мягким проявлением (motion-safe). */
-function Field({ children }: { children: ReactNode }) {
+/** Печатает текст ровным ритмом поверх бурстящего стрима (см. useTypewriter). */
+function TypingText({ text }: { text: string }) {
+  return <>{useTypewriter(text)}</>;
+}
+
+/** Плавная каретка (CSS-кейфрейм, не жёсткий blink) в конце активного поля. */
+function Caret() {
   return (
-    <div className="animate-in fade-in space-y-1 duration-500 motion-reduce:animate-none">
+    <span
+      aria-hidden="true"
+      className="bg-primary trainer-caret ml-0.5 inline-block h-4 w-0.5 align-middle"
+    />
+  );
+}
+
+/** Оценка считается вверх до значения (motion-safe). */
+function ScoreCountUp({ value, reduced }: { value: number; reduced: boolean }) {
+  const mv = useMotionValue(0);
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    if (reduced) return; // reduced → рендерим value напрямую ниже, без setState
+    const controls = animate(mv, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [value, reduced, mv]);
+
+  return <>{reduced ? value : display}</>;
+}
+
+/** Обёртка-поле с мягким проявлением (Framer, motion-safe). */
+function Field({
+  children,
+  reduced,
+}: {
+  children: ReactNode;
+  reduced: boolean;
+}) {
+  return (
+    <motion.div
+      layout={!reduced}
+      initial={reduced ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="space-y-1"
+    >
       {children}
-    </div>
+    </motion.div>
   );
 }

@@ -12,6 +12,11 @@ import {
   retrieveRelevant,
 } from "@/lib/ai/rag/retrieve";
 import {
+  FRAME_REASONING,
+  FRAME_TEXT,
+  STREAM_FRAME,
+} from "@/lib/ai/trainer-stream-parse";
+import {
   JSON_SHAPE_INSTRUCTION,
   parseTrainerJson,
   renderTrainerMarkdown,
@@ -99,5 +104,38 @@ ${context.prompt}`;
     },
   });
 
-  return result.toTextStreamResponse();
+  // Кадрируем поток: текст ответа (JSON) и «мысли» модели (reasoning) — две
+  // дорожки в одном text-стриме (см. splitTrainerStream). Клиент льёт JSON в
+  // живой разбор, а reasoning — в тикер «тренер размышляет». Reasoning есть не
+  // у всех провайдеров (best-effort) — если его нет, идёт только текст.
+  // Потребление fullStream до конца дотягивает генерацию → onFinish сохраняет.
+  const encoder = new TextEncoder();
+  const framed = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const part of result.fullStream) {
+          if (part.type === "text-delta") {
+            controller.enqueue(
+              encoder.encode(STREAM_FRAME + FRAME_TEXT + part.text),
+            );
+          } else if (part.type === "reasoning-delta") {
+            controller.enqueue(
+              encoder.encode(STREAM_FRAME + FRAME_REASONING + part.text),
+            );
+          }
+        }
+      } catch (err) {
+        console.error("[trainer-stream] fullStream error:", err);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(framed, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }

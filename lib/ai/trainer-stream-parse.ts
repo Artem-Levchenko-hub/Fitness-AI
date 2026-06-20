@@ -103,3 +103,37 @@ export function extractPartialTrainer(raw: string): PartialTrainer {
   if (motivation !== undefined) out.motivation = motivation;
   return out;
 }
+
+/** Кадрирование живого стрима разбора. Сервер шлёт две дорожки в одном потоке:
+ *  текст ответа (JSON разбора) и «мысли» модели (reasoning). Каждый дельта-кадр
+ *  предваряется управляющим символом U+0001 + буквой дорожки. U+0001 не
+ *  встречается ни в JSON, ни в кириллице, поэтому `split` восстанавливает
+ *  дорожки даже при произвольной нарезке байт по `reader.read()`. */
+export const STREAM_FRAME = String.fromCharCode(1);
+export const FRAME_TEXT = "T";
+export const FRAME_REASONING = "R";
+
+/** Разбирает накопленный кадрированный поток на `{ thinking, json }`. Без кадров
+ *  (легаси / нефреймленный ответ) — весь текст считаем JSON (обратная
+ *  совместимость со старым `toTextStreamResponse`). */
+export function splitTrainerStream(acc: string): {
+  thinking: string;
+  json: string;
+} {
+  if (acc.indexOf(STREAM_FRAME) === -1) {
+    return { thinking: "", json: acc };
+  }
+
+  let thinking = "";
+  let json = "";
+  for (const part of acc.split(STREAM_FRAME)) {
+    if (part.length === 0) continue;
+    const channel = part[0];
+    const payload = part.slice(1);
+    if (channel === FRAME_TEXT) json += payload;
+    else if (channel === FRAME_REASONING) thinking += payload;
+    // иной/неполный префикс (U+0001 пришёл, буква дорожки — ещё нет) → игнор,
+    // следующий read добьёт кадр.
+  }
+  return { thinking, json };
+}
