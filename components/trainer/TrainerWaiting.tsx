@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils/index";
 
 import { InsightCards } from "./InsightCards";
-import { RandomDemoLoader } from "./RandomDemoLoader";
+import { TrainerAura } from "./TrainerAura";
 import { TrainerStages } from "./TrainerStages";
 import { TrainerTips } from "./TrainerTips";
 
@@ -11,8 +11,8 @@ import { TrainerTips } from "./TrainerTips";
  *
  *  Компоновка (GoFundMe «Did you know?»): силуэт нагруженных мышц + карусель
  *  коротких советов/ликбезов — слой ПОВЕРХ живого скелета. Скелет ведёт
- *  рандомная demo-гифка упражнения (вектор-StickmanLoader как reduce-fallback) +
- *  подписанные стадии. `thinking` (live-стрим) — хвост
+ *  «Аура» (гифка-ядро + дышащие sage-кольца; StickmanLoader как reduce-fallback)
+ *  + стадии-таймлайн. `thinking` (live-стрим) — хвост
  *  «мыслей» модели вместо статичной подписи; без него остаётся статичный text. */
 export function TrainerWaiting({
   text,
@@ -42,7 +42,7 @@ export function TrainerWaiting({
 
 /** Скелетон в форме будущей карточки разбора. Стрим не отдаёт Content-Length,
  *  поэтому честный индикатор — каркас того, что вот-вот появится, а сверху —
- *  «живой» лоадер (рандомная demo-гифка) вместо зависшего спиннера + стадии.
+ *  «живая» Аура (гифка-портал) вместо зависшего спиннера + стадии-таймлайн.
  *  Под ними — тикер «мыслей» модели (live) либо статичный статус-текст. */
 export function TrainerSkeleton({
   text,
@@ -58,8 +58,8 @@ export function TrainerSkeleton({
       aria-live="polite"
       className="bg-card border-border space-y-6 rounded-2xl border p-6"
     >
-      <div className="flex flex-col items-center gap-4">
-        <RandomDemoLoader className="size-36" />
+      <div className="flex flex-col items-center gap-3">
+        <TrainerAura />
         <div className="w-full space-y-2">
           <TrainerStages />
           <ThinkingLine thinking={thinking} fallback={text} />

@@ -189,6 +189,97 @@ body {
   animation: trainer-caret 1.05s ease-in-out infinite;
 }
 
+/* H-WOW «Аура» — вау-портал лоадера ожидания разбора: дышащие sage-кольца
+   (sonar-рябь наружу), вращающаяся conic-дуга «тренер думает» и плывущие
+   частицы вокруг круглого гиф-ядра. Все цвета — токены через color-mix(oklch)
+   (R-36, без hex в разметке). prefers-reduced-motion гасит анимации глобальным
+   правилом ниже; в reduce-режиме аура вообще не рендерится — спокойный
+   статичный StickmanLoader (см. TrainerAura). */
+@keyframes trainer-aura-breathe {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  22% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+@keyframes trainer-aura-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes trainer-aura-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+}
+@keyframes trainer-aura-float {
+  0% {
+    transform: translateY(6px) scale(0.7);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-20px) scale(1);
+    opacity: 0;
+  }
+}
+.trainer-aura-glow {
+  background: radial-gradient(
+    circle at center,
+    color-mix(in oklch, var(--primary) 30%, transparent) 0%,
+    transparent 62%
+  );
+  animation: trainer-aura-glow 4s ease-in-out infinite;
+}
+.trainer-aura-ring {
+  border: 1px solid color-mix(in oklch, var(--primary) 42%, transparent);
+  animation: trainer-aura-breathe 4.2s ease-out infinite;
+}
+/* Свечение-кольцо вокруг белого гиф-ядра: определяет «портал» и отрывает его от
+   почти-белой карточки в светлой теме (раньше белое-на-белом сливалось). */
+.trainer-aura-core {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent),
+    0 0 26px color-mix(in oklch, var(--primary) 24%, transparent);
+}
+.trainer-aura-scan {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in oklch, var(--primary) 50%, transparent) 70deg,
+    transparent 150deg
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 2px),
+    #000 calc(100% - 2px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 2px),
+    #000 calc(100% - 2px)
+  );
+  animation: trainer-aura-spin 6s linear infinite;
+}
+.trainer-aura-mote {
+  background: color-mix(in oklch, var(--primary) 55%, transparent);
+  animation: trainer-aura-float 3.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

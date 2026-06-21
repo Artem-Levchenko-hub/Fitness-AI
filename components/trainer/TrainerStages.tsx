@@ -39,35 +39,56 @@ export function TrainerStages() {
 
   const states = stageStates(elapsedMs);
 
+  // H-WOW — стадии как вертикальный таймлайн: соединительная линия слева
+  // ЗАЛИВАЕТСЯ sage по мере прохождения стадий (пройденный сегмент = primary),
+  // активная точка пульсирует мягким sage-ореолом. motion-safe: при reduce лента
+  // не тикает (первая active) и ping-ореол скрыт.
   return (
-    <ul className="space-y-2" aria-hidden="true">
+    <ol className="space-y-0" aria-hidden="true">
       {WAITING_STAGES.map((stage, i) => {
         const state = states[i]!;
+        const last = i === WAITING_STAGES.length - 1;
         return (
-          <li
-            key={stage.id}
-            className={cn(
-              "flex items-center gap-2 text-sm transition-colors duration-500",
-              state === "active"
-                ? "text-foreground font-medium"
-                : state === "done"
-                  ? "text-muted-foreground"
-                  : "text-muted-foreground/40",
-            )}
-          >
-            <span className="flex size-4 shrink-0 items-center justify-center">
-              {state === "done" ? (
-                <Check className="text-success size-4" />
-              ) : state === "active" ? (
-                <span className="bg-primary size-2 animate-pulse rounded-full motion-reduce:animate-none" />
-              ) : (
-                <span className="bg-border size-1.5 rounded-full" />
+          <li key={stage.id} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <span className="flex size-3.5 shrink-0 items-center justify-center">
+                {state === "done" ? (
+                  <Check className="text-success size-3.5" />
+                ) : state === "active" ? (
+                  <span className="relative flex size-3.5 items-center justify-center">
+                    <span className="bg-primary/30 absolute inline-flex size-3.5 animate-ping rounded-full motion-reduce:hidden" />
+                    <span className="bg-primary relative size-2 rounded-full" />
+                  </span>
+                ) : (
+                  <span className="bg-border size-1.5 rounded-full" />
+                )}
+              </span>
+              {!last ? (
+                <span
+                  style={{ minHeight: "0.75rem" }}
+                  className={cn(
+                    "my-1 w-px grow rounded-full transition-colors duration-500",
+                    state === "done" ? "bg-primary" : "bg-border",
+                  )}
+                />
+              ) : null}
+            </div>
+            <span
+              className={cn(
+                "text-sm transition-colors duration-500",
+                last ? "pb-0" : "pb-3",
+                state === "active"
+                  ? "text-foreground font-medium"
+                  : state === "done"
+                    ? "text-muted-foreground"
+                    : "text-muted-foreground/40",
               )}
+            >
+              {stage.label}
             </span>
-            {stage.label}
           </li>
         );
       })}
-    </ul>
+    </ol>
   );
 }
