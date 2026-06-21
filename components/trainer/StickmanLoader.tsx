@@ -17,8 +17,7 @@ export function StickmanLoader({ className }: { className?: string }) {
 
   return (
     <div
-      role="status"
-      aria-live="polite"
+      aria-hidden="true"
       className={cn("flex items-center justify-center", className)}
     >
       <svg viewBox="0 0 120 120" className="size-full" aria-hidden="true">
@@ -54,7 +53,6 @@ export function StickmanLoader({ className }: { className?: string }) {
           <circle cx="88" cy="57" r="6.5" className="fill-card" />
         </motion.g>
       </svg>
-      <span className="sr-only">Тренер готовит разбор</span>
     </div>
   );
 }

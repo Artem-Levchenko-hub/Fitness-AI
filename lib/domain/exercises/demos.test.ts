@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { EXERCISE_DEMOS, getExerciseDemo, hasExerciseDemo } from "./demos";
+import {
+  allDemoGifs,
+  EXERCISE_DEMOS,
+  getExerciseDemo,
+  hasExerciseDemo,
+  pickRandomDemoGif,
+} from "./demos";
 
 describe("getExerciseDemo", () => {
   it("returns the self-hosted gif path for a matched slug", () => {
@@ -45,5 +51,40 @@ describe("hasExerciseDemo", () => {
   it("covers a solid majority of the system catalogue", () => {
     // Guards against a botched re-fetch silently emptying the manifest.
     expect(Object.keys(EXERCISE_DEMOS).length).toBeGreaterThanOrEqual(60);
+  });
+});
+
+describe("allDemoGifs", () => {
+  it("returns every demo gif path, one per manifest entry", () => {
+    const gifs = allDemoGifs();
+    expect(gifs.length).toBe(Object.keys(EXERCISE_DEMOS).length);
+    expect(gifs.every((g) => g.startsWith("/exercises-demos/"))).toBe(true);
+  });
+
+  it("is ordered by slug (stable for reproducible random pick)", () => {
+    const expected = Object.keys(EXERCISE_DEMOS)
+      .sort()
+      .map((slug) => `/exercises-demos/${slug}.gif`);
+    expect(allDemoGifs()).toEqual(expected);
+  });
+});
+
+describe("pickRandomDemoGif", () => {
+  it("rand=0 picks the first gif, rand→1 picks the last", () => {
+    const gifs = allDemoGifs();
+    expect(pickRandomDemoGif(() => 0)).toBe(gifs[0]);
+    expect(pickRandomDemoGif(() => 0.999999)).toBe(gifs[gifs.length - 1]);
+  });
+
+  it("rand=1 stays in-bounds (last gif, never undefined)", () => {
+    const gifs = allDemoGifs();
+    expect(pickRandomDemoGif(() => 1)).toBe(gifs[gifs.length - 1]);
+  });
+
+  it("always returns a path that exists in the manifest", () => {
+    const set = new Set(allDemoGifs());
+    for (const r of [0, 0.1, 0.37, 0.5, 0.84, 0.999]) {
+      expect(set.has(pickRandomDemoGif(() => r)!)).toBe(true);
+    }
   });
 });
