@@ -1,0 +1,21 @@
+# Signing keys & secrets — NEVER commit
+*.keystore
+keystore-credentials.txt
+
+# Bubblewrap-generated Android project (regenerate with: bubblewrap build)
+app/
+gradle/
+gradlew
+gradlew.bat
+build.gradle
+settings.gradle
+gradle.properties
+store_icon.png
+twa-manifest-checksum.txt
+.gradle/
+build/
+*.apk
+*.aab
+*.idsig
+
+# Keep tracked: twa-manifest.json, README.md, .gitignore

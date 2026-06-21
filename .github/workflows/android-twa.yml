@@ -1,0 +1,70 @@
+name: Build Android TWA (Vibe-trainer)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [chore/android-twa-build]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-twa.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;34.0.0" "build-tools;36.0.0"
+
+      - name: Install Bubblewrap CLI
+        run: npm i -g @bubblewrap/cli
+
+      - name: Configure Bubblewrap (non-interactive)
+        run: |
+          mkdir -p ~/.bubblewrap
+          printf '{\n  "jdkPath": "%s",\n  "androidSdkPath": "%s"\n}\n' "$JAVA_HOME" "$ANDROID_SDK_ROOT" > ~/.bubblewrap/config.json
+          cat ~/.bubblewrap/config.json
+          # Bubblewrap expects a legacy "tools" dir alongside cmdline-tools
+          ln -sf "$ANDROID_SDK_ROOT/cmdline-tools/latest" "$ANDROID_SDK_ROOT/tools" || true
+
+      - name: Decode signing keystore from secret
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/android.keystore
+          test -s android/android.keystore && echo "keystore: $(wc -c < android/android.keystore) bytes"
+
+      - name: Build signed APK + AAB
+        working-directory: android
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          bubblewrap update --skipVersionUpgrade
+          bubblewrap build --skipPwaValidation
+          echo "=== artifacts ==="
+          ls -la *.apk *.aab
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-trainer-android
+          path: |
+            android/*.apk
+            android/*.aab
+          if-no-files-found: error

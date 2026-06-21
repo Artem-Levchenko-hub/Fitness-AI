@@ -1,0 +1,43 @@
+{
+  "packageId": "app.leadgenerator.fitness",
+  "host": "app.lead-generator.ru",
+  "name": "Vibe-trainer",
+  "launcherName": "Vibe-trainer",
+  "display": "standalone",
+  "themeColor": "#3A6B4A",
+  "themeColorDark": "#3A6B4A",
+  "navigationColor": "#3A6B4A",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F6F4EF",
+  "enableNotifications": true,
+  "startUrl": "/dashboard",
+  "iconUrl": "https://app.lead-generator.ru/icons/icon-512.png",
+  "maskableIconUrl": "https://app.lead-generator.ru/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "vibe-trainer"
+  },
+  "appVersionName": "y",
+  "appVersionCode": 2,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://app.lead-generator.ru/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "minSdkVersion": 23,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "displayOverride": [],
+  "appVersion": "y"
+}
