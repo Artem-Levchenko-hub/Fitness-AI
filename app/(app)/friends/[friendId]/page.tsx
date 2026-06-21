@@ -3,8 +3,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { buildAvatarData } from "@/components/avatar/build-avatar-data";
-import { HeatComparison } from "@/components/friends/HeatComparison";
+import { ProfileAvatar } from "@/components/avatar/ProfileAvatar";
+import {
+  buildAvatarData,
+  hasTrainingData,
+} from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { formatFriendBodyLine } from "@/lib/domain/friends/friend-body";
@@ -34,16 +37,23 @@ export default async function FriendWorkoutsPage({ params }: Props) {
   if (!friend) notFound();
 
   const now = new Date();
-  // Heat друга — РОВНО за areFriends-гейтом выше (R-7). Мой heat — мои данные,
-  // нужны для силуэта сравнения H3.5.
-  const [workoutsRaw, heat, myHeat] = await Promise.all([
+  // Heat друга — РОВНО за areFriends-гейтом выше (R-7).
+  const [workoutsRaw, heat] = await Promise.all([
     listRecentWorkouts(friendId, 30),
     muscleHeatProfile(friendId, now),
-    muscleHeatProfile(user.id, now),
   ]);
   const workouts = workoutsRaw.filter((w) => w.status === "completed");
-  const avatarData = buildAvatarData(heat, now);
-  const myAvatarData = buildAvatarData(myHeat, now);
+  // Аватар друга = тот же 3D-компонент, что на своём /profile, но read-only.
+  // R-7: показываем НАГРЕВ групп друга, но НЕ его упражнения/рекорды — обнуляем
+  // top3/records (тот же узкий объём данных, что нёс прежний силуэт сравнения).
+  // Цели/недели/«забытость» не передаём (buildAvatarData без них → goalTarget
+  // null, weeklyVolume []), панель остаётся read-only.
+  const friendAvatarData = buildAvatarData(heat, now).map((d) => ({
+    ...d,
+    top3: [],
+    records: [],
+  }));
+  const hasData = hasTrainingData(heat);
   const bodyLine = formatFriendBodyLine(friend.heightCm, friend.weightKg);
 
   return (
@@ -74,18 +84,21 @@ export default async function FriendWorkoutsPage({ params }: Props) {
         </div>
       </header>
 
-      <HeatComparison
-        mine={myAvatarData}
-        theirs={avatarData}
-        theirData={avatarData.map((d) => ({
-          key: d.key,
-          label: d.label,
-          sets: d.sets,
-          volume7d: d.volume7d,
-          levelLabel: d.levelLabel,
-        }))}
-        friendName={displayName(friend)}
-      />
+      <section className="mb-6">
+        <h2 className="mb-3 text-sm font-semibold tracking-tight">
+          Мышцы за неделю
+        </h2>
+        {!hasData ? (
+          <div className="border-border text-muted-foreground mb-3 rounded-2xl border border-dashed px-5 py-4 text-sm">
+            У друга пока пусто — мышцы загорятся, когда он завершит тренировку.
+          </div>
+        ) : null}
+        <ProfileAvatar data={friendAvatarData} />
+        <p className="text-muted-foreground/70 mt-3 text-center text-xs leading-relaxed">
+          Цвет мышцы — объём друга за 7 дней против его нормы: серый отдыхает,
+          красный нагружен сильнее обычного. Покрути модель и нажми на группу.
+        </p>
+      </section>
 
       <h2 className="mb-3 text-sm font-semibold tracking-tight">
         Последние тренировки
