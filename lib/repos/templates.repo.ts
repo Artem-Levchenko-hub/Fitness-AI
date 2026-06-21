@@ -201,6 +201,30 @@ export async function revertTemplateAdaptation(
   });
 }
 
+/** Шаблон, который тренер адаптировал ИМЕННО по этой тренировке — для CTA на
+ *  экране разбора («Шаблон обновлён тренером → открыть»). Ключ —
+ *  lastAdaptedWorkoutId === workoutId. null, если тренировка не адаптировала
+ *  шаблон (ad-hoc, opt-out, ещё не финиширована). R-7: гейт по userId. */
+export async function getAdaptedTemplateForWorkout(
+  userId: string,
+  workoutId: string,
+): Promise<{ id: string; name: string } | null> {
+  const [row] = await db
+    .select({
+      id: schema.workoutTemplates.id,
+      name: schema.workoutTemplates.name,
+    })
+    .from(schema.workoutTemplates)
+    .where(
+      and(
+        eq(schema.workoutTemplates.userId, userId),
+        eq(schema.workoutTemplates.lastAdaptedWorkoutId, workoutId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 export type CreateTemplateInput = {
   name: string;
   description?: string | null;

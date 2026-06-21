@@ -1,4 +1,4 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, Wand2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -16,6 +16,7 @@ import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { renderTrainerMarkdown, trainerSchema } from "@/lib/ai/trainer-parse";
 import { requireUser } from "@/lib/auth/require-user";
 import { totalVolume } from "@/lib/domain";
+import { getAdaptedTemplateForWorkout } from "@/lib/repos/templates.repo";
 import {
   getActiveWorkoutForUser,
   getLatestTrainerResult,
@@ -73,6 +74,11 @@ export default async function TrainerPage({ params }: Props) {
     await getPreviousAnalysisRef(user.id, "strength", { workoutId: id }),
   );
 
+  // CTA «шаблон обновлён → открыть»: шаблон, который тренер подкрутил по ЭТОЙ
+  // тренировке (если она была по шаблону). null — ad-hoc / opt-out / не
+  // адаптирован. Замыкает петлю: из разбора сразу к скорректированному шаблону.
+  const adaptedTemplate = await getAdaptedTemplateForWorkout(user.id, id);
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -113,6 +119,30 @@ export default async function TrainerPage({ params }: Props) {
           </li>
         </ul>
       </section>
+
+      {adaptedTemplate ? (
+        <Link
+          href={`/templates/${adaptedTemplate.id}`}
+          className="border-primary/30 bg-primary/5 hover:bg-primary/10 mb-6 flex items-center gap-3 rounded-2xl border p-4 transition-colors"
+        >
+          <span className="bg-primary/15 text-primary flex size-10 shrink-0 items-center justify-center rounded-full">
+            <Wand2 className="size-5" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">
+              Шаблон обновлён тренером
+            </span>
+            <span className="text-muted-foreground block truncate text-xs">
+              «{adaptedTemplate.name}» — веса и повторы подогнаны под эту
+              тренировку
+            </span>
+          </span>
+          <span className="text-primary inline-flex shrink-0 items-center gap-0.5 text-sm font-medium">
+            Открыть
+            <ChevronRight className="size-4" aria-hidden="true" />
+          </span>
+        </Link>
+      ) : null}
 
       {savedAnalysis?.resultJson ? (
         <>
