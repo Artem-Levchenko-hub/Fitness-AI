@@ -1,9 +1,10 @@
-import { ChevronLeft, Pencil } from "lucide-react";
+import { ChevronLeft, Pencil, Wand2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
+import { RevertAdaptationButton } from "@/components/templates/RevertAdaptationButton";
 import { StartWorkoutButton } from "@/components/templates/StartWorkoutButton";
 import { TemplateFocusHint } from "@/components/templates/TemplateFocusHint";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,14 @@ export default async function TemplateDetailPage({ params }: Props) {
   const lastAnalysis = await getLastTemplateAnalysis(user.id, id);
   const lastFocus = lastAnalysis ? extractPastAdvice(lastAnalysis).focus : null;
 
+  // Подпись «обновлён тренером · <дата>». adaptedAt может быть null у шаблонов,
+  // адаптированных ДО миграции 0023 (старый путь не писал дату) — тогда без даты.
+  const adaptedLabel = tpl.adaptedAt
+    ? new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(
+        tpl.adaptedAt,
+      )
+    : null;
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -43,6 +52,21 @@ export default async function TemplateDetailPage({ params }: Props) {
           <p className="text-muted-foreground mt-2 text-sm">{tpl.description}</p>
         ) : null}
       </header>
+
+      {tpl.lastAdaptedWorkoutId ? (
+        // Тренер подогнал ЭТОТ шаблон под факт последней тренировки — он уже в
+        // «Шаблонах», готов к старту. Откат возвращает оригинал (R-41 — иконка
+        // + текст, не только цвет).
+        <div className="border-border bg-muted/40 mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border px-4 py-3">
+          <p className="inline-flex items-center gap-1.5 text-sm font-medium">
+            <Wand2 className="text-primary size-4" aria-hidden="true" />
+            Шаблон обновлён тренером{adaptedLabel ? ` · ${adaptedLabel}` : ""}
+          </p>
+          {tpl.canRevert ? (
+            <RevertAdaptationButton templateId={tpl.id} />
+          ) : null}
+        </div>
+      ) : null}
 
       {lastFocus && lastAnalysis ? (
         <TemplateFocusHint focus={lastFocus} analysisId={lastAnalysis.id} />

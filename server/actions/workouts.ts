@@ -18,13 +18,8 @@ import {
   saveWorkoutNote,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
-import {
-  createTrainerNextTemplate,
-  trainerTemplateExistsForWorkout,
-} from "@/lib/repos/templates.repo";
-import { adaptProgramDayAfterWorkout } from "@/lib/repos/training-programs.repo";
+import { adaptTemplateAfterWorkout } from "@/lib/repos/training-programs.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
-import { buildNextTemplateItems } from "@/lib/domain/templates/next-template";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
 import { parseClientWorkoutId } from "@/lib/domain/workouts/client-workout-id";
 
@@ -163,13 +158,13 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
   }
 
   // Прогрессия от тренера по завершённой силовой — чтобы атлет был в потоке и не
-  // собирал шаблон руками. Fail-soft (R-10): любая ошибка НЕ должна ломать
-  // завершение тренировки.
-  //  • Тренировка по программному шаблону (день тренировочной системы) → тренер
-  //    адаптирует ТОТ ЖЕ шаблон-день НА МЕСТЕ: вес/повторы по факту, изредка свап
-  //    застойного упражнения. Идемпотентно по lastAdaptedWorkoutId.
-  //  • Одиночный шаблон → старый путь: отдельный trainer-шаблон «следующая»
-  //    (идемпотентно по sourceWorkoutId).
+  // собирал шаблон руками. Единый путь для ЛЮБОГО силового шаблона (программный
+  // день ИЛИ одиночный — оба ставят workouts.templateId на старте): тренер
+  // адаптирует ТОТ ЖЕ шаблон НА МЕСТЕ под факт (вес/повторы, изредка свап
+  // застойного упражнения) — корректировка падает сразу в «Шаблоны», готова к
+  // следующему старту. Идемпотентно по lastAdaptedWorkoutId. null = адаптировать
+  // нечего (ad-hoc без шаблона или липкий откат тренера, adaptOptOut).
+  // Fail-soft (R-10): любая ошибка НЕ должна ломать завершение тренировки.
   try {
     const done = await getActiveWorkoutForUser(user.id, workoutId);
     if (done && done.status === "completed") {
@@ -178,36 +173,18 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
         sets: e.sets,
       }));
 
-      const program = await adaptProgramDayAfterWorkout(
+      const adaptation = await adaptTemplateAfterWorkout(
         user.id,
         workoutId,
         performed,
       );
-
-      if (program) {
-        // День программы адаптирован на месте (или идемпотентно пропущен).
+      if (adaptation) {
         revalidatePath("/programs");
         revalidatePath("/templates");
-      } else {
-        const already = await trainerTemplateExistsForWorkout(
-          user.id,
-          workoutId,
-        );
-        if (!already) {
-          const items = buildNextTemplateItems(performed);
-          if (items.length > 0) {
-            await createTrainerNextTemplate(user.id, {
-              name: `${done.name} · следующая`,
-              sourceWorkoutId: workoutId,
-              items,
-            });
-            revalidatePath("/templates");
-          }
-        }
       }
     }
   } catch (e) {
-    console.error("[next-template] generation failed:", e);
+    console.error("[template-adapt] adaptation failed:", e);
   }
 
   // Ставим post_workout аналитический job. Если уже стоит (на случай

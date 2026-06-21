@@ -1,8 +1,10 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -12,6 +14,20 @@ import { users } from "./auth";
 import { templateSource } from "./enums";
 import { exercises } from "./exercises";
 import { trainingPrograms } from "./training-programs";
+
+/** Один элемент снимка-оригинала шаблона (template_exercises минус identity-id):
+ *  ровно то, что нужно восстановить при откате адаптации. Зеркалит вставку в
+ *  template_exercises. */
+export type PreAdaptSnapshotItem = {
+  exerciseId: string;
+  position: number;
+  targetSets: number;
+  targetRepsMin: number;
+  targetRepsMax: number;
+  targetWeightKg: number | null;
+  targetRestSeconds: number;
+  notes: string | null;
+};
 
 /** Шаблон тренировки. Принадлежит пользователю — стабильный набор
  *  упражнений с целевыми параметрами. */
@@ -40,10 +56,24 @@ export const workoutTemplates = pgTable(
     }),
     /** Порядок дня внутри программы (0-индекс). null у одиночных шаблонов. */
     dayOrder: integer("day_order"),
-    /** Последняя тренировка, по которой шаблон-день адаптирован на месте
+    /** Последняя тренировка, по которой шаблон адаптирован на месте
      *  (тренер правил вес/повторы прямо здесь) — ключ идемпотентности:
-     *  повторный finish / офлайн-реплей с тем же workoutId = no-op. */
+     *  повторный finish / офлайн-реплей с тем же workoutId = no-op. Маркер
+     *  «Улучшено тренером» (non-null = адаптирован). Силовой, как программный
+     *  день, так и одиночный шаблон. */
     lastAdaptedWorkoutId: text("last_adapted_workout_id"),
+    /** Снимок ОРИГИНАЛЬНЫХ template_exercises, снятый ОДИН раз — перед ПЕРВОЙ
+     *  адаптацией тренером. Нужен для отката («Отменить корректировку ИИ
+     *  тренера»). null — шаблон ещё ни разу не адаптирован (или уже откатан).
+     *  Один снимок-до-оригинала (YAGNI, R-05): история ревизий не нужна. */
+    preAdaptSnapshot: jsonb("pre_adapt_snapshot").$type<PreAdaptSnapshotItem[]>(),
+    /** Когда тренер в последний раз адаптировал шаблон — для подписи
+     *  «Улучшено тренером · <дата>». null — не адаптирован. */
+    adaptedAt: timestamp("adapted_at", { mode: "date", withTimezone: true }),
+    /** Липкий отказ от авто-адаптации: после отката тренер БОЛЬШЕ не переписывает
+     *  этот шаблон сам (атлет вернул свой вариант и не хочет правок), пока заново
+     *  не включит. true → finish пропускает адаптацию этого шаблона. */
+    adaptOptOut: boolean("adapt_opt_out").notNull().default(false),
     archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()

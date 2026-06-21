@@ -386,9 +386,12 @@ async function getTemplateAdaptItems(templateId: string): Promise<AdaptItem[]> {
   return rows;
 }
 
-/** Записывает адаптированные элементы в ТОТ ЖЕ шаблон-день (replace) и ставит
- *  ключ идемпотентности lastAdaptedWorkoutId. Транзакция, проверка владения. */
-export async function adaptProgramTemplateInPlace(
+/** Записывает адаптированные элементы в ТОТ ЖЕ шаблон (replace), ставит ключ
+ *  идемпотентности lastAdaptedWorkoutId + adaptedAt и — РОВНО один раз, перед
+ *  ПЕРВОЙ правкой — снимает снимок оригинала (preAdaptSnapshot) для отката
+ *  («Отменить корректировку ИИ тренера»). Транзакция, проверка владения (R-7).
+ *  Силовой шаблон любого вида: программный день или одиночный. */
+export async function adaptTemplateInPlace(
   userId: string,
   templateId: string,
   items: AdaptItem[],
@@ -396,7 +399,10 @@ export async function adaptProgramTemplateInPlace(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [owned] = await tx
-      .select({ id: schema.workoutTemplates.id })
+      .select({
+        id: schema.workoutTemplates.id,
+        preAdaptSnapshot: schema.workoutTemplates.preAdaptSnapshot,
+      })
       .from(schema.workoutTemplates)
       .where(
         and(
@@ -406,6 +412,27 @@ export async function adaptProgramTemplateInPlace(
       )
       .limit(1);
     if (!owned) throw new Error("Template not found or not yours");
+
+    // Снимок оригинала — РОВНО один раз, ДО первой правки: то, к чему вернёт
+    // откат. Снимаем текущие строки (их же сейчас и перезапишем). Повторная
+    // адаптация снимок не трогает (snapshot остаётся undefined → не пишем).
+    let snapshot: schema.PreAdaptSnapshotItem[] | undefined;
+    if (owned.preAdaptSnapshot == null) {
+      snapshot = await tx
+        .select({
+          exerciseId: schema.templateExercises.exerciseId,
+          position: schema.templateExercises.position,
+          targetSets: schema.templateExercises.targetSets,
+          targetRepsMin: schema.templateExercises.targetRepsMin,
+          targetRepsMax: schema.templateExercises.targetRepsMax,
+          targetWeightKg: schema.templateExercises.targetWeightKg,
+          targetRestSeconds: schema.templateExercises.targetRestSeconds,
+          notes: schema.templateExercises.notes,
+        })
+        .from(schema.templateExercises)
+        .where(eq(schema.templateExercises.templateId, templateId))
+        .orderBy(asc(schema.templateExercises.position));
+    }
 
     await tx
       .delete(schema.templateExercises)
@@ -429,24 +456,32 @@ export async function adaptProgramTemplateInPlace(
 
     await tx
       .update(schema.workoutTemplates)
-      .set({ lastAdaptedWorkoutId: workoutId })
+      .set({
+        lastAdaptedWorkoutId: workoutId,
+        adaptedAt: new Date(),
+        ...(snapshot !== undefined ? { preAdaptSnapshot: snapshot } : {}),
+      })
       .where(eq(schema.workoutTemplates.id, templateId));
   });
 }
 
-/** Шаблон-день, по которому стартовала эта тренировка (если стартовала по
- *  программному шаблону). null — тренировка ad-hoc или одиночный шаблон. */
-async function getProgramDayBinding(
+/** Силовой шаблон, по которому стартовала эта тренировка — программный ДЕНЬ ИЛИ
+ *  одиночный шаблон (оба ставят workouts.templateId на старте), плюс маркеры
+ *  адаптации. null — ad-hoc тренировка без шаблона: адаптировать нечего.
+ *  R-7: гейт по userId. */
+async function getTemplateBindingForWorkout(
   userId: string,
   workoutId: string,
 ): Promise<{
   templateId: string;
   lastAdaptedWorkoutId: string | null;
+  adaptOptOut: boolean;
 } | null> {
   const [row] = await db
     .select({
       templateId: schema.workoutTemplates.id,
       lastAdaptedWorkoutId: schema.workoutTemplates.lastAdaptedWorkoutId,
+      adaptOptOut: schema.workoutTemplates.adaptOptOut,
     })
     .from(schema.workouts)
     .innerJoin(
@@ -461,15 +496,7 @@ async function getProgramDayBinding(
     )
     .limit(1);
 
-  if (!row) return null;
-  // Программный шаблон? (есть привязка к программе)
-  const [tpl] = await db
-    .select({ programId: schema.workoutTemplates.programId })
-    .from(schema.workoutTemplates)
-    .where(eq(schema.workoutTemplates.id, row.templateId))
-    .limit(1);
-  if (!tpl?.programId) return null;
-  return row;
+  return row ?? null;
 }
 
 /** Подбор замены застойному упражнению среди СИСТЕМНЫХ упражнений той же
@@ -541,25 +568,31 @@ async function isExerciseStagnant(
     .stale;
 }
 
-export type ProgramAdaptationResult = {
-  /** true — день программы адаптирован на месте сейчас. */
+export type TemplateAdaptationResult = {
+  /** true — шаблон адаптирован на месте сейчас (false — идемпотентный пропуск). */
   adapted: boolean;
   /** Сделанный свап упражнения (id→id) или null. */
   swap: { fromExerciseId: string; toExerciseId: string } | null;
 };
 
-/** Оркестратор адаптации дня программы ПОСЛЕ завершённой тренировки. Возвращает
- *  null, если тренировка НЕ по программному шаблону — тогда вызывающий идёт
- *  старым путём (новый trainer-шаблон «следующая»). Идемпотентно по workoutId
- *  (lastAdaptedWorkoutId): повторный finish / офлайн-реплей = no-op. Свап —
- *  не более одного и только при подтверждённом застое (изредка). */
-export async function adaptProgramDayAfterWorkout(
+/** Оркестратор адаптации СИЛОВОГО шаблона ПОСЛЕ завершённой тренировки — единый
+ *  путь для программного дня И одиночного шаблона (оба ставят workouts.templateId
+ *  на старте). Тренер правит ТОТ ЖЕ шаблон на месте: вес/повторы по факту, изредка
+ *  свап застойного упражнения — корректировка сразу в «Шаблонах», готова к
+ *  следующему старту (атлету не нужно лезть в прошлую тренировку и править руками).
+ *  Возвращает null, когда адаптировать нечего: ad-hoc тренировка без шаблона ЛИБО
+ *  шаблон с липким отказом (adaptOptOut — атлет откатил правки и не хочет их назад).
+ *  Идемпотентно по lastAdaptedWorkoutId (повторный finish / офлайн-реплей = no-op).
+ *  Снимок оригинала + adaptedAt ставит adaptTemplateInPlace. Свап — не более
+ *  одного и только при подтверждённом застое (изредка). */
+export async function adaptTemplateAfterWorkout(
   userId: string,
   workoutId: string,
   performed: WorkoutExerciseInput[],
-): Promise<ProgramAdaptationResult | null> {
-  const binding = await getProgramDayBinding(userId, workoutId);
-  if (!binding) return null; // не программный день → старый путь
+): Promise<TemplateAdaptationResult | null> {
+  const binding = await getTemplateBindingForWorkout(userId, workoutId);
+  if (!binding) return null; // ad-hoc без шаблона → адаптировать нечего
+  if (binding.adaptOptOut) return null; // липкий откат → тренер не лезет в шаблон
 
   // Идемпотентность: этот шаблон уже адаптирован по этой тренировке.
   if (binding.lastAdaptedWorkoutId === workoutId) {
@@ -569,7 +602,7 @@ export async function adaptProgramDayAfterWorkout(
   const current = await getTemplateAdaptItems(binding.templateId);
   const excludeIds = current.map((c) => c.exerciseId);
 
-  // Ищем ПЕРВОЕ застойное упражнение дня, которому есть замена. Не более одного
+  // Ищем ПЕРВОЕ застойное упражнение, которому есть замена. Не более одного
   // свапа — «изредка», чтобы не выпотрошить шаблон.
   const substitutes: Record<string, string> = {};
   for (const it of current) {
@@ -582,7 +615,7 @@ export async function adaptProgramDayAfterWorkout(
   }
 
   const { items, swap } = buildInPlaceAdaptation(current, performed, substitutes);
-  await adaptProgramTemplateInPlace(userId, binding.templateId, items, workoutId);
+  await adaptTemplateInPlace(userId, binding.templateId, items, workoutId);
 
   return { adapted: true, swap };
 }

@@ -169,6 +169,13 @@
       "when": 1781793387383,
       "tag": "0023_unique_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782037616306,
+      "tag": "0024_shiny_miracleman",
+      "breakpoints": true
     }
   ]
 }

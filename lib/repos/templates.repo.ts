@@ -2,7 +2,6 @@ import { and, asc, count, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import type { NextTemplateItem } from "@/lib/domain/templates/next-template";
 
 export type TemplateSource = "manual" | "trainer";
 
@@ -42,6 +41,12 @@ export type TemplateWithItems = {
   items: TemplateItem[];
   createdAt: Date;
   updatedAt: Date;
+  /** Тренер адаптировал шаблон на месте (non-null = есть корректировка). */
+  lastAdaptedWorkoutId: string | null;
+  /** Когда тренер в последний раз правил шаблон — для подписи «Улучшено тренером». */
+  adaptedAt: Date | null;
+  /** Есть снимок оригинала → откат возможен. */
+  canRevert: boolean;
 };
 
 export async function listTemplates(
@@ -84,62 +89,6 @@ export async function listTemplates(
     ...r,
     adapted: lastAdaptedWorkoutId != null,
   }));
-}
-
-/** Уже есть trainer-шаблон «следующая», составленный по этой тренировке?
- *  Ключ идемпотентности — повторный finish / реплей офлайн-дренажа не плодит
- *  дубликаты (R-31 семантика). */
-export async function trainerTemplateExistsForWorkout(
-  userId: string,
-  workoutId: string,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ id: schema.workoutTemplates.id })
-    .from(schema.workoutTemplates)
-    .where(
-      and(
-        eq(schema.workoutTemplates.userId, userId),
-        eq(schema.workoutTemplates.sourceWorkoutId, workoutId),
-        eq(schema.workoutTemplates.source, "trainer"),
-      ),
-    )
-    .limit(1);
-  return Boolean(row);
-}
-
-/** Создаёт trainer-шаблон «следующая тренировка» (прогрессия по завершённой
- *  силовой). items уже посчитаны чистым доменом `buildNextTemplateItems`. */
-export async function createTrainerNextTemplate(
-  userId: string,
-  input: { name: string; sourceWorkoutId: string; items: NextTemplateItem[] },
-): Promise<{ id: string }> {
-  return db.transaction(async (tx) => {
-    const id = crypto.randomUUID();
-    await tx.insert(schema.workoutTemplates).values({
-      id,
-      userId,
-      name: input.name,
-      source: "trainer",
-      sourceWorkoutId: input.sourceWorkoutId,
-    });
-
-    if (input.items.length > 0) {
-      await tx.insert(schema.templateExercises).values(
-        input.items.map((it, i) => ({
-          templateId: id,
-          exerciseId: it.exerciseId,
-          position: i,
-          targetSets: it.targetSets,
-          targetRepsMin: it.targetRepsMin,
-          targetRepsMax: it.targetRepsMax,
-          targetWeightKg: it.targetWeightKg,
-          targetRestSeconds: it.targetRestSeconds,
-        })),
-      );
-    }
-
-    return { id };
-  });
 }
 
 export async function getTemplateWithItems(
@@ -188,7 +137,68 @@ export async function getTemplateWithItems(
     items,
     createdAt: tpl.createdAt,
     updatedAt: tpl.updatedAt,
+    lastAdaptedWorkoutId: tpl.lastAdaptedWorkoutId,
+    adaptedAt: tpl.adaptedAt,
+    canRevert: tpl.preAdaptSnapshot != null,
   };
+}
+
+/** Откат адаптации тренера: восстанавливает оригинальные упражнения шаблона из
+ *  снимка (preAdaptSnapshot) и ставит ЛИПКИЙ отказ (adaptOptOut=true) — тренер
+ *  больше не переписывает этот шаблон сам, пока атлет не включит заново. Чистит
+ *  маркеры адаптации (lastAdaptedWorkoutId/adaptedAt/preAdaptSnapshot). Без
+ *  снимка — no-op (нечего восстанавливать). Транзакция, R-7 (гейт по userId). */
+export async function revertTemplateAdaptation(
+  userId: string,
+  templateId: string,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [tpl] = await tx
+      .select({ preAdaptSnapshot: schema.workoutTemplates.preAdaptSnapshot })
+      .from(schema.workoutTemplates)
+      .where(
+        and(
+          eq(schema.workoutTemplates.id, templateId),
+          eq(schema.workoutTemplates.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!tpl) throw new Error("Template not found or not yours");
+
+    const snapshot = tpl.preAdaptSnapshot;
+    // Нечего восстанавливать (не адаптирован / уже откатан) — выходим без правок.
+    if (snapshot == null) return;
+
+    await tx
+      .delete(schema.templateExercises)
+      .where(eq(schema.templateExercises.templateId, templateId));
+
+    if (snapshot.length > 0) {
+      await tx.insert(schema.templateExercises).values(
+        snapshot.map((it, i) => ({
+          templateId,
+          exerciseId: it.exerciseId,
+          position: i,
+          targetSets: it.targetSets,
+          targetRepsMin: it.targetRepsMin,
+          targetRepsMax: it.targetRepsMax,
+          targetWeightKg: it.targetWeightKg,
+          targetRestSeconds: it.targetRestSeconds,
+          notes: it.notes,
+        })),
+      );
+    }
+
+    await tx
+      .update(schema.workoutTemplates)
+      .set({
+        adaptOptOut: true,
+        lastAdaptedWorkoutId: null,
+        adaptedAt: null,
+        preAdaptSnapshot: null,
+      })
+      .where(eq(schema.workoutTemplates.id, templateId));
+  });
 }
 
 export type CreateTemplateInput = {

@@ -165,4 +165,17 @@ describe("buildInPlaceAdaptation", () => {
     expect(out.swap).toBeNull();
     expect(out.items[0].exerciseId).toBe("bench");
   });
+
+  it("adapted items differ from the original, and the original is not mutated (snapshot stays intact for revert)", () => {
+    const original = [cur("bench", 0, { targetWeightKg: 50 })];
+    const out = buildInPlaceAdaptation(original, [
+      ex("bench", [{ weightKg: 50, reps: 12 }]),
+    ]);
+    // Снимок-оригинал, который repo сохраняет ДО правки, не должен мутироваться
+    // адаптацией — иначе откат вернёт уже изменённые цели.
+    expect(original[0].targetWeightKg).toBe(50);
+    // Адаптация реально меняет цель → откат к снимку имеет смысл.
+    expect(out.items[0].targetWeightKg).toBe(52.5);
+    expect(out.items[0].targetWeightKg).not.toBe(original[0].targetWeightKg);
+  });
 });

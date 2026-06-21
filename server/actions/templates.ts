@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import {
   createTemplate,
   deleteTemplate,
+  revertTemplateAdaptation,
   updateTemplate,
 } from "@/lib/repos/templates.repo";
 import { templateInputSchema } from "@/server/schemas/templates";
@@ -79,4 +80,16 @@ export async function deleteTemplateAction(formData: FormData) {
   await deleteTemplate(user.id, templateId);
   revalidatePath("/templates");
   redirect("/templates");
+}
+
+/** «Отменить корректировку ИИ тренера» — вернуть оригинал шаблона из снимка и
+ *  включить липкий отказ от авто-адаптации. R-7: repo гейтит по userId. Без
+ *  redirect (остаёмся на detail) — ревалидация перерисует страницу без бейджа. */
+export async function revertTemplateAdaptationAction(formData: FormData) {
+  const user = await requireUser();
+  const templateId = String(formData.get("templateId"));
+  if (!templateId) throw new Error("Missing templateId");
+  await revertTemplateAdaptation(user.id, templateId);
+  revalidatePath("/templates");
+  revalidatePath(`/templates/${templateId}`);
 }
