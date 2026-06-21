@@ -1,0 +1,53 @@
+{
+  "name": "vibe-trainer-desktop",
+  "version": "1.0.0",
+  "description": "Vibe-trainer — десктоп-приложение для силовых тренировок с AI-анализом",
+  "author": "lead-generator.ru",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "assets": "node scripts/gen-assets.mjs",
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^32.2.7",
+    "electron-builder": "^25.1.8",
+    "sharp": "^0.33.5",
+    "png-to-ico": "^2.1.0",
+    "jimp": "^1.6.0"
+  },
+  "build": {
+    "appId": "ru.leadgenerator.vibetrainer",
+    "productName": "Vibe-trainer",
+    "copyright": "© lead-generator.ru",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "renderer/**/*"],
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.ico",
+      "artifactName": "Vibe-trainer-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/sidebar.bmp",
+      "uninstallerSidebar": "build/sidebar.bmp",
+      "installerHeader": "build/header.bmp",
+      "license": "build/license.txt",
+      "language": "1049",
+      "shortcutName": "Vibe-trainer",
+      "uninstallDisplayName": "Vibe-trainer"
+    }
+  }
+}

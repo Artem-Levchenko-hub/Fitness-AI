@@ -1,0 +1,6 @@
+node_modules/
+dist/
+build/icon.ico
+build/*.bmp
+
+build/_preview*.png
