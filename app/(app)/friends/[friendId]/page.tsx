@@ -1,4 +1,4 @@
-import { Activity, ChevronLeft } from "lucide-react";
+import { Activity, ChevronLeft, Dumbbell, Sparkles, Wand2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,11 +10,21 @@ import {
 } from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
+import {
+  formatTemplateMeta,
+  mergeTemplateList,
+  sortTemplatesForFlow,
+  type UnifiedTemplateItem,
+} from "@/lib/domain";
 import { formatFriendBodyLine } from "@/lib/domain/friends/friend-body";
+import { listCardioTemplates } from "@/lib/repos/cardio-templates.repo";
+import { listCircuitTemplates } from "@/lib/repos/circuit-templates.repo";
 import { getFriendProfile } from "@/lib/repos/friends.repo";
 import { muscleHeatProfile } from "@/lib/repos/stats.repo";
+import { listTemplates } from "@/lib/repos/templates.repo";
 import {
   listRecentWorkouts,
+  listWorkoutScores,
   type RecentWorkout,
 } from "@/lib/repos/workouts.repo";
 
@@ -43,6 +53,26 @@ export default async function FriendWorkoutsPage({ params }: Props) {
     muscleHeatProfile(friendId, now),
   ]);
   const workouts = workoutsRaw.filter((w) => w.status === "completed");
+
+  // Шаблоны + оценки ИИ-тренера — ТОЛЬКО если друг включил «делиться»
+  // (тренировки видны и без тумблера). Тот же прямой read по friendId за гейтом.
+  let sharedTemplates: UnifiedTemplateItem[] = [];
+  let scores = new Map<string, number>();
+  if (friend.sharesPrograms) {
+    const [strength, circuit, cardio] = await Promise.all([
+      listTemplates(friendId),
+      listCircuitTemplates(friendId),
+      listCardioTemplates(friendId),
+    ]);
+    sharedTemplates = sortTemplatesForFlow(
+      mergeTemplateList(strength, circuit, cardio),
+    );
+    scores = await listWorkoutScores(
+      friendId,
+      workouts.map((w) => w.id),
+    );
+  }
+
   // Аватар друга = тот же 3D-компонент, что на своём /profile, но read-only.
   // R-7: показываем НАГРЕВ групп друга, но НЕ его упражнения/рекорды — обнуляем
   // top3/records (тот же узкий объём данных, что нёс прежний силуэт сравнения).
@@ -100,6 +130,25 @@ export default async function FriendWorkoutsPage({ params }: Props) {
         </p>
       </section>
 
+      {friend.sharesPrograms && sharedTemplates.length > 0 ? (
+        <section className="mb-6">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold tracking-tight">
+            <Dumbbell className="text-muted-foreground size-4" aria-hidden="true" />
+            Шаблоны друга
+          </h2>
+          <ul className="space-y-2">
+            {sharedTemplates.map((tpl) => (
+              <li
+                key={`${tpl.format}-${tpl.id}`}
+                className="bg-card border-border rounded-xl border p-4"
+              >
+                <FriendTemplateMeta tpl={tpl} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <h2 className="mb-3 text-sm font-semibold tracking-tight">
         Последние тренировки
       </h2>
@@ -110,12 +159,31 @@ export default async function FriendWorkoutsPage({ params }: Props) {
         <ul className="space-y-2">
           {workouts.map((w) => (
             <li key={w.id}>
-              <WorkoutRow workout={w} />
+              <WorkoutRow workout={w} score={scores.get(w.id) ?? null} />
             </li>
           ))}
         </ul>
       )}
     </main>
+  );
+}
+
+/** Read-only мета шаблона друга — без ссылки (detail-роуты закрыты по userId).
+ *  Бейдж «обновлён тренером» (R-41 иконка + текст). */
+function FriendTemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-sm font-semibold">{tpl.name}</p>
+      <p className="text-muted-foreground mt-0.5 text-xs">
+        {formatTemplateMeta(tpl)}
+      </p>
+      {tpl.adapted ? (
+        <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+          <Wand2 className="size-3" aria-hidden="true" />
+          обновлён тренером
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -129,14 +197,29 @@ function EmptyState() {
 }
 
 /** Read-only карточка тренировки друга — без ссылки (detail-роуты закрыты по
- *  userId), без действий. Дата · название · базовые KPI. */
-function WorkoutRow({ workout }: { workout: RecentWorkout }) {
+ *  userId), без действий. Дата · название · базовые KPI. Оценка ИИ-тренера
+ *  (score 0..100) — бейджем, только если друг делится программами (иначе null). */
+function WorkoutRow({
+  workout,
+  score,
+}: {
+  workout: RecentWorkout;
+  score: number | null;
+}) {
   const min = durationMinutes(workout.startedAt, workout.finishedAt);
   return (
     <div className="bg-card border-border rounded-2xl border p-4">
-      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-        {formatShortDate(workout.startedAt)}
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+          {formatShortDate(workout.startedAt)}
+        </p>
+        {score != null ? (
+          <span className="bg-primary/10 text-primary inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold">
+            <Sparkles className="size-3" aria-hidden="true" />
+            Оценка ИИ {score}
+          </span>
+        ) : null}
+      </div>
       <h3 className="mt-0.5 truncate text-base font-semibold tracking-tight">
         {workout.name}
       </h3>

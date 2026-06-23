@@ -7,6 +7,7 @@ import {
   acceptFriendRequest,
   findUserByEmail,
   sendFriendRequest,
+  setShareProgramsWithFriends,
 } from "@/lib/repos/friends.repo";
 import { friendRequestSchema } from "@/server/schemas/friends";
 
@@ -55,5 +56,15 @@ export async function acceptFriendRequestAction(
   const id = String(formData.get("id"));
   if (!id) throw new Error("Missing id");
   await acceptFriendRequest(user.id, id);
+  revalidatePath("/friends");
+}
+
+/** Переключить «делиться программами с друзьями» (тумблер на /friends). Открывает
+ *  друзьям дополнительно шаблоны/программы + оценки ИИ-тренера на странице друга
+ *  (тренировки видны и так). R-7: repo правит только свою строку. */
+export async function setShareProgramsAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const enabled = formData.get("enabled") === "true";
+  await setShareProgramsWithFriends(user.id, enabled);
   revalidatePath("/friends");
 }

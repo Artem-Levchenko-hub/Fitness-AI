@@ -1,7 +1,8 @@
-import { Check, ChevronLeft, ChevronRight, Clock, Users } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clock, Share2, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ShareProgramsToggle } from "@/components/friends/ShareProgramsToggle";
 import { Button } from "@/components/ui/button";
 import {
   friendDisplayName,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/domain/friends/friend-activity";
 import { requireUser } from "@/lib/auth/require-user";
 import {
+  getShareProgramsWithFriends,
   listFriendsActivity,
   listIncomingRequestsDetailed,
   listOutgoingRequestsDetailed,
@@ -23,10 +25,11 @@ export const metadata: Metadata = { title: "Друзья" };
 
 export default async function FriendsPage() {
   const user = await requireUser();
-  const [friends, incoming, outgoing] = await Promise.all([
+  const [friends, incoming, outgoing, sharesPrograms] = await Promise.all([
     listFriendsActivity(user.id),
     listIncomingRequestsDetailed(user.id),
     listOutgoingRequestsDetailed(user.id),
+    getShareProgramsWithFriends(user.id),
   ]);
 
   return (
@@ -50,6 +53,26 @@ export default async function FriendsPage() {
           делиться разборами.
         </p>
       </header>
+
+      {/* «Раздать мои программы»: тумблер открывает друзьям шаблоны/программы +
+          оценки ИИ-тренера на твоей странице (тренировки видны и без него). */}
+      <section className="bg-card border-border mb-6 flex items-center justify-between gap-3 rounded-2xl border p-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="bg-primary/10 text-primary mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl">
+            <Share2 className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold tracking-tight">
+              Делиться программами
+            </h2>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              Друзья увидят твои шаблоны, программы и оценки ИИ-тренера. Включай —
+              пусть видят, как ты тренируешься.
+            </p>
+          </div>
+        </div>
+        <ShareProgramsToggle initialEnabled={sharesPrograms} />
+      </section>
 
       {incoming.length > 0 ? (
         <section className="mb-6">

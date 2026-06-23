@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "share_programs_with_friends" boolean DEFAULT false NOT NULL;

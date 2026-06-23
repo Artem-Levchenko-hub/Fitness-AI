@@ -82,6 +82,19 @@ export async function deleteTemplateAction(formData: FormData) {
   redirect("/templates");
 }
 
+/** Свайп-удаление шаблона из списка (/create и /templates). В отличие от
+ *  detail-кнопки НЕ редиректит — остаёмся на месте, ревалидация перерисовывает
+ *  список без удалённой строки (R-7: repo гейтит по userId). */
+export async function deleteTemplateFromListAction(formData: FormData) {
+  const user = await requireUser();
+  const templateId = String(formData.get("templateId"));
+  if (!templateId) throw new Error("Missing templateId");
+  await deleteTemplate(user.id, templateId);
+  revalidatePath("/templates");
+  revalidatePath("/create");
+  revalidatePath("/dashboard");
+}
+
 /** «Отменить корректировку ИИ тренера» — вернуть оригинал шаблона из снимка и
  *  включить липкий отказ от авто-адаптации. R-7: repo гейтит по userId. Без
  *  redirect (остаёмся на detail) — ревалидация перерисует страницу без бейджа. */

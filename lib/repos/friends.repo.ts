@@ -18,10 +18,12 @@ export type FriendUser = { id: string; name: string | null; email: string };
 /** Карточка друга для его страницы — публичные поля + рост/последний вес,
  *  показываемые read-only только подтверждённому другу (R-7, см.
  *  getFriendProfile). heightCm — с профиля (users), weightKg — из последнего
- *  замера тела; любое может быть null. */
+ *  замера тела; любое может быть null. sharesPrograms — включил ли друг тумблер
+ *  «делиться программами»: открывает его шаблоны/программы + оценки ИИ-тренера. */
 export type FriendProfile = FriendUser & {
   heightCm: number | null;
   weightKg: number | null;
+  sharesPrograms: boolean;
 };
 
 /** Дружба/заявка вместе с «другим» пользователем (партнёром по связи). */
@@ -208,6 +210,7 @@ export async function getFriendProfile(
       name: schema.users.name,
       email: schema.users.email,
       heightCm: schema.users.heightCm,
+      sharesPrograms: schema.users.shareProgramsWithFriends,
     })
     .from(schema.users)
     .where(eq(schema.users.id, otherId))
@@ -215,6 +218,32 @@ export async function getFriendProfile(
   if (!u) return null;
   const latest = await getLatestMeasurement(otherId);
   return { ...u, weightKg: latest?.weightKg ?? null };
+}
+
+/** Включён ли у юзера тумблер «делиться программами с друзьями» — для начального
+ *  состояния переключателя на /friends. R-7: только своё значение. */
+export async function getShareProgramsWithFriends(
+  userId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ value: schema.users.shareProgramsWithFriends })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return row?.value ?? false;
+}
+
+/** Переключить «делиться программами с друзьями». R-7: правит только свою строку
+ *  users. Тренировки друзей видны всегда; этот флаг открывает дополнительно
+ *  шаблоны/программы + оценки ИИ-тренера на странице друга. */
+export async function setShareProgramsWithFriends(
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  await db
+    .update(schema.users)
+    .set({ shareProgramsWithFriends: enabled })
+    .where(eq(schema.users.id, userId));
 }
 
 /** Дополнить строки дружбы карточкой «другого» пользователя одним запросом

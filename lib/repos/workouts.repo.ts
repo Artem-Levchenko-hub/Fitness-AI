@@ -7,6 +7,7 @@ import {
   type InsightQueryInput,
 } from "@/lib/ai/insight-query";
 import { resumeCutoff } from "@/lib/domain";
+import { extractOverallScore } from "@/lib/domain/friends/friend-score";
 
 type WorkoutStatusLiteral = (typeof schema.workoutStatus.enumValues)[number];
 type SetTypeLiteral = (typeof schema.setType.enumValues)[number];
@@ -473,6 +474,43 @@ export async function listRecentWorkouts(
     tonnageKg: tonnage.get(r.id) ?? 0,
     hasAnalysis: hasAnalysis.has(r.id),
   }));
+}
+
+/** Оценки ИИ-тренера (overallScore 0..100) по списку тренировок — для бейджа
+ *  «оценка» у друга, когда тот делится программами. Берём СВЕЖАЙШИЙ разбор на
+ *  тренировку (rows по createdAt desc, первый встреченный workoutId — он же
+ *  актуальный) и извлекаем оценку чистым extractOverallScore (R-04 переиспользуем
+ *  в любом контексте — друг/своя история). R-7: фильтр по userId — оценки только
+ *  владельца тренировок. Тренировки без числовой оценки в Map не попадают. */
+export async function listWorkoutScores(
+  userId: string,
+  workoutIds: string[],
+): Promise<Map<string, number>> {
+  const scores = new Map<string, number>();
+  if (workoutIds.length === 0) return scores;
+
+  const rows = await db
+    .select({
+      workoutId: schema.aiAnalyses.workoutId,
+      resultJson: schema.aiAnalyses.resultJson,
+    })
+    .from(schema.aiAnalyses)
+    .where(
+      and(
+        eq(schema.aiAnalyses.userId, userId),
+        inArray(schema.aiAnalyses.workoutId, workoutIds),
+      ),
+    )
+    .orderBy(desc(schema.aiAnalyses.createdAt));
+
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (!r.workoutId || seen.has(r.workoutId)) continue;
+    seen.add(r.workoutId); // свежайший разбор тренировки — авторитетный
+    const score = extractOverallScore(r.resultJson);
+    if (score != null) scores.set(r.workoutId, score);
+  }
+  return scores;
 }
 
 export async function getAiAnalysisForWorkout(

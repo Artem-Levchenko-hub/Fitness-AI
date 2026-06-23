@@ -7,7 +7,9 @@ import {
   formatExerciseCount,
   formatTemplateMeta,
   mergeTemplateList,
+  sortTemplatesForFlow,
   type CardioTemplateListSource,
+  type FlowSortable,
   type TemplateListSource,
   type UnifiedTemplateItem,
 } from "./template-list";
@@ -161,6 +163,54 @@ describe("mergeTemplateList", () => {
       ["cd", "cardio"],
       ["s", "strength"],
     ]);
+  });
+});
+
+describe("sortTemplatesForFlow", () => {
+  const item = (over: Partial<FlowSortable> & { id: string }) => ({
+    name: over.id,
+    ...over,
+    updatedAt: over.updatedAt ?? d("2026-06-01T00:00:00Z"),
+  });
+
+  it("puts a trainer-adapted template ahead of a fresher manual one", () => {
+    const sorted = sortTemplatesForFlow([
+      item({ id: "manual-fresh", updatedAt: d("2026-06-12T00:00:00Z") }),
+      item({ id: "adapted-old", adapted: true, updatedAt: d("2026-06-05T00:00:00Z") }),
+    ]);
+    expect(sorted.map((t) => t.id)).toEqual(["adapted-old", "manual-fresh"]);
+  });
+
+  it("treats source=trainer as trainer-touched (leads the list)", () => {
+    const sorted = sortTemplatesForFlow([
+      item({ id: "manual", updatedAt: d("2026-06-12T00:00:00Z") }),
+      item({ id: "trainer", source: "trainer", updatedAt: d("2026-06-01T00:00:00Z") }),
+    ]);
+    expect(sorted[0].id).toBe("trainer");
+  });
+
+  it("orders within each tier by updatedAt desc (freshest first)", () => {
+    const sorted = sortTemplatesForFlow([
+      item({ id: "a-old", adapted: true, updatedAt: d("2026-06-02T00:00:00Z") }),
+      item({ id: "a-new", adapted: true, updatedAt: d("2026-06-10T00:00:00Z") }),
+      item({ id: "m-old", updatedAt: d("2026-06-03T00:00:00Z") }),
+      item({ id: "m-new", updatedAt: d("2026-06-09T00:00:00Z") }),
+    ]);
+    expect(sorted.map((t) => t.id)).toEqual(["a-new", "a-old", "m-new", "m-old"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const input = [
+      item({ id: "manual", updatedAt: d("2026-06-12T00:00:00Z") }),
+      item({ id: "adapted", adapted: true, updatedAt: d("2026-06-01T00:00:00Z") }),
+    ];
+    const order = input.map((t) => t.id);
+    sortTemplatesForFlow(input);
+    expect(input.map((t) => t.id)).toEqual(order);
+  });
+
+  it("returns [] for empty input", () => {
+    expect(sortTemplatesForFlow([])).toEqual([]);
   });
 });
 

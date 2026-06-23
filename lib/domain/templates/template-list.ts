@@ -59,6 +59,31 @@ export function mergeTemplateList(
   return tagged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
+/** Минимальная форма для приоритезации потока «Начать»: свежесть + признаки
+ *  авторства тренера. И силовой repo-тип (TemplateListItem), и объединённый
+ *  UnifiedTemplateItem ей соответствуют — поэтому сортировка одна на оба экрана. */
+export type FlowSortable = {
+  updatedAt: Date;
+  source?: "manual" | "trainer";
+  adapted?: boolean;
+};
+
+/** «Обновлённые тренером — вперёд, остальное по свежести». Атлет приходит в зал,
+ *  жмёт «Начать» и первыми видит шаблоны, которые тренер подогнал по факту прошлых
+ *  тренировок (adapted) либо собрал как авто-«следующую» (source="trainer") — он
+ *  в потоке, просто выбирает. Внутри тира — по убыванию updatedAt (свежие сверху).
+ *  Чистая (R-07), не мутирует вход; стабильность Array.sort сохраняет порядок при
+ *  равных ключах. */
+export function sortTemplatesForFlow<T extends FlowSortable>(items: T[]): T[] {
+  const trainerTouched = (t: T) => t.source === "trainer" || t.adapted === true;
+  return [...items].sort((a, b) => {
+    const tierA = trainerTouched(a) ? 0 : 1;
+    const tierB = trainerTouched(b) ? 0 : 1;
+    if (tierA !== tierB) return tierA - tierB;
+    return b.updatedAt.getTime() - a.updatedAt.getTime();
+  });
+}
+
 const FORMAT_LABEL: Record<TemplateFormat, string> = {
   strength: "Силовая",
   circuit: "Круговая",

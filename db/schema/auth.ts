@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   date,
   index,
   integer,
@@ -33,6 +34,14 @@ export const users = pgTable("users", {
   /** Пол в свободной форме (male/female/other) — опционально, AI может
    *  адаптировать рекомендации (например, женские ProT нормы отличаются). */
   sex: text("sex"),
+
+  /** Делиться с друзьями своими шаблонами/программами + оценками ИИ-тренера
+   *  (overallScore). Тренировки друзей видны всегда; этот тумблер дополнительно
+   *  открывает программы и оценки на странице друга. По умолчанию выкл —
+   *  приватность не падает без явного согласия. */
+  shareProgramsWithFriends: boolean("share_programs_with_friends")
+    .notNull()
+    .default(false),
 
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()

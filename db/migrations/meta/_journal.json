@@ -176,6 +176,13 @@
       "when": 1782037616306,
       "tag": "0024_shiny_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782240948722,
+      "tag": "0025_chunky_wrecking_crew",
+      "breakpoints": true
     }
   ]
 }

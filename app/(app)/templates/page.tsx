@@ -1,19 +1,14 @@
-import {
-  ChevronRight,
-  Library,
-  Pencil,
-  Play,
-  Plus,
-  Wand2,
-} from "lucide-react";
+import { ChevronRight, Library, Pencil, Play, Plus, Wand2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { SwipeToDelete } from "@/components/app/swipe-to-delete";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   formatTemplateMeta,
   mergeTemplateList,
+  sortTemplatesForFlow,
   type UnifiedTemplateItem,
 } from "@/lib/domain";
 import { listCardioTemplates } from "@/lib/repos/cardio-templates.repo";
@@ -21,6 +16,7 @@ import { listCircuitTemplates } from "@/lib/repos/circuit-templates.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
 import { startCardioFromTemplateAction } from "@/server/actions/cardio-templates";
 import { startCircuitFromTemplateAction } from "@/server/actions/circuit-templates";
+import { deleteTemplateFromListAction } from "@/server/actions/templates";
 
 export const metadata: Metadata = { title: "Шаблоны" };
 
@@ -33,16 +29,16 @@ export default async function TemplatesPage() {
     listCircuitTemplates(user.id),
     listCardioTemplates(user.id),
   ]);
-  // Вкладка «Шаблоны» = только то, что атлет собрал/сохранил сам. Авто-«следующая
-  // тренировка» от тренера (source="trainer") сюда не попадает — она живёт как
-  // подсказка на дашборде и не засоряет список ручных шаблонов.
-  const templates = mergeTemplateList(strength, circuit, cardio).filter(
-    (tpl) => tpl.source !== "trainer",
+  // Поток «в зал»: обновлённые тренером шаблоны (adapted / source="trainer") —
+  // первыми, остальное по свежести (sortTemplatesForFlow). Главный шаблон «под
+  // тебя» от ИИ-тренера виден и здесь, и в «Начать» — единый простой список.
+  const templates = sortTemplatesForFlow(
+    mergeTemplateList(strength, circuit, cardio),
   );
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
-      <header className="mb-6 flex items-center justify-between gap-3">
+      <header className="mb-4 flex items-center justify-between gap-3">
         <h1 className="font-serif text-3xl font-normal tracking-tight md:text-4xl">
           Шаблоны
         </h1>
@@ -55,22 +51,14 @@ export default async function TemplatesPage() {
         </Button>
       </header>
 
-      {/* Отдельный вход в библиотеку: готовые программы + мои тренировочные
-          системы. Системы тренируются отсюда после «Начать тренироваться». */}
+      {/* Менее выраженный вход в библиотеку: готовые программы + ИИ-план + мои
+          системы. Не бросается в глаза (раньше был крупной градиент-карточкой). */}
       <Link
         href="/library"
-        className="from-primary/10 to-primary/5 border-primary/20 hover:to-primary/10 mb-5 flex min-h-[56px] items-center gap-3 rounded-2xl border bg-gradient-to-br p-4 transition-colors"
+        className="text-muted-foreground hover:text-foreground mb-5 inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
       >
-        <span className="bg-primary/15 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
-          <Library className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">Библиотека</span>
-          <span className="text-muted-foreground block text-xs">
-            Готовые программы и мои тренировочные системы
-          </span>
-        </span>
-        <ChevronRight className="text-muted-foreground size-5 shrink-0" />
+        <Library className="size-3.5" aria-hidden="true" />
+        Библиотека силовых
       </Link>
 
       {templates.length === 0 ? (
@@ -80,13 +68,23 @@ export default async function TemplatesPage() {
           {templates.map((tpl) =>
             tpl.format === "strength" ? (
               <li key={`strength-${tpl.id}`}>
-                <Link
-                  href={`/templates/${tpl.id}`}
-                  className="bg-card hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
+                {/* Свайп влево — удалить (как в «Начать» и в истории). Тап —
+                    экран старта/деталей шаблона. */}
+                <SwipeToDelete
+                  action={deleteTemplateFromListAction}
+                  hidden={{ templateId: tpl.id }}
+                  title="Удалить шаблон?"
+                  description={`«${tpl.name}» удалится безвозвратно. Выполненные по нему тренировки останутся в истории.`}
+                  deleteAriaLabel={`Удалить шаблон «${tpl.name}»`}
                 >
-                  <TemplateMeta tpl={tpl} />
-                  <ChevronRight className="text-muted-foreground size-5 shrink-0" />
-                </Link>
+                  <Link
+                    href={`/templates/${tpl.id}`}
+                    className="bg-card hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
+                  >
+                    <TemplateMeta tpl={tpl} />
+                    <ChevronRight className="text-muted-foreground size-5 shrink-0" />
+                  </Link>
+                </SwipeToDelete>
               </li>
             ) : (
               // Круговая и кардио переиспользуются стартом одним кликом —
