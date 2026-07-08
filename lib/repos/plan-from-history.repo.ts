@@ -1,6 +1,9 @@
+import { and, eq, isNull } from "drizzle-orm";
+
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import {
+  buildNextTemplateItems,
   templateItemsFromWorkout,
   type NextTemplateItem,
 } from "@/lib/domain/templates/next-template";
@@ -66,6 +69,83 @@ export async function createTemplateFromWorkout(
       source: "manual",
     });
     await insertItems(tx, id, day.items);
+    return { id };
+  });
+}
+
+export type NextWorkoutPreviewItem = {
+  exerciseId: string;
+  nameRu: string;
+  targetSets: number;
+  targetRepsMin: number;
+  targetRepsMax: number;
+  targetWeightKg: number | null;
+};
+
+/** Превью «следующей тренировки от тренера» из завершённой: прогрессия по факту
+ *  (buildNextTemplateItems — добавляет вес/повторы) + имена упражнений для показа.
+ *  Пусто, если тренировка не найдена/не завершена/без рабочих подходов. Это то,
+ *  что атлет видит в истории ДО старта скорректированной тренировки. */
+export async function nextWorkoutPreview(
+  userId: string,
+  workoutId: string,
+): Promise<NextWorkoutPreviewItem[]> {
+  const w = await getActiveWorkoutForUser(userId, workoutId);
+  if (!w || w.status !== "completed") return [];
+  const nameById = new Map(w.exercises.map((e) => [e.exerciseId, e.exerciseNameRu]));
+  return buildNextTemplateItems(
+    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+  ).map((it) => ({
+    exerciseId: it.exerciseId,
+    nameRu: nameById.get(it.exerciseId) ?? "Упражнение",
+    targetSets: it.targetSets,
+    targetRepsMin: it.targetRepsMin,
+    targetRepsMax: it.targetRepsMax,
+    targetWeightKg: it.targetWeightKg,
+  }));
+}
+
+/** Get-or-create шаблон «следующая тренировка от тренера» по завершённой:
+ *  прогрессия по факту (buildNextTemplateItems). Идемпотентно по sourceWorkoutId
+ *  (source='trainer') — повторные заходы переиспользуют один шаблон, а не плодят
+ *  копии. Отсюда стартует «скорректированная тренировка» прямо из истории —
+ *  работает и для ad-hoc (без исходного шаблона). null — нечего прогрессировать.
+ *  R-7: getActiveWorkoutForUser гейтит по userId. */
+export async function getOrCreateNextWorkoutTemplate(
+  userId: string,
+  workoutId: string,
+): Promise<{ id: string } | null> {
+  const [existing] = await db
+    .select({ id: schema.workoutTemplates.id })
+    .from(schema.workoutTemplates)
+    .where(
+      and(
+        eq(schema.workoutTemplates.userId, userId),
+        eq(schema.workoutTemplates.source, "trainer"),
+        eq(schema.workoutTemplates.sourceWorkoutId, workoutId),
+        isNull(schema.workoutTemplates.archivedAt),
+      ),
+    )
+    .limit(1);
+  if (existing) return existing;
+
+  const w = await getActiveWorkoutForUser(userId, workoutId);
+  if (!w || w.status !== "completed") return null;
+  const items = buildNextTemplateItems(
+    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+  );
+  if (items.length === 0) return null;
+
+  return db.transaction(async (tx) => {
+    const id = crypto.randomUUID();
+    await tx.insert(schema.workoutTemplates).values({
+      id,
+      userId,
+      name: w.name.slice(0, 80),
+      source: "trainer",
+      sourceWorkoutId: workoutId,
+    });
+    await insertItems(tx, id, items);
     return { id };
   });
 }

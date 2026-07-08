@@ -3,7 +3,9 @@ import {
   ChevronLeft,
   ClipboardList,
   MessageSquare,
+  Play,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -19,6 +21,7 @@ import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { requireUser } from "@/lib/auth/require-user";
 import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
+import { buildNextTemplateItems } from "@/lib/domain/templates/next-template";
 import {
   summarizePreviousSession,
   type PreviousSessionSummary,
@@ -38,7 +41,10 @@ import {
 import { getExerciseGoal } from "@/lib/repos/goals.repo";
 import { exerciseSetHistory } from "@/lib/repos/stats.repo";
 import { saveWorkoutAsTemplateAction } from "@/server/actions/templates";
-import { deleteWorkoutAction } from "@/server/actions/workouts";
+import {
+  deleteWorkoutAction,
+  startNextWorkoutAction,
+} from "@/server/actions/workouts";
 
 import { ActiveWorkoutView } from "./active-workout";
 
@@ -179,6 +185,16 @@ function CompletedView({
       })
     : null;
 
+  // «Следующая тренировка» — прогрессия по факту этой сессии (тот же расчёт,
+  // что тренер применяет к шаблону): веса/повторы подняты. Пусто, если рабочих
+  // подходов не было. Чистый доменный вызов (R-7) прямо в server-компоненте.
+  const nextItems = buildNextTemplateItems(
+    workout.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+  );
+  const nameById = new Map(
+    workout.exercises.map((e) => [e.exerciseId, e.exerciseNameRu]),
+  );
+
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -251,6 +267,54 @@ function CompletedView({
       ) : (
         <CoachCta workoutId={workout.id} />
       )}
+
+      {nextItems.length > 0 ? (
+        // Провалиться из истории прямо в скорректированную тренировку: тренер
+        // поднял веса/повторы по факту, цели уже проставлены — один тап в живую
+        // сессию. Работает и для ad-hoc (репо создаёт шаблон source='trainer').
+        <section className="border-primary/30 bg-primary/5 mt-6 rounded-2xl border p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="bg-primary/15 text-primary flex size-8 shrink-0 items-center justify-center rounded-full">
+              <Wand2 className="size-4" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight">
+                Следующая тренировка
+              </h2>
+              <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+                Скорректировано тренером
+              </p>
+            </div>
+          </div>
+          <p className="text-muted-foreground mb-3 text-xs leading-relaxed">
+            Тренер поднял веса и повторы по факту этой тренировки. Начни — цели
+            уже проставлены под каждый подход.
+          </p>
+          <ul className="mb-4 space-y-1.5">
+            {nextItems.map((it) => (
+              <li
+                key={it.exerciseId}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {nameById.get(it.exerciseId) ?? "Упражнение"}
+                </span>
+                <span className="text-muted-foreground tabular shrink-0 text-xs">
+                  {it.targetSets}×{it.targetRepsMin}–{it.targetRepsMax}
+                  {it.targetWeightKg ? ` · ${formatNum(it.targetWeightKg)} кг` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <form action={startNextWorkoutAction}>
+            <input type="hidden" name="workoutId" value={workout.id} />
+            <Button type="submit" size="xl" className="w-full">
+              <Play className="size-5 fill-current" />
+              Начать эту тренировку
+            </Button>
+          </form>
+        </section>
+      ) : null}
 
       <section className="mt-6">
         <h2 className="font-serif mb-3 text-2xl font-normal tracking-tight">

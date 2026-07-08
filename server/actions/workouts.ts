@@ -18,6 +18,7 @@ import {
   saveWorkoutNote,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
+import { getOrCreateNextWorkoutTemplate } from "@/lib/repos/plan-from-history.repo";
 import { adaptTemplateAfterWorkout } from "@/lib/repos/training-programs.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
@@ -26,6 +27,25 @@ import { parseClientWorkoutId } from "@/lib/domain/workouts/client-workout-id";
 const startSchema = z.object({
   templateId: z.string().uuid(),
 });
+
+/** «Начать скорректированную тренировку» прямо из истории: по завершённой
+ *  тренировке тренер строит следующую с прогрессией (get-or-create шаблон
+ *  source='trainer'), и мы стартуем по нему живую сессию. Работает и для ad-hoc
+ *  тренировок без исходного шаблона. Нечего прогрессировать (нет рабочих
+ *  подходов) → возврат в ту же тренировку. R-7: repo гейтят по userId. */
+export async function startNextWorkoutAction(formData: FormData) {
+  const user = await requireUser();
+  const workoutId = String(formData.get("workoutId") ?? "");
+  if (!workoutId) throw new Error("Missing workoutId");
+
+  const tpl = await getOrCreateNextWorkoutTemplate(user.id, workoutId);
+  if (!tpl) redirect(`/workouts/${workoutId}`);
+
+  const { id } = await startWorkoutFromTemplate(user.id, tpl.id);
+  revalidatePath("/dashboard");
+  revalidatePath("/workouts");
+  redirect(`/workouts/${id}`);
+}
 
 export async function startWorkoutFromTemplateAction(formData: FormData) {
   const user = await requireUser();
