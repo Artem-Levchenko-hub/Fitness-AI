@@ -154,10 +154,49 @@ async function circuitVolumeBuckets(
   }));
 }
 
-/** Объём по дням за период — силовые working-подходы И круговые раунды,
- *  слитые по дню (`mergeVolumeBuckets`). Дни бакетятся в `timeZone` юзера —
- *  РОВНО как история `/workouts` (G1). Раньше круговая тренировка не давала
- *  столбика на графике объёма (и на week-strip дашборда). */
+/** Объём доп. активности (быстрый лог вне тренировок) по бакету (день/неделя)
+ *  в TZ юзера. Подход = запись mode='sets'; запись mode='total' считается одним
+ *  «подходом»-записью, повторы — как есть. Тоннаж = вес·повторы (вес NULL —
+ *  bodyweight/эспандер → 0, честно: тоннаж ≠ усилие). */
+async function quickVolumeBuckets(
+  userId: string,
+  from: Date | null,
+  timeZone: string,
+  bucket: "day" | "week",
+): Promise<VolumeBucket[]> {
+  const keyExpr =
+    bucket === "week"
+      ? sql<string>`to_char(date_trunc('week', ${schema.quickActivities.performedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`
+      : sql<string>`to_char(${schema.quickActivities.performedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`;
+
+  const rows = await db
+    .select({
+      key: keyExpr,
+      volume: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+      sets: sql<number>`COUNT(${schema.quickActivities.id})`,
+      reps: sql<number>`COALESCE(SUM(${schema.quickActivities.reps}), 0)`,
+    })
+    .from(schema.quickActivities)
+    .where(
+      and(
+        eq(schema.quickActivities.userId, userId),
+        from ? gte(schema.quickActivities.performedAt, from) : undefined,
+      ),
+    )
+    .groupBy(sql`1`);
+
+  return rows.map((r) => ({
+    key: r.key,
+    volume: Number(r.volume),
+    sets: Number(r.sets),
+    reps: Number(r.reps),
+  }));
+}
+
+/** Объём по дням за период — силовые working-подходы, круговые раунды И
+ *  доп. активность, слитые по дню (`mergeVolumeBuckets`). Дни бакетятся в
+ *  `timeZone` юзера — РОВНО как история `/workouts` (G1). Раньше круговая
+ *  тренировка не давала столбика на графике объёма (и на week-strip дашборда). */
 export async function dailyVolume(
   userId: string,
   range: StatsRange,
@@ -165,12 +204,13 @@ export async function dailyVolume(
 ): Promise<DailyVolumePoint[]> {
   const from = rangeToFromDate(range);
 
-  const [strength, circuit] = await Promise.all([
+  const [strength, circuit, quick] = await Promise.all([
     strengthVolumeBuckets(userId, from, timeZone, "day"),
     circuitVolumeBuckets(userId, from, timeZone, "day"),
+    quickVolumeBuckets(userId, from, timeZone, "day"),
   ]);
 
-  return mergeVolumeBuckets([strength, circuit]).map((b) => ({
+  return mergeVolumeBuckets([strength, circuit, quick]).map((b) => ({
     date: b.key,
     volume: b.volume,
     sets: b.sets,
@@ -185,8 +225,8 @@ export type WeeklyVolumePoint = {
   reps: number;
 };
 
-/** Объём по неделям (ISO неделя, начало — понедельник) — силовые И круговые,
- *  слитые по неделе. Границы недели считаются в `timeZone` юзера (G1). */
+/** Объём по неделям (ISO неделя, начало — понедельник) — силовые, круговые И
+ *  доп. активность, слитые по неделе. Границы недели — в `timeZone` юзера (G1). */
 export async function weeklyVolume(
   userId: string,
   range: StatsRange,
@@ -194,12 +234,13 @@ export async function weeklyVolume(
 ): Promise<WeeklyVolumePoint[]> {
   const from = rangeToFromDate(range);
 
-  const [strength, circuit] = await Promise.all([
+  const [strength, circuit, quick] = await Promise.all([
     strengthVolumeBuckets(userId, from, timeZone, "week"),
     circuitVolumeBuckets(userId, from, timeZone, "week"),
+    quickVolumeBuckets(userId, from, timeZone, "week"),
   ]);
 
-  return mergeVolumeBuckets([strength, circuit]).map((b) => ({
+  return mergeVolumeBuckets([strength, circuit, quick]).map((b) => ({
     weekStart: b.key,
     volume: b.volume,
     sets: b.sets,
@@ -292,15 +333,43 @@ async function muscleVolumeRows(
       schema.exerciseMuscleGroups.role,
     );
 
-  return [...strength, ...circuit].map((r) => ({
+  // Доп. активность: тоннаж записей (вес·повторы) по группе×роли. Без веса →
+  // 0 тоннажа (метрика тоннажа; усилие живёт в нагреве аватара). Окно — по
+  // performedAt.
+  const quick = await db
+    .select({
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      role: schema.exerciseMuscleGroups.role,
+      volume: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+    })
+    .from(schema.quickActivities)
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.quickActivities.exerciseId,
+      ),
+    )
+    .where(
+      and(
+        eq(schema.quickActivities.userId, userId),
+        from ? gte(schema.quickActivities.performedAt, from) : undefined,
+      ),
+    )
+    .groupBy(
+      schema.exerciseMuscleGroups.muscleGroupKey,
+      schema.exerciseMuscleGroups.role,
+    );
+
+  return [...strength, ...circuit, ...quick].map((r) => ({
     muscleKey: r.muscle,
     role: r.role,
     volume: Number(r.volume),
   }));
 }
 
-/** Объём по группам мышц (primary 1.0 / secondary 0.5) — силовые И круговые
- *  тоннажем, свёрнутые `foldMuscleVolume`. */
+/** Объём по группам мышц (primary 1.0 / secondary 0.5) — силовые, круговые И
+ *  доп. активность тоннажем, свёрнутые `foldMuscleVolume`. */
 export async function volumeByMuscle(
   userId: string,
   range: StatsRange,
@@ -324,7 +393,7 @@ export async function muscleWeeklyVolume(
   // по TZ-границе; запрос лишь грубо отсекает старое.
   const from = new Date(now.getTime() - (weeks * 7 + 2) * DAY_MS);
 
-  const [strengthRows, circuitRows] = await Promise.all([
+  const [strengthRows, circuitRows, quickRows] = await Promise.all([
     db
       .select({
         muscle: schema.exerciseMuscleGroups.muscleGroupKey,
@@ -392,10 +461,32 @@ export async function muscleWeeklyVolume(
           gte(schema.circuitRoundLogs.completedAt, from),
         ),
       ),
+    db
+      .select({
+        muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+        role: schema.exerciseMuscleGroups.role,
+        weight: schema.quickActivities.weightKg,
+        reps: schema.quickActivities.reps,
+        at: schema.quickActivities.performedAt,
+      })
+      .from(schema.quickActivities)
+      .innerJoin(
+        schema.exerciseMuscleGroups,
+        eq(
+          schema.exerciseMuscleGroups.exerciseId,
+          schema.quickActivities.exerciseId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.quickActivities.userId, userId),
+          gte(schema.quickActivities.performedAt, from),
+        ),
+      ),
   ]);
 
   const byMuscle = new Map<string, WeeklyVolumeContribution[]>();
-  for (const r of [...strengthRows, ...circuitRows]) {
+  for (const r of [...strengthRows, ...circuitRows, ...quickRows]) {
     if (r.weight == null || r.reps == null) continue;
     const list = byMuscle.get(r.muscle) ?? [];
     list.push({ at: r.at, volume: r.weight * r.reps * roleFactor(r.role) });
@@ -558,9 +649,34 @@ async function dailyCompletedCounts(
   return rows.map((r) => ({ date: r.date, count: Number(r.count) }));
 }
 
+/** Дни с доп. активностью (быстрый лог вне тренировок) как календарные точки:
+ *  день с ЛЮБЫМ числом записей = count 1 (5 подходов у турника ≠ 5 тренировок —
+ *  день просто «активен» на heatmap, без инфляции счётчика сессий). */
+async function quickDailyPresence(
+  userId: string,
+  from: Date | null,
+  timeZone: string,
+): Promise<FrequencyPoint[]> {
+  const rows = await db
+    .select({
+      date: sql<string>`to_char(${schema.quickActivities.performedAt} AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')`,
+    })
+    .from(schema.quickActivities)
+    .where(
+      and(
+        eq(schema.quickActivities.userId, userId),
+        from ? gte(schema.quickActivities.performedAt, from) : undefined,
+      ),
+    )
+    .groupBy(sql`1`);
+
+  return rows.map((r) => ({ date: r.date, count: 1 }));
+}
+
 /** Календарная активность — сколько тренировок в каждый день (для
  *  heatmap-графика). Считает ВСЕ форматы: силовые + круговые + кардио (как
- *  счётчик WeekCard дашборда после H12.0 — день с любой тренировкой виден).
+ *  счётчик WeekCard дашборда после H12.0 — день с любой тренировкой виден) +
+ *  дни доп. активности (count 1 — день с быстрым логом тоже виден).
  *  Дни — в timezone юзера (G1, как `/workouts`). */
 export async function workoutFrequency(
   userId: string,
@@ -569,7 +685,7 @@ export async function workoutFrequency(
 ): Promise<FrequencyPoint[]> {
   const from = rangeToFromDate(range);
 
-  const [strength, circuit, cardio] = await Promise.all([
+  const [strength, circuit, cardio, quick] = await Promise.all([
     dailyCompletedCounts(
       schema.workouts,
       schema.workouts.userId,
@@ -597,9 +713,10 @@ export async function workoutFrequency(
       from,
       timeZone,
     ),
+    quickDailyPresence(userId, from, timeZone),
   ]);
 
-  return mergeDailyFrequency([strength, circuit, cardio]);
+  return mergeDailyFrequency([strength, circuit, cardio, quick]);
 }
 
 export type TopLineKpi = {
@@ -668,12 +785,42 @@ async function circuitEffortTotals(
   };
 }
 
+/** Вклад доп. активности (быстрый лог вне тренировок) в KPI-итоги за окно:
+ *  запись mode='sets' = один подход; mode='total' = одна запись (повторы как
+ *  есть). Тоннаж = вес·повторы там, где вес указан (без веса → 0, как
+ *  bodyweight-раунды круговых). */
+async function quickEffortTotals(
+  userId: string,
+  from: Date | null,
+): Promise<ActivityTotals> {
+  const [agg] = await db
+    .select({
+      sets: sql<number>`COUNT(${schema.quickActivities.id})`,
+      reps: sql<number>`COALESCE(SUM(${schema.quickActivities.reps}), 0)`,
+      tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+    })
+    .from(schema.quickActivities)
+    .where(
+      and(
+        eq(schema.quickActivities.userId, userId),
+        from ? gte(schema.quickActivities.performedAt, from) : undefined,
+      ),
+    );
+
+  return {
+    sets: Number(agg?.sets ?? 0),
+    reps: Number(agg?.reps ?? 0),
+    tonnageKg: Number(agg?.tonnage ?? 0),
+  };
+}
+
 /** Главные KPI-карточки на /stats. Учитывает ВСЮ активность: «Тренировок»
  *  считает все форматы (силовые + круговые + кардио), а Подходы/Повторения/
- *  Тоннаж теперь складывают силовые рабочие подходы И круговые раунды
+ *  Тоннаж складывают силовые рабочие подходы, круговые раунды И доп. активность
  *  (`combineActivityTotals`) — раньше круговая тренировка давала противоречивую
  *  карточку «N тренировок / 0 подходов». Кардио в подходы/тоннаж не входит (нет
- *  подходов/веса) — оно учтено как сессия в «Тренировок». */
+ *  подходов/веса) — оно учтено как сессия в «Тренировок». Доп. активность в
+ *  «Тренировок» НЕ входит (запись ≠ сессия), но входит в подходы/повторы. */
 export async function topLineKpi(
   userId: string,
   range: StatsRange,
@@ -707,7 +854,8 @@ export async function topLineKpi(
       ),
     );
 
-  const [circuitCount, cardioCount, circuitEffort] = await Promise.all([
+  const [circuitCount, cardioCount, circuitEffort, quickEffort] =
+    await Promise.all([
     countCompletedSessions(
       schema.circuitWorkouts,
       schema.circuitWorkouts.userId,
@@ -725,6 +873,7 @@ export async function topLineKpi(
       from,
     ),
     circuitEffortTotals(userId, from),
+    quickEffortTotals(userId, from),
   ]);
 
   const totals = combineActivityTotals([
@@ -734,6 +883,7 @@ export async function topLineKpi(
       tonnageKg: Number(agg?.tonnage ?? 0),
     },
     circuitEffort,
+    quickEffort,
   ]);
 
   return {
@@ -962,10 +1112,11 @@ type HeatRow = {
 
 /** Профиль «нагрева» всех 14 групп мышц для 3D-аватара за последнюю неделю.
  *  Нагрев = АБСОЛЮТНОЕ число эффективных рабочих подходов на группу (см.
- *  доменный `heatFromSets`): серый → красный. Считает И силовые подходы, И
- *  круговые (circuit_round_logs) — иначе круговая тренировка не «грела» бы тело
- *  (баг: пользователь тренировался круговыми, а аватар оставался серым).
- *  Только completed-сессии (G1).
+ *  доменный `heatFromSets`): серый → красный. Считает силовые подходы, круговые
+ *  (circuit_round_logs) И доп. активность (quick_activities) — иначе круговая
+ *  тренировка или подходы «между делом» не «грели» бы тело (баг: пользователь
+ *  подтягивался у турника, а аватар оставался серым). Силовые/круговые — только
+ *  completed-сессии (G1); доп. активность — все записи (лог сразу финален).
  *
  *  Возвращает РОВНО 14 записей в порядке MUSCLE_KEYS (нетренированные — нулями).
  *  primary = полный подход, secondary = 0.5 (стандарт оценки нагрузки). */
@@ -1058,9 +1209,44 @@ export async function muscleHeatProfile(
       ),
     );
 
+  // Доп. активность: каждая запись = один «подход» своего упражнения (mode=
+  // 'sets' — буквально подход; mode='total' — одна суммарная запись, считаем
+  // одним эффективным подходом: лёгкая внетренировочная нагрузка без инфляции
+  // нагрева). Вес/повторы — для тоннажа, где вес указан.
+  const quickHeatRows = await db
+    .select({
+      entryId: schema.quickActivities.id,
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      role: schema.exerciseMuscleGroups.role,
+      weight: schema.quickActivities.weightKg,
+      reps: schema.quickActivities.reps,
+      exerciseId: schema.quickActivities.exerciseId,
+      exName: schema.exercises.nameRu,
+      at: schema.quickActivities.performedAt,
+    })
+    .from(schema.quickActivities)
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.quickActivities.exerciseId,
+      ),
+    )
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.quickActivities.exerciseId),
+    )
+    .where(
+      and(
+        eq(schema.quickActivities.userId, userId),
+        gte(schema.quickActivities.performedAt, from),
+      ),
+    );
+
   const rows: HeatRow[] = [
     ...strengthRows.map((r) => ({ ...r, sourceId: `s:${r.setId}` })),
     ...circuitRows.map((r) => ({ ...r, sourceId: `c:${r.logId}` })),
+    ...quickHeatRows.map((r) => ({ ...r, sourceId: `q:${r.entryId}` })),
   ];
 
   type Acc = {
@@ -1192,8 +1378,24 @@ export async function muscleLastTrained(
     )
     .groupBy(schema.exerciseMuscleGroups.muscleGroupKey);
 
+  const quick = await db
+    .select({
+      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+      at: sql<Date>`max(${schema.quickActivities.performedAt})`.as("at"),
+    })
+    .from(schema.quickActivities)
+    .innerJoin(
+      schema.exerciseMuscleGroups,
+      eq(
+        schema.exerciseMuscleGroups.exerciseId,
+        schema.quickActivities.exerciseId,
+      ),
+    )
+    .where(eq(schema.quickActivities.userId, userId))
+    .groupBy(schema.exerciseMuscleGroups.muscleGroupKey);
+
   const map = new Map<string, Date>();
-  for (const r of [...strength, ...circuit]) {
+  for (const r of [...strength, ...circuit, ...quick]) {
     if (!r.at) continue;
     const d = r.at instanceof Date ? r.at : new Date(r.at);
     const cur = map.get(r.muscle);
@@ -1439,6 +1641,20 @@ export type WeeklyAgg = {
   cardioSessions: number;
   /** Активные work-минуты кардио недели. */
   cardioMinutes: number;
+  /** Записи доп. активности недели (быстрый лог вне тренировок). */
+  quickEntries: number;
+  /** Суммарные повторы доп. активности недели. */
+  quickReps: number;
+  /** Тоннаж доп. активности (вес×повт; без веса → 0). */
+  quickTonnage: number;
+  /** Разбивка доп. активности по упражнениям×режиму для промпта тренера
+   *  (mode='sets': entries = подходы; mode='total': entries = записи). */
+  quickByExercise: {
+    name: string;
+    mode: "sets" | "total";
+    entries: number;
+    reps: number;
+  }[];
 };
 
 export type WeeklyReviewData = {
@@ -1590,10 +1806,37 @@ export async function weeklyReviewData(
     )
     .groupBy(sql`1`);
 
+  // (E) Доп. активность: записи×повторы×тоннаж по неделе × упражнению × режиму
+  //     (бакет по performedAt). Тренер видит подходы «между делом» — иначе
+  //     неделя из подтягиваний у турника выглядела бы пустой.
+  const quickWeekExpr = sql<string>`to_char(date_trunc('week', ${schema.quickActivities.performedAt} AT TIME ZONE ${timeZone}), 'YYYY-MM-DD')`;
+  const quickWeekRows = await db
+    .select({
+      week: quickWeekExpr,
+      name: schema.exercises.nameRu,
+      mode: schema.quickActivities.mode,
+      entries: sql<number>`COUNT(${schema.quickActivities.id})`,
+      reps: sql<number>`COALESCE(SUM(${schema.quickActivities.reps}), 0)`,
+      tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+    })
+    .from(schema.quickActivities)
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.quickActivities.exerciseId),
+    )
+    .where(
+      and(
+        eq(schema.quickActivities.userId, userId),
+        gte(schema.quickActivities.performedAt, from),
+      ),
+    )
+    .groupBy(sql`1`, schema.exercises.nameRu, schema.quickActivities.mode);
+
   const buildAgg = (weekKey: string): WeeklyAgg => {
     const t = totalsRows.find((r) => r.week === weekKey);
     const c = circuitRows.find((r) => r.week === weekKey);
     const cardio = cardioRows.find((r) => r.week === weekKey);
+    const quick = quickWeekRows.filter((r) => r.week === weekKey);
     const byMuscle = new Map<string, number>();
     for (const r of muscleRows) {
       if (r.week !== weekKey) continue;
@@ -1615,6 +1858,17 @@ export async function weeklyReviewData(
       circuitTonnage: Number(c?.tonnage ?? 0),
       cardioSessions: Number(cardio?.sessions ?? 0),
       cardioMinutes: Math.round(Number(cardio?.seconds ?? 0) / 60),
+      quickEntries: quick.reduce((s, r) => s + Number(r.entries), 0),
+      quickReps: quick.reduce((s, r) => s + Number(r.reps), 0),
+      quickTonnage: quick.reduce((s, r) => s + Number(r.tonnage), 0),
+      quickByExercise: quick
+        .map((r) => ({
+          name: r.name,
+          mode: r.mode,
+          entries: Number(r.entries),
+          reps: Number(r.reps),
+        }))
+        .sort((a, b) => b.reps - a.reps),
     };
   };
 

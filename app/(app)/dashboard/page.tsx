@@ -16,6 +16,7 @@ import { DashboardAvatarTile } from "@/components/dashboard/DashboardAvatarTile"
 import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
 import { FriendsActivityPreview } from "@/components/dashboard/FriendsActivityPreview";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
+import { QuickActivityTile } from "@/components/dashboard/QuickActivityTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
@@ -158,6 +159,12 @@ export default async function DashboardPage() {
           /profile. Крючок столпа 2 на главной, а не за вкладкой профиля. */}
       <section className="mt-3">
         <DashboardAvatarTile data={avatarData} />
+      </section>
+
+      {/* Доп. активность — быстрый лог подхода/тотала между делом без создания
+          тренировки; учитывается в /stats, нагреве аватара и недельном разборе. */}
+      <section className="mt-3">
+        <QuickActivityTile userId={user.id} tz={tz} />
       </section>
 
       <section className="mt-6 space-y-2">

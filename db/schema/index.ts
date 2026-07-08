@@ -20,3 +20,4 @@ export * from "./knowledge";
 export * from "./schedule";
 export * from "./friends";
 export * from "./goals";
+export * from "./quick-activity";

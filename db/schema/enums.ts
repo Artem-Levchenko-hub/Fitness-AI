@@ -77,6 +77,14 @@ export const pushKind = pgEnum("push_kind", [
   "workout_reminder",
 ]);
 
+/** Формат быстрой записи доп. активности вне тренировки: sets — одна запись =
+ *  один подход (подтягивания: 12, потом 10…); total — одна запись = суммарные
+ *  повторы одним числом (кистевой эспандер: 100). */
+export const quickActivityMode = pgEnum("quick_activity_mode", [
+  "sets",
+  "total",
+]);
+
 export const cardioPreset = pgEnum("cardio_preset", [
   "tabata",
   "norwegian_4x4",

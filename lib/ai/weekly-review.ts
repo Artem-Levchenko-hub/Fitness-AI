@@ -24,6 +24,21 @@ export type WeekAgg = {
   cardioSessions: number;
   /** Активные минуты кардио (сумма work-блоков). */
   cardioMinutes: number;
+  /** Записи доп. активности (быстрый лог вне тренировок: подход у турника,
+   *  эспандер «тотал»). */
+  quickEntries: number;
+  /** Суммарные повторы доп. активности. */
+  quickReps: number;
+  /** Тоннаж доп. активности (вес×повт; без веса → 0). */
+  quickTonnage: number;
+  /** Разбивка доп. активности по упражнениям×режиму (mode='sets': entries =
+   *  подходы; mode='total': entries = записи, reps = суммарные повторы). */
+  quickByExercise: {
+    name: string;
+    mode: "sets" | "total";
+    entries: number;
+    reps: number;
+  }[];
 };
 
 /** Одна ночь сна за разбираемую неделю. */
@@ -93,13 +108,19 @@ function weekActivityCount(w: WeekAgg): number {
 }
 
 /** Есть ли что разбирать: хотя бы одна сессия ЛЮБОГО формата (силовая,
- *  круговая ИЛИ кардио) на этой ИЛИ прошлой неделе. Тренер следит за всей
- *  активностью, а не только за силовыми — круговая/кардио-неделя тоже
- *  разбирается. Единый источник правила и для кнопки «по запросу» (H8.1), и
+ *  круговая ИЛИ кардио) ЛИБО запись доп. активности на этой ИЛИ прошлой
+ *  неделе. Тренер следит за всей активностью, а не только за силовыми —
+ *  круговая/кардио-неделя и даже неделя «только подходы у турника» тоже
+ *  разбираются. Единый источник правила и для кнопки «по запросу» (H8.1), и
  *  для авто-воркера (H8.2). Пустые обе недели по всем форматам → не жжём LLM.
  *  Чистая (R-7), юнит-тестируема. */
 export function hasWeeklyData(data: WeeklyReviewInput): boolean {
-  return weekActivityCount(data.current) > 0 || weekActivityCount(data.previous) > 0;
+  return (
+    weekActivityCount(data.current) > 0 ||
+    weekActivityCount(data.previous) > 0 ||
+    data.current.quickEntries > 0 ||
+    data.previous.quickEntries > 0
+  );
 }
 
 /** Сколько групп показать в блоке (бюджет промпта — самые нагруженные). */
@@ -196,6 +217,22 @@ function formatActivityBlock(current: WeekAgg, previous: WeekAgg): string[] {
     lines.push(
       `- Кардио: ${current.cardioSessions} (прошлая ${previous.cardioSessions}) — ${current.cardioMinutes} мин`,
     );
+  }
+  if (current.quickEntries > 0 || previous.quickEntries > 0) {
+    const tonnage =
+      current.quickTonnage > 0
+        ? `, ${round(current.quickTonnage)} кг·повт`
+        : "";
+    lines.push(
+      `- Доп. активность (вне тренировок): ${current.quickReps} повт (прошлая ${previous.quickReps})${tonnage}`,
+    );
+    for (const q of current.quickByExercise) {
+      lines.push(
+        q.mode === "total"
+          ? `  - ${q.name}: ${q.reps} повт (тотал)`
+          : `  - ${q.name}: ${q.entries} подх · ${q.reps} повт`,
+      );
+    }
   }
   lines.push("");
   return lines;

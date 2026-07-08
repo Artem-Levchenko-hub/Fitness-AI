@@ -183,6 +183,13 @@
       "when": 1782240948722,
       "tag": "0025_chunky_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1783500498511,
+      "tag": "0026_classy_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

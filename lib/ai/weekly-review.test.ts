@@ -27,6 +27,10 @@ function agg(over: Partial<WeekAgg> = {}): WeekAgg {
     circuitTonnage: 0,
     cardioSessions: 0,
     cardioMinutes: 0,
+    quickEntries: 0,
+    quickReps: 0,
+    quickTonnage: 0,
+    quickByExercise: [],
     ...over,
   };
 }
@@ -180,6 +184,39 @@ describe("formatWeeklyReviewBlock", () => {
     expect(out).toContain("Силовые: 3 (прошлая 2)");
     expect(out).not.toContain("Круговые:");
     expect(out).not.toContain("Кардио:");
+    expect(out).not.toContain("Доп. активность");
+  });
+
+  it("hasWeeklyData: ТОЛЬКО доп. активность на этой неделе → true", () => {
+    const d = base();
+    d.current = agg({
+      quickEntries: 3,
+      quickReps: 32,
+      quickByExercise: [
+        { name: "Подтягивания", mode: "sets", entries: 3, reps: 32 },
+      ],
+    });
+    d.previous = agg();
+    expect(hasWeeklyData(d)).toBe(true);
+  });
+
+  it("блок «Доп. активность»: подходные строки и тотал-строки различаются", () => {
+    const d = base();
+    d.current = agg({
+      sessions: 1,
+      quickEntries: 4,
+      quickReps: 132,
+      quickTonnage: 0,
+      quickByExercise: [
+        { name: "Эспандер кистевой", mode: "total", entries: 1, reps: 100 },
+        { name: "Подтягивания", mode: "sets", entries: 3, reps: 32 },
+      ],
+    });
+    d.previous = agg();
+    const out = formatWeeklyReviewBlock(d);
+    expect(out).toContain("Доп. активность (вне тренировок): 132 повт (прошлая 0)");
+    expect(out).toContain("Эспандер кистевой: 100 повт (тотал)");
+    expect(out).toContain("Подтягивания: 3 подх · 32 повт");
   });
 
   it("разбор не пуст для круговой недели без силовых (есть что показать)", () => {
