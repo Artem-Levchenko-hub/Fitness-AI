@@ -1,4 +1,12 @@
-import { ChevronRight, Library, Pencil, Play, Plus, Wand2 } from "lucide-react";
+import {
+  ChevronRight,
+  Layers,
+  Library,
+  Pencil,
+  Play,
+  Plus,
+  Wand2,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -51,15 +59,24 @@ export default async function TemplatesPage() {
         </Button>
       </header>
 
-      {/* Менее выраженный вход в библиотеку: готовые программы + ИИ-план + мои
-          системы. Не бросается в глаза (раньше был крупной градиент-карточкой). */}
-      <Link
-        href="/library"
-        className="text-muted-foreground hover:text-foreground mb-5 inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
-      >
-        <Library className="size-3.5" aria-hidden="true" />
-        Библиотека силовых
-      </Link>
+      {/* Входы уровнем выше шаблона: «Мои планы» (собрать программу из своих
+          тренировок + оценка тренера) и Библиотека готовых. */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Link
+          href="/programs"
+          className="text-primary hover:text-primary/80 inline-flex items-center gap-1.5 text-xs font-semibold transition-colors"
+        >
+          <Layers className="size-3.5" aria-hidden="true" />
+          Мои планы
+        </Link>
+        <Link
+          href="/library"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
+        >
+          <Library className="size-3.5" aria-hidden="true" />
+          Библиотека силовых
+        </Link>
+      </div>
 
       {templates.length === 0 ? (
         <EmptyState />

@@ -1,8 +1,22 @@
 import { relations } from "drizzle-orm";
-import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
 import { workoutTemplates } from "./templates";
+
+/** Кэш последней оценки программы тренером (structured JSON). Показывается на
+ *  /programs/[id]; перегенерируется кнопкой. Форма — ProgramReviewResult из
+ *  lib/domain/programs/program-review.ts (score/summary/strengths/weaknesses/
+ *  recommendations/muscleBalance). jsonb, а не отдельная таблица: одна свежая
+ *  оценка на программу (YAGNI — история ревизий не нужна). */
+export type ProgramReviewSnapshot = {
+  score: number;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  muscleBalance: string | null;
+};
 
 /** Тренировочная система (программа) — именованная связка шаблонов-дней.
  *  Всегда принадлежит пользователю. Готовая библиотека программ живёт
@@ -28,6 +42,11 @@ export const trainingPrograms = pgTable(
      *  «Начать тренироваться» активирует; обёртка своих шаблонов — сразу активна
      *  (они уже были в «Шаблонах»). null = на полке (только в Библиотеке). */
     activatedAt: timestamp("activated_at", { mode: "date", withTimezone: true }),
+    /** Кэш последней оценки тренером (см. ProgramReviewSnapshot). null — ещё не
+     *  оценивалась. Перезаписывается при перегенерации. */
+    reviewJson: jsonb("review_json").$type<ProgramReviewSnapshot>(),
+    /** Когда тренер последний раз оценил программу — для подписи «Оценка от …». */
+    reviewedAt: timestamp("reviewed_at", { mode: "date", withTimezone: true }),
     archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()

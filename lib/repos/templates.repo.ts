@@ -1,7 +1,18 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+} from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import type { RefineCurrentItem } from "@/lib/domain/templates/template-refine";
 
 export type TemplateSource = "manual" | "trainer";
 
@@ -327,4 +338,123 @@ export async function deleteTemplate(
         eq(schema.workoutTemplates.userId, userId),
       ),
     );
+}
+
+export type TemplateRefineSource = {
+  name: string;
+  current: RefineCurrentItem[];
+};
+
+/** Собирает текущий шаблон для «улучшить с тренером»: имя + упражнения (slug,
+ *  имя, первичные группы, целевые параметры, заметка). slug нужен, чтобы LLM
+ *  ссылался на упражнения, а apply резолвил их обратно. R-7: гейт по userId.
+ *  null — шаблон не найден / не принадлежит атлету. */
+export async function getTemplateForRefine(
+  userId: string,
+  templateId: string,
+): Promise<TemplateRefineSource | null> {
+  const [tpl] = await db
+    .select({ name: schema.workoutTemplates.name })
+    .from(schema.workoutTemplates)
+    .where(
+      and(
+        eq(schema.workoutTemplates.id, templateId),
+        eq(schema.workoutTemplates.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!tpl) return null;
+
+  const rows = await db
+    .select({
+      exerciseId: schema.templateExercises.exerciseId,
+      slug: schema.exercises.slug,
+      nameRu: schema.exercises.nameRu,
+      targetSets: schema.templateExercises.targetSets,
+      targetRepsMin: schema.templateExercises.targetRepsMin,
+      targetRepsMax: schema.templateExercises.targetRepsMax,
+      targetRestSeconds: schema.templateExercises.targetRestSeconds,
+      notes: schema.templateExercises.notes,
+    })
+    .from(schema.templateExercises)
+    .innerJoin(
+      schema.exercises,
+      eq(schema.exercises.id, schema.templateExercises.exerciseId),
+    )
+    .where(eq(schema.templateExercises.templateId, templateId))
+    .orderBy(asc(schema.templateExercises.position));
+
+  const exerciseIds = [...new Set(rows.map((r) => r.exerciseId))];
+  const muscleRows = exerciseIds.length
+    ? await db
+        .select({
+          exerciseId: schema.exerciseMuscleGroups.exerciseId,
+          muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+        })
+        .from(schema.exerciseMuscleGroups)
+        .where(
+          and(
+            inArray(schema.exerciseMuscleGroups.exerciseId, exerciseIds),
+            eq(schema.exerciseMuscleGroups.role, "primary"),
+          ),
+        )
+    : [];
+
+  const primaryByExercise = new Map<string, string[]>();
+  for (const m of muscleRows) {
+    const list = primaryByExercise.get(m.exerciseId) ?? [];
+    list.push(m.muscle);
+    primaryByExercise.set(m.exerciseId, list);
+  }
+
+  return {
+    name: tpl.name,
+    current: rows.map((r) => ({
+      slug: r.slug,
+      nameRu: r.nameRu,
+      primaryMuscles: primaryByExercise.get(r.exerciseId) ?? [],
+      targetSets: r.targetSets,
+      targetRepsMin: r.targetRepsMin,
+      targetRepsMax: r.targetRepsMax,
+      targetRestSeconds: r.targetRestSeconds,
+      note: r.notes,
+    })),
+  };
+}
+
+/** Резолвит slug → exerciseId среди видимых атлету упражнений (системные ∪ свои).
+ *  Для применения улучшения тренера: возвращённые тренером slug превращаем в id.
+ *  При коллизии slug системное упражнение имеет приоритет (детерминизм). R-7:
+ *  свои упражнения — строго этого userId. */
+export async function resolveExerciseIdsBySlug(
+  userId: string,
+  slugs: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(slugs)];
+  if (unique.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      id: schema.exercises.id,
+      slug: schema.exercises.slug,
+      ownerUserId: schema.exercises.ownerUserId,
+    })
+    .from(schema.exercises)
+    .where(
+      and(
+        inArray(schema.exercises.slug, unique),
+        or(
+          isNull(schema.exercises.ownerUserId),
+          eq(schema.exercises.ownerUserId, userId),
+        ),
+      ),
+    );
+
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    // Системное (ownerUserId=null) перекрывает своё при коллизии slug.
+    const existing = map.get(r.slug);
+    if (!existing || r.ownerUserId === null) map.set(r.slug, r.id);
+  }
+  return map;
 }

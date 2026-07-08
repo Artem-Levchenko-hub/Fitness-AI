@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
 import { RevertAdaptationButton } from "@/components/templates/RevertAdaptationButton";
 import { StartWorkoutButton } from "@/components/templates/StartWorkoutButton";
+import { TemplateCoachPanel } from "@/components/templates/TemplateCoachPanel";
 import { TemplateFocusHint } from "@/components/templates/TemplateFocusHint";
 import { Button } from "@/components/ui/button";
 import { extractPastAdvice } from "@/lib/ai/trainer-memory";
@@ -105,6 +106,8 @@ export default async function TemplateDetailPage({ params }: Props) {
           </li>
         ))}
       </ol>
+
+      <TemplateCoachPanel templateId={tpl.id} />
 
       <div className="mt-6 flex gap-2">
         <Button asChild variant="outline" className="flex-1">

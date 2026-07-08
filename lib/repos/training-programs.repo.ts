@@ -10,6 +10,11 @@ import {
 } from "@/lib/domain/programs/adapt";
 import type { AiPlan } from "@/lib/domain/programs/ai-plan";
 import { getLibraryProgram } from "@/lib/domain/programs/library";
+import type {
+  ProgramReviewInput,
+  ProgramReviewResult,
+} from "@/lib/domain/programs/program-review";
+import type { ProgramReviewSnapshot } from "@/db/schema";
 import type { WorkoutExerciseInput } from "@/lib/domain/templates/next-template";
 import {
   detectStagnation,
@@ -46,6 +51,10 @@ export type ProgramWithDays = {
   active: boolean;
   createdAt: Date;
   days: ProgramDay[];
+  /** Кэш последней оценки тренером (null — ещё не оценивалась). */
+  review: ProgramReviewSnapshot | null;
+  /** Когда оценивали (для подписи). */
+  reviewedAt: Date | null;
 };
 
 /** Системные упражнения (ownerUserId = null) по slug → id. Каталог библиотеки
@@ -316,7 +325,128 @@ export async function getProgramWithDays(
       exerciseCount: r.exerciseCount,
       adapted: r.lastAdaptedWorkoutId != null,
     })),
+    review: program.reviewJson ?? null,
+    reviewedAt: program.reviewedAt,
   };
+}
+
+/** Собирает вход для оценки программы тренером: дни + упражнения (имя, целевые
+ *  подходы/повторы) + группы мышц каждого упражнения. R-7: гейт по userId.
+ *  null — программа не найдена / не принадлежит атлету. Пустые дни включаются
+ *  (тренер отметит дыры). */
+export async function getProgramForReview(
+  userId: string,
+  programId: string,
+): Promise<ProgramReviewInput | null> {
+  const [program] = await db
+    .select({
+      name: schema.trainingPrograms.name,
+      description: schema.trainingPrograms.description,
+    })
+    .from(schema.trainingPrograms)
+    .where(
+      and(
+        eq(schema.trainingPrograms.id, programId),
+        eq(schema.trainingPrograms.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!program) return null;
+
+  const dayRows = await db
+    .select({
+      templateId: schema.workoutTemplates.id,
+      name: schema.workoutTemplates.name,
+      dayOrder: schema.workoutTemplates.dayOrder,
+    })
+    .from(schema.workoutTemplates)
+    .where(eq(schema.workoutTemplates.programId, programId))
+    .orderBy(asc(schema.workoutTemplates.dayOrder));
+
+  const dayIds = dayRows.map((d) => d.templateId);
+
+  // Упражнения всех дней одним запросом (имя + целевые параметры), плюс группы
+  // мышц. Затем раскладываем по дням в JS.
+  const exerciseRows = dayIds.length
+    ? await db
+        .select({
+          templateId: schema.templateExercises.templateId,
+          position: schema.templateExercises.position,
+          exerciseId: schema.templateExercises.exerciseId,
+          nameRu: schema.exercises.nameRu,
+          targetSets: schema.templateExercises.targetSets,
+          targetRepsMin: schema.templateExercises.targetRepsMin,
+          targetRepsMax: schema.templateExercises.targetRepsMax,
+        })
+        .from(schema.templateExercises)
+        .innerJoin(
+          schema.exercises,
+          eq(schema.exercises.id, schema.templateExercises.exerciseId),
+        )
+        .where(inArray(schema.templateExercises.templateId, dayIds))
+        .orderBy(asc(schema.templateExercises.position))
+    : [];
+
+  const exerciseIds = [...new Set(exerciseRows.map((e) => e.exerciseId))];
+  const muscleRows = exerciseIds.length
+    ? await db
+        .select({
+          exerciseId: schema.exerciseMuscleGroups.exerciseId,
+          muscle: schema.exerciseMuscleGroups.muscleGroupKey,
+          role: schema.exerciseMuscleGroups.role,
+        })
+        .from(schema.exerciseMuscleGroups)
+        .where(inArray(schema.exerciseMuscleGroups.exerciseId, exerciseIds))
+    : [];
+
+  const musclesByExercise = new Map<
+    string,
+    { primary: string[]; secondary: string[] }
+  >();
+  for (const m of muscleRows) {
+    const entry = musclesByExercise.get(m.exerciseId) ?? {
+      primary: [],
+      secondary: [],
+    };
+    if (m.role === "primary") entry.primary.push(m.muscle);
+    else entry.secondary.push(m.muscle);
+    musclesByExercise.set(m.exerciseId, entry);
+  }
+
+  return {
+    name: program.name,
+    description: program.description,
+    days: dayRows.map((d) => ({
+      name: d.name,
+      exercises: exerciseRows
+        .filter((e) => e.templateId === d.templateId)
+        .map((e) => ({
+          nameRu: e.nameRu,
+          primaryMuscles: musclesByExercise.get(e.exerciseId)?.primary ?? [],
+          secondaryMuscles: musclesByExercise.get(e.exerciseId)?.secondary ?? [],
+          targetSets: e.targetSets,
+          targetRepsMin: e.targetRepsMin,
+          targetRepsMax: e.targetRepsMax,
+        })),
+    })),
+  };
+}
+
+/** Кэширует оценку тренера в программу (review_json + reviewed_at). R-7. */
+export async function saveProgramReview(
+  userId: string,
+  programId: string,
+  review: ProgramReviewResult,
+): Promise<void> {
+  await db
+    .update(schema.trainingPrograms)
+    .set({ reviewJson: review, reviewedAt: new Date() })
+    .where(
+      and(
+        eq(schema.trainingPrograms.id, programId),
+        eq(schema.trainingPrograms.userId, userId),
+      ),
+    );
 }
 
 /** Удалить программу: дни-шаблоны отвязываются в standalone (не теряются),

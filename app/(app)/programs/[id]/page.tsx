@@ -10,6 +10,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
+import { ProgramReviewCard } from "@/components/programs/ProgramReviewCard";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { getProgramWithDays } from "@/lib/repos/training-programs.repo";
@@ -78,6 +79,19 @@ export default async function ProgramDetailPage({ params }: Props) {
           </Button>
         </form>
       )}
+
+      <ProgramReviewCard
+        programId={program.id}
+        initialReview={program.review}
+        reviewedAtLabel={
+          program.reviewedAt
+            ? new Intl.DateTimeFormat("ru-RU", {
+                day: "numeric",
+                month: "long",
+              }).format(program.reviewedAt)
+            : null
+        }
+      />
 
       <p className="text-muted-foreground mb-3 text-xs">
         Дни системы. После каждого прохода тренер подгонит этот день под тебя —

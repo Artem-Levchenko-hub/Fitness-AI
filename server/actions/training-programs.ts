@@ -4,10 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { isAiConfigured, reviewProgram } from "@/lib/ai/program-review";
 import { requireUser } from "@/lib/auth/require-user";
+import type { ProgramReviewResult } from "@/lib/domain/programs/program-review";
 import {
   copyLibraryProgramToUser,
   deleteProgram,
+  getProgramForReview,
+  saveProgramReview,
   setProgramActive,
   wrapTemplatesIntoProgram,
 } from "@/lib/repos/training-programs.repo";
@@ -15,6 +19,51 @@ import {
 export type ProgramActionState =
   | { status: "idle" }
   | { status: "error"; message: string };
+
+export type ProgramReviewActionResult =
+  | { status: "success"; review: ProgramReviewResult }
+  | { status: "error"; message: string };
+
+/** Оценить программу тренером: собирает дни+упражнения+объём, зовёт LLM,
+ *  кэширует результат в программу и возвращает его клиенту. AI выключен / сбой /
+ *  чужая программа → ошибка (R-37) без падения. R-7: repo гейтит по userId. */
+export async function reviewProgramAction(
+  programId: string,
+): Promise<ProgramReviewActionResult> {
+  const user = await requireUser();
+  if (!programId) return { status: "error", message: "Нет id программы" };
+
+  if (!isAiConfigured()) {
+    return {
+      status: "error",
+      message: "ИИ-тренер пока выключен. Владельцу нужно добавить ключ AI в .env.",
+    };
+  }
+
+  const input = await getProgramForReview(user.id, programId);
+  if (!input) return { status: "error", message: "Программа не найдена" };
+  if (input.days.every((d) => d.exercises.length === 0)) {
+    return {
+      status: "error",
+      message: "В программе нет упражнений — добавь хотя бы один день с упражнениями.",
+    };
+  }
+
+  try {
+    const review = await reviewProgram(input);
+    await saveProgramReview(user.id, programId, review);
+    revalidatePath(`/programs/${programId}`);
+    return { status: "success", review };
+  } catch (err) {
+    return {
+      status: "error",
+      message:
+        err instanceof Error
+          ? err.message
+          : "Не удалось оценить программу. Попробуйте ещё раз.",
+    };
+  }
+}
 
 /** «Использовать» программу из библиотеки → глубокая копия к себе и переход в неё.
  *  Простое form-action (без состояния): кнопка на /library/[slug]. */
