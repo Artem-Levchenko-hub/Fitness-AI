@@ -1,6 +1,7 @@
 import {
   CheckCircle2,
   ChevronLeft,
+  ClipboardList,
   MessageSquare,
   Sparkles,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 } from "@/lib/repos/workouts.repo";
 import { getExerciseGoal } from "@/lib/repos/goals.repo";
 import { exerciseSetHistory } from "@/lib/repos/stats.repo";
+import { saveWorkoutAsTemplateAction } from "@/server/actions/templates";
 import { deleteWorkoutAction } from "@/server/actions/workouts";
 
 import { ActiveWorkoutView } from "./active-workout";
@@ -262,6 +264,19 @@ function CompletedView({
           ))}
         </ul>
       </section>
+
+      {workout.exercises.some((e) => e.sets.length > 0) ? (
+        // Тренировался по факту без шаблона? Сохрани сделанное как повторяемый
+        // шаблон (точная передача: упражнения, веса, повторы) — потом соберёшь
+        // из таких шаблонов/тренировок целый план.
+        <form action={saveWorkoutAsTemplateAction} className="mt-6">
+          <input type="hidden" name="workoutId" value={workout.id} />
+          <Button type="submit" variant="outline" size="lg" className="w-full">
+            <ClipboardList className="size-4" />
+            Сохранить как шаблон
+          </Button>
+        </form>
+      ) : null}
 
       <div className="border-border mt-8 border-t pt-5">
         <ConfirmDeleteButton

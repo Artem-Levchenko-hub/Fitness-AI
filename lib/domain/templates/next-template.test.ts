@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildNextTemplateItems, type WorkoutExerciseInput } from "./next-template";
+import {
+  buildNextTemplateItems,
+  templateItemsFromWorkout,
+  type WorkoutExerciseInput,
+} from "./next-template";
 
 const ex = (
   exerciseId: string,
@@ -80,5 +84,61 @@ describe("buildNextTemplateItems", () => {
   it("excludes exercises with no working sets", () => {
     const out = buildNextTemplateItems([ex("curl", [{ weightKg: 10, reps: 12, setType: "warmup" }])]);
     expect(out).toEqual([]);
+  });
+});
+
+describe("templateItemsFromWorkout (точная передача без прогрессии)", () => {
+  it("фиксирует факт: подходы, диапазон повторов [min,max], топ-вес", () => {
+    const out = templateItemsFromWorkout([
+      ex("bench", [
+        { weightKg: 50, reps: 8 },
+        { weightKg: 50, reps: 7 },
+        { weightKg: 50, reps: 6 },
+      ]),
+    ]);
+    expect(out[0]).toEqual({
+      exerciseId: "bench",
+      targetSets: 3,
+      targetRepsMin: 6,
+      targetRepsMax: 8,
+      targetWeightKg: 50,
+      targetRestSeconds: 120,
+    });
+  });
+
+  it("НЕ добавляет вес даже на потолке повторов (в отличие от прогрессии)", () => {
+    const out = templateItemsFromWorkout([ex("squat", [{ weightKg: 60, reps: 12 }])]);
+    expect(out[0]).toMatchObject({ targetWeightKg: 60, targetRepsMin: 12, targetRepsMax: 12 });
+  });
+
+  it("bodyweight → вес null, диапазон реальных повторов", () => {
+    const out = templateItemsFromWorkout([
+      ex("pullup", [{ weightKg: null, reps: 12 }, { weightKg: null, reps: 10 }]),
+    ]);
+    expect(out[0]).toMatchObject({
+      targetWeightKg: null,
+      targetRepsMin: 10,
+      targetRepsMax: 12,
+      targetSets: 2,
+    });
+  });
+
+  it("топ-вес берётся из самого тяжёлого рабочего подхода", () => {
+    const out = templateItemsFromWorkout([
+      ex("row", [{ weightKg: 40, reps: 12 }, { weightKg: 55, reps: 6 }]),
+    ]);
+    expect(out[0]).toMatchObject({ targetWeightKg: 55, targetRepsMin: 6, targetRepsMax: 12 });
+  });
+
+  it("игнорирует разминочные и отбрасывает упражнения без рабочих", () => {
+    const out = templateItemsFromWorkout([
+      ex("ohp", [
+        { weightKg: 20, reps: 15, setType: "warmup" },
+        { weightKg: 40, reps: 10, setType: "working" },
+      ]),
+      ex("curl", [{ weightKg: 10, reps: 12, setType: "warmup" }]),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ exerciseId: "ohp", targetSets: 1, targetWeightKg: 40 });
   });
 });

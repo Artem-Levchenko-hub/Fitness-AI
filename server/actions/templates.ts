@@ -8,6 +8,7 @@ import { isAiConfigured, refineTemplate } from "@/lib/ai/template-refine";
 import { requireUser } from "@/lib/auth/require-user";
 import type { PlanCatalogEntry } from "@/lib/domain/programs/ai-plan";
 import { listExercises } from "@/lib/repos/exercises.repo";
+import { createTemplateFromWorkout } from "@/lib/repos/plan-from-history.repo";
 import {
   createTemplate,
   deleteTemplate,
@@ -76,6 +77,24 @@ export async function updateTemplateAction(
   revalidatePath("/templates");
   revalidatePath(`/templates/${templateId}`);
   redirect(`/templates/${templateId}`);
+}
+
+/** «Сохранить как шаблон» с завершённой тренировки: превращает выполненное в
+ *  повторяемый силовой шаблон (точная передача — templateItemsFromWorkout) и
+ *  ведёт в него. Так атлет, тренирующийся по факту без шаблонов, одним тапом
+ *  получает шаблон для повтора. R-7: repo гейтит по userId. Пустая тренировка
+ *  (нет рабочих подходов) → возврат в неё же (нечего сохранять). */
+export async function saveWorkoutAsTemplateAction(formData: FormData) {
+  const user = await requireUser();
+  const workoutId = String(formData.get("workoutId") ?? "");
+  if (!workoutId) throw new Error("Missing workoutId");
+
+  const created = await createTemplateFromWorkout(user.id, workoutId);
+  if (!created) redirect(`/workouts/${workoutId}`);
+
+  revalidatePath("/templates");
+  revalidatePath("/dashboard");
+  redirect(`/templates/${created.id}`);
 }
 
 export async function deleteTemplateAction(formData: FormData) {

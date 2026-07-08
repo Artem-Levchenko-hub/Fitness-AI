@@ -7,6 +7,7 @@ import { z } from "zod";
 import { isAiConfigured, reviewProgram } from "@/lib/ai/program-review";
 import { requireUser } from "@/lib/auth/require-user";
 import type { ProgramReviewResult } from "@/lib/domain/programs/program-review";
+import { createProgramFromWorkouts } from "@/lib/repos/plan-from-history.repo";
 import {
   copyLibraryProgramToUser,
   deleteProgram,
@@ -117,6 +118,63 @@ export async function wrapTemplatesAction(
   revalidatePath("/programs");
   revalidatePath("/templates");
   redirect(`/programs/${id}`);
+}
+
+const fromHistorySchema = z.object({
+  name: z.string().trim().min(2, "Название от 2 символов").max(80),
+  workoutIds: z
+    .array(z.string().min(1))
+    .min(1, "Выберите хотя бы одну тренировку")
+    .max(7, "Не больше 7 тренировок в плане"),
+});
+
+/** Собрать программу ПРЯМО ИЗ ИСТОРИИ тренировок: выбранные завершённые
+ *  тренировки становятся днями (точная передача выполненного). useActionState-
+ *  форма (PlanFromHistoryBuilder): payload — JSON {name, workoutIds[]}. При
+ *  успехе ведёт в созданную программу. R-7: repo гейтит по userId. */
+export async function createPlanFromWorkoutsAction(
+  _prev: ProgramActionState,
+  formData: FormData,
+): Promise<ProgramActionState> {
+  const user = await requireUser();
+
+  const raw = String(formData.get("payload") ?? "");
+  if (!raw) return { status: "error", message: "Нет данных формы" };
+
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return { status: "error", message: "Не удалось разобрать данные" };
+  }
+
+  const parsed = fromHistorySchema.safeParse(json);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { status: "error", message: first?.message ?? "Проверьте поля" };
+  }
+
+  let programId: string;
+  try {
+    const created = await createProgramFromWorkouts(user.id, {
+      name: parsed.data.name,
+      workoutIds: parsed.data.workoutIds,
+    });
+    programId = created.id;
+  } catch (err) {
+    return {
+      status: "error",
+      message:
+        err instanceof Error
+          ? err.message
+          : "Не удалось собрать план из истории.",
+    };
+  }
+
+  revalidatePath("/programs");
+  revalidatePath("/templates");
+  revalidatePath("/dashboard");
+  redirect(`/programs/${programId}`);
 }
 
 /** «Начать тренироваться» — активировать систему: её дни-шаблоны появляются в

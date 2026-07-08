@@ -92,3 +92,41 @@ export function buildNextTemplateItems(
     .map(progressExercise)
     .filter((it): it is NextTemplateItem => it !== null);
 }
+
+/** ТОЧНАЯ передача выполненного в шаблон (БЕЗ прогрессии) — «сохрани как шаблон
+ *  ровно то, что я сделал». Отличие от buildNextTemplateItems: не добавляет вес
+ *  и не двигает повторы вверх, а фиксирует факт: подходы = число рабочих,
+ *  диапазон повторов = [min, max] реальных повторов, вес = самый тяжёлый рабочий
+ *  подход (null для bodyweight). Основа «собери план из истории тренировок». */
+function faithfulItem(ex: WorkoutExerciseInput): NextTemplateItem | null {
+  const working = ex.sets.filter((s) => s.setType === "working");
+  if (working.length === 0) return null;
+
+  const reps = working.map((s) => s.reps);
+  const repsMin = Math.min(...reps);
+  const repsMax = Math.max(...reps);
+  const weighted = working.filter((s) => s.weightKg != null && s.weightKg > 0);
+  const topWeight =
+    weighted.length > 0
+      ? Math.max(...weighted.map((s) => s.weightKg as number))
+      : null;
+
+  return {
+    exerciseId: ex.exerciseId,
+    targetSets: working.length,
+    targetRepsMin: repsMin,
+    targetRepsMax: repsMax,
+    targetWeightKg: topWeight,
+    targetRestSeconds: DEFAULT_REST_SECONDS,
+  };
+}
+
+/** Элементы шаблона из выполненной тренировки как есть (см. faithfulItem).
+ *  Упражнения без рабочих подходов отбрасываются, порядок сохраняется. */
+export function templateItemsFromWorkout(
+  exercises: WorkoutExerciseInput[],
+): NextTemplateItem[] {
+  return exercises
+    .map(faithfulItem)
+    .filter((it): it is NextTemplateItem => it !== null);
+}
