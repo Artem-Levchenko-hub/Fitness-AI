@@ -1,5 +1,6 @@
 import { CheckCircle2, Sparkles, Wand2 } from "lucide-react";
 
+import { RetryAnalysisButton } from "@/components/trainer/RetryAnalysisButton";
 import { TrainerJobPoller } from "@/components/trainer/TrainerJobPoller";
 import {
   TrainerResultCard,
@@ -115,6 +116,7 @@ export function CompletedCircuit({
         jobId={jobId}
         circuitWorkoutId={workout.id}
         pastAdviceHref={pastAdviceHref}
+        canRetry={!isCancelled}
       />
 
       {templateAdapted ? (
@@ -201,12 +203,16 @@ function AnalysisCard({
   jobId,
   circuitWorkoutId,
   pastAdviceHref,
+  canRetry,
 }: {
   analysis: { content: string; resultJson: unknown } | null;
   jobStatus: "pending" | "running" | "succeeded" | "failed" | null;
   jobId: string | null;
   circuitWorkoutId: string;
   pastAdviceHref?: string | null;
+  /** Завершённая (не прерванная) круговая → «не запустился»-состояниям
+   *  показываем принудительный перезапуск разбора. */
+  canRetry?: boolean;
 }) {
   if (analysis) {
     // Structured-разбор (F4) — цветная карточка с оценкой/аспектами, как в
@@ -258,11 +264,31 @@ function AnalysisCard({
     );
   }
   if (jobStatus === "failed") {
+    // Терминальный fail (attempts ≥ 3) воркер сам больше НЕ подберёт —
+    // единственный путь к разбору отсюда: принудительный перезапуск.
     return (
-      <section className="bg-destructive/5 border-destructive/30 rounded-2xl border p-5 text-sm">
+      <section className="bg-destructive/5 border-destructive/30 space-y-3 rounded-2xl border p-5 text-sm">
         <p className="text-destructive">
-          Разбор тренера не удался. Попробуем при следующем заходе.
+          Разбор тренера не удался — AI был недоступен.
         </p>
+        {canRetry ? (
+          <RetryAnalysisButton circuitWorkoutId={circuitWorkoutId} />
+        ) : null}
+      </section>
+    );
+  }
+  // Job не создан (finish оборвался) / застрял в running без поллера /
+  // succeeded с потерянным разбором — раньше здесь была пустота без выхода.
+  if (canRetry) {
+    return (
+      <section className="bg-card border-border space-y-3 rounded-2xl border p-5 text-sm">
+        <p className="text-muted-foreground">
+          Разбор тренера по этой тренировке не запускался.
+        </p>
+        <RetryAnalysisButton
+          circuitWorkoutId={circuitWorkoutId}
+          label="Запустить анализ"
+        />
       </section>
     );
   }
