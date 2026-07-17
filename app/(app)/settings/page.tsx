@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { PushPrompt } from "@/components/push/PushPrompt";
 import { env } from "@/lib/env";
 import { requireUser } from "@/lib/auth/require-user";
+import { isUserAdmin } from "@/lib/repos/admin.repo";
 import { getUserProfile } from "@/lib/repos/body.repo";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 
@@ -15,7 +16,10 @@ export const metadata: Metadata = { title: "Настройки" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const profile = await getUserProfile(user.id);
+  const [profile, isAdmin] = await Promise.all([
+    getUserProfile(user.id),
+    isUserAdmin(user.id),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -80,6 +84,25 @@ export default async function SettingsPage() {
           присылать готовые разборы.
         </p>
       </section>
+
+      {isAdmin ? (
+        <section className="bg-card border-border mb-6 rounded-2xl border p-5">
+          <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+            <ShieldCheck className="text-primary size-4" aria-hidden="true" />
+            Владелец
+          </h2>
+          <Button
+            asChild
+            variant="ghost"
+            className="text-foreground h-auto w-full justify-start py-3"
+          >
+            <Link href="/admin" className="flex items-center justify-between">
+              <span>Пользователи (активность и траты)</span>
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        </section>
+      ) : null}
 
       <section className="bg-card border-border mb-6 rounded-2xl border p-5">
         <h2 className="mb-2 text-sm font-semibold tracking-tight">

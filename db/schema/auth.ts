@@ -43,6 +43,11 @@ export const users = pgTable("users", {
     .notNull()
     .default(false),
 
+  /** Админ (владелец сервиса): видит обзор всех пользователей на /admin и их
+   *  тренировки/программы как у друга — без записи в friendships. Выдаётся
+   *  только вручную (миграцией или scripts/set-admin.ts), UI выдачи нет. */
+  isAdmin: boolean("is_admin").notNull().default(false),
+
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()
     .defaultNow(),

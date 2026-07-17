@@ -7,6 +7,7 @@ import {
   sortFriendsByRecency,
 } from "@/lib/domain/friends/friend-activity";
 import type { HistoryItem } from "@/lib/domain/workouts/history";
+import { isUserAdmin } from "@/lib/repos/admin.repo";
 import { getLatestMeasurement } from "@/lib/repos/body.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
@@ -198,12 +199,18 @@ export async function areFriends(
 /** Публичная карточка друга — ТОЛЬКО если otherId является принятым другом
  *  userId. Иначе null. Единый R-7-гейт: чужие данные смотрим лишь по дружбе.
  *  Возвращает рост (с профиля) + вес последнего замера — read-only для шапки
- *  страницы друга; reuse getLatestMeasurement (R-04). */
+ *  страницы друга; reuse getLatestMeasurement (R-04).
+ *
+ *  Админ-обход: админ (users.is_admin) видит страницу ЛЮБОГО пользователя как
+ *  друга — без записи в friendships (не светимся в чужих списках друзей) и
+ *  поверх тумблера sharesPrograms (владельцу сервиса нужен полный обзор,
+ *  данные и так в его БД). */
 export async function getFriendProfile(
   userId: string,
   otherId: string,
 ): Promise<FriendProfile | null> {
-  if (!(await areFriends(userId, otherId))) return null;
+  const viewerIsAdmin = await isUserAdmin(userId);
+  if (!viewerIsAdmin && !(await areFriends(userId, otherId))) return null;
   const [u] = await db
     .select({
       id: schema.users.id,
@@ -217,7 +224,12 @@ export async function getFriendProfile(
     .limit(1);
   if (!u) return null;
   const latest = await getLatestMeasurement(otherId);
-  return { ...u, weightKg: latest?.weightKg ?? null };
+  return {
+    ...u,
+    // Админу открываем программы/оценки независимо от тумблера пользователя.
+    sharesPrograms: u.sharesPrograms || viewerIsAdmin,
+    weightKg: latest?.weightKg ?? null,
+  };
 }
 
 /** Включён ли у юзера тумблер «делиться программами с друзьями» — для начального
