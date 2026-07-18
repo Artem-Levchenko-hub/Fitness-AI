@@ -40,6 +40,10 @@ export default async function EditTemplatePage({ params }: Props) {
     targetRepsMax: it.targetRepsMax,
     targetWeightKg: it.targetWeightKg,
     targetRestSeconds: it.targetRestSeconds,
+    myoReps: it.myoReps ?? false,
+    myoMiniSets: it.myoMiniSets ?? 4,
+    myoMiniReps: it.myoMiniReps ?? 4,
+    myoMiniRestSeconds: it.myoMiniRestSeconds ?? 15,
     notes: it.notes ?? "",
   }));
 

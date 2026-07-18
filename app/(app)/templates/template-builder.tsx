@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Loader2, Plus, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, Plus, Trash2, Zap } from "lucide-react";
 import { startTransition, useActionState, useState } from "react";
 
 import {
@@ -44,6 +44,11 @@ export type BuilderItem = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  /** Миорепсы: 1 активационный (диапазон повторов выше) + мини-сеты. */
+  myoReps: boolean;
+  myoMiniSets: number;
+  myoMiniReps: number;
+  myoMiniRestSeconds: number;
   notes: string;
 };
 
@@ -67,8 +72,17 @@ const DEFAULT_ITEM: Omit<BuilderItem, "uid" | "exerciseId"> = {
   targetRepsMax: 12,
   targetWeightKg: null,
   targetRestSeconds: 120,
+  myoReps: false,
+  myoMiniSets: 4,
+  myoMiniReps: 4,
+  myoMiniRestSeconds: 15,
   notes: "",
 };
+
+/** При включении миорепсов диапазон активационного по умолчанию 12–20 (почти
+ *  до отказа) — если атлет оставил обычные 8–12, подсказываем протокольные. */
+const MYO_ACTIVATION_MIN = 12;
+const MYO_ACTIVATION_MAX = 20;
 
 export function TemplateBuilder({
   exercises,
@@ -136,6 +150,10 @@ export function TemplateBuilder({
           targetRepsMax: i.targetRepsMax,
           targetWeightKg: i.targetWeightKg ?? "",
           targetRestSeconds: i.targetRestSeconds,
+          myoReps: i.myoReps,
+          myoMiniSets: i.myoMiniSets,
+          myoMiniReps: i.myoMiniReps,
+          myoMiniRestSeconds: i.myoMiniRestSeconds,
           notes: i.notes,
         })),
     };
@@ -346,7 +364,102 @@ function SortableItem({
           onChange={(v) => onChange({ targetRestSeconds: v ?? 60 })}
         />
       </div>
+
+      <div className="border-border mt-3 border-t pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-medium">
+            <Zap
+              className={cn(
+                "size-3.5",
+                item.myoReps ? "text-primary" : "text-muted-foreground",
+              )}
+              aria-hidden="true"
+            />
+            Миорепсы
+          </span>
+          <MyoToggle
+            enabled={item.myoReps}
+            onToggle={() => {
+              const next = !item.myoReps;
+              // Включили протокол при дефолтном диапазоне 8–12 — подсказываем
+              // активационные 12–20 (почти до отказа). Свой диапазон не трогаем.
+              const bumpReps =
+                next && item.targetRepsMin === 8 && item.targetRepsMax === 12
+                  ? {
+                      targetRepsMin: MYO_ACTIVATION_MIN,
+                      targetRepsMax: MYO_ACTIVATION_MAX,
+                    }
+                  : {};
+              onChange({ myoReps: next, ...bumpReps });
+            }}
+          />
+        </div>
+        {item.myoReps ? (
+          <>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <NumField
+                label="Мини-сеты"
+                value={item.myoMiniSets}
+                min={1}
+                max={10}
+                onChange={(v) => onChange({ myoMiniSets: v ?? 4 })}
+              />
+              <NumField
+                label="Повт. мини"
+                value={item.myoMiniReps}
+                min={1}
+                max={10}
+                onChange={(v) => onChange({ myoMiniReps: v ?? 4 })}
+              />
+              <NumField
+                label="Отдых мини"
+                value={item.myoMiniRestSeconds}
+                min={5}
+                max={60}
+                onChange={(v) => onChange({ myoMiniRestSeconds: v ?? 15 })}
+              />
+            </div>
+            <p className="text-muted-foreground/80 mt-2 text-[11px] leading-relaxed">
+              1 активационный подход ({item.targetRepsMin}–{item.targetRepsMax}{" "}
+              повт. почти до отказа) + {item.myoMiniSets} мини по{" "}
+              {item.myoMiniReps} повт. с отдыхом {item.myoMiniRestSeconds} с.
+              Поле «Подходы» здесь не участвует.
+            </p>
+          </>
+        ) : null}
+      </div>
     </li>
+  );
+}
+
+/** Тумблер миорепсов — тот же паттерн, что ShareProgramsToggle (role="switch",
+ *  R-39/R-41), но локальный контролируемый: состояние живёт в BuilderItem. */
+function MyoToggle({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label="Миорепсы для этого упражнения"
+      onClick={onToggle}
+      className={cn(
+        "focus-visible:ring-ring relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none",
+        enabled ? "bg-primary" : "bg-muted",
+      )}
+    >
+      <span
+        className={cn(
+          "bg-background block size-5 rounded-full shadow transition-transform",
+          enabled ? "translate-x-6" : "translate-x-1",
+        )}
+      />
+    </button>
   );
 }
 

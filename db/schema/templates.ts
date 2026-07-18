@@ -27,6 +27,12 @@ export type PreAdaptSnapshotItem = {
   targetWeightKg: number | null;
   targetRestSeconds: number;
   notes: string | null;
+  /** Миорепс-протокол. Опциональны: старые снимки (до 0029) их не содержат —
+   *  восстановление подставляет дефолты (выкл). */
+  myoReps?: boolean;
+  myoMiniSets?: number;
+  myoMiniReps?: number;
+  myoMiniRestSeconds?: number;
 };
 
 /** Шаблон тренировки. Принадлежит пользователю — стабильный набор
@@ -110,6 +116,15 @@ export const templateExercises = pgTable(
     targetRepsMax: integer("target_reps_max").notNull().default(12),
     targetWeightKg: doublePrecision("target_weight_kg"),
     targetRestSeconds: integer("target_rest_seconds").notNull().default(120),
+    /** Миорепсы: targetSets игнорируется как счётчик — план = 1 активационный
+     *  подход (targetRepsMin–Max почти до отказа) + myoMiniSets мини-сетов по
+     *  myoMiniReps повторов с отдыхом myoMiniRestSeconds (10–20 с). Подходы
+     *  пишутся обычными working-строками (объём/PR/статистика работают без
+     *  спец-логики; мини никогда не перебьёт активационный по weight×reps). */
+    myoReps: boolean("myo_reps").notNull().default(false),
+    myoMiniSets: integer("myo_mini_sets").notNull().default(4),
+    myoMiniReps: integer("myo_mini_reps").notNull().default(4),
+    myoMiniRestSeconds: integer("myo_mini_rest_seconds").notNull().default(15),
     notes: text("notes"),
   },
   (t) => [

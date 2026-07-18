@@ -36,6 +36,11 @@ export type TemplateItemInput = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  /** Миорепс-протокол (опционально — отсутствие = выключено с дефолтами). */
+  myoReps?: boolean;
+  myoMiniSets?: number;
+  myoMiniReps?: number;
+  myoMiniRestSeconds?: number;
   notes?: string | null;
 };
 
@@ -43,6 +48,12 @@ export type TemplateItem = TemplateItemInput & {
   id: string;
   exerciseNameRu: string;
   exerciseNameEn: string;
+  /** Из БД мио-поля приходят всегда (колонки NOT NULL) — сужаем опциональность
+   *  входного типа до конкретных значений. */
+  myoReps: boolean;
+  myoMiniSets: number;
+  myoMiniReps: number;
+  myoMiniRestSeconds: number;
 };
 
 export type TemplateWithItems = {
@@ -129,6 +140,10 @@ export async function getTemplateWithItems(
       targetRepsMax: schema.templateExercises.targetRepsMax,
       targetWeightKg: schema.templateExercises.targetWeightKg,
       targetRestSeconds: schema.templateExercises.targetRestSeconds,
+      myoReps: schema.templateExercises.myoReps,
+      myoMiniSets: schema.templateExercises.myoMiniSets,
+      myoMiniReps: schema.templateExercises.myoMiniReps,
+      myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
       notes: schema.templateExercises.notes,
       exerciseNameRu: schema.exercises.nameRu,
       exerciseNameEn: schema.exercises.nameEn,
@@ -195,6 +210,11 @@ export async function revertTemplateAdaptation(
           targetRepsMax: it.targetRepsMax,
           targetWeightKg: it.targetWeightKg,
           targetRestSeconds: it.targetRestSeconds,
+          // Старые снимки (до 0029) без myo-полей → дефолты (выключено).
+          myoReps: it.myoReps ?? false,
+          myoMiniSets: it.myoMiniSets ?? 4,
+          myoMiniReps: it.myoMiniReps ?? 4,
+          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 15,
           notes: it.notes,
         })),
       );
@@ -266,6 +286,10 @@ export async function createTemplate(
           targetRepsMax: it.targetRepsMax,
           targetWeightKg: it.targetWeightKg,
           targetRestSeconds: it.targetRestSeconds,
+          myoReps: it.myoReps ?? false,
+          myoMiniSets: it.myoMiniSets ?? 4,
+          myoMiniReps: it.myoMiniReps ?? 4,
+          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 15,
           notes: it.notes ?? null,
         })),
       );
@@ -319,6 +343,10 @@ export async function updateTemplate(
           targetRepsMax: it.targetRepsMax,
           targetWeightKg: it.targetWeightKg,
           targetRestSeconds: it.targetRestSeconds,
+          myoReps: it.myoReps ?? false,
+          myoMiniSets: it.myoMiniSets ?? 4,
+          myoMiniReps: it.myoMiniReps ?? 4,
+          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 15,
           notes: it.notes ?? null,
         })),
       );

@@ -35,6 +35,11 @@ export type ActiveWorkoutExercise = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  /** Миорепс-протокол упражнения (см. lib/domain/workouts/myo.ts). */
+  myoReps: boolean;
+  myoMiniSets: number;
+  myoMiniReps: number;
+  myoMiniRestSeconds: number;
   sets: ActiveWorkoutSet[];
 };
 
@@ -191,6 +196,10 @@ export async function getActiveWorkoutForUser(
       targetRepsMax: number;
       targetWeightKg: number | null;
       targetRestSeconds: number;
+      myoReps: boolean;
+      myoMiniSets: number;
+      myoMiniReps: number;
+      myoMiniRestSeconds: number;
     }
   >();
   if (w.templateId) {
@@ -202,6 +211,10 @@ export async function getActiveWorkoutForUser(
         targetRepsMax: schema.templateExercises.targetRepsMax,
         targetWeightKg: schema.templateExercises.targetWeightKg,
         targetRestSeconds: schema.templateExercises.targetRestSeconds,
+        myoReps: schema.templateExercises.myoReps,
+        myoMiniSets: schema.templateExercises.myoMiniSets,
+        myoMiniReps: schema.templateExercises.myoMiniReps,
+        myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
       })
       .from(schema.templateExercises)
       .where(eq(schema.templateExercises.templateId, w.templateId));
@@ -217,6 +230,10 @@ export async function getActiveWorkoutForUser(
       targetRepsMax: t?.targetRepsMax ?? 12,
       targetWeightKg: t?.targetWeightKg ?? null,
       targetRestSeconds: t?.targetRestSeconds ?? 120,
+      myoReps: t?.myoReps ?? false,
+      myoMiniSets: t?.myoMiniSets ?? 4,
+      myoMiniReps: t?.myoMiniReps ?? 4,
+      myoMiniRestSeconds: t?.myoMiniRestSeconds ?? 15,
       sets: setsByWe.get(r.id) ?? [],
     };
   });

@@ -16,6 +16,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
+import {
+  myoPhaseLabel,
+  plannedSetCount,
+  repsTargetForNextSet,
+  restBeforeNextSet,
+} from "@/lib/domain/workouts/myo";
 import { GoalTrackBar } from "@/components/progression/GoalTrackBar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -93,7 +99,7 @@ export function ActiveWorkoutView({
       workout.exercises.filter(
         (e) =>
           e.sets.length + (pendingByExerciseId.get(e.id)?.length ?? 0) >=
-          e.targetSets,
+          plannedSetCount(e.targetSets, e),
       ).length,
     [workout.exercises, pendingByExerciseId],
   );
@@ -308,7 +314,22 @@ function ExerciseCard({
   // завершённость и следующий индекс монотонны (line H15.3b-2 sharpen — иначе
   // N офлайн-подходов слились бы на одном setIndex).
   const totalDone = exercise.sets.length + pending.length;
-  const completed = totalDone >= exercise.targetSets;
+  // Миорепсы: план = активационный + мини-сеты (targetSets игнорируется),
+  // отдых/повторы следующего подхода зависят от фазы (см. domain/workouts/myo).
+  const planned = plannedSetCount(exercise.targetSets, exercise);
+  const completed = totalDone >= planned;
+  const nextRestSeconds = restBeforeNextSet(
+    exercise.targetRestSeconds,
+    exercise,
+    totalDone,
+  );
+  const nextReps = repsTargetForNextSet(
+    exercise.targetRepsMin,
+    exercise.targetRepsMax,
+    exercise,
+    totalDone,
+  );
+  const phase = myoPhaseLabel(exercise, totalDone);
   const lastSet = exercise.sets[exercise.sets.length - 1];
 
   return (
@@ -343,11 +364,14 @@ function ExerciseCard({
           </h3>
           <p className="text-muted-foreground tabular mt-0.5 text-xs">
             <span>
-              {totalDone}/{exercise.targetSets} ·{" "}
+              {totalDone}/{planned} ·{" "}
               {exercise.targetRepsMin}–{exercise.targetRepsMax} повт.
             </span>
             {exercise.targetWeightKg ? (
               <span> · цель {exercise.targetWeightKg} кг</span>
+            ) : null}
+            {exercise.myoReps ? (
+              <span className="text-primary font-medium"> · миорепсы</span>
             ) : null}
           </p>
         </div>
@@ -445,10 +469,23 @@ function ExerciseCard({
 
               {lastSet ? (
                 <RestTimer
-                  targetSeconds={exercise.targetRestSeconds}
+                  targetSeconds={nextRestSeconds}
                   startedAt={lastSet.completedAt}
                   demoSlug={exercise.exerciseSlug}
                 />
+              ) : null}
+
+              {/* Фаза миорепсов в точке решения: что сейчас — активационный
+                  почти до отказа или короткий мини-сет (R-37: без протокола
+                  строки нет). */}
+              {phase ? (
+                <p className="bg-primary/10 text-primary tabular rounded-lg px-3 py-2 text-xs font-medium">
+                  Сейчас: {phase} ·{" "}
+                  {nextReps.min === nextReps.max
+                    ? `${nextReps.max} повт.`
+                    : `${nextReps.min}–${nextReps.max} повт. почти до отказа`}
+                  {totalDone >= 1 ? ` · отдых ${nextRestSeconds} с` : ""}
+                </p>
               ) : null}
 
               <SetInput
@@ -461,8 +498,8 @@ function ExerciseCard({
                   exercise.targetWeightKg ??
                   null
                 }
-                defaultRepsMax={exercise.targetRepsMax}
-                restSeconds={exercise.targetRestSeconds}
+                defaultRepsMax={nextReps.max}
+                restSeconds={nextRestSeconds}
                 onOfflineRecord={onOfflineRecord}
               />
             </>

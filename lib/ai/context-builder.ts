@@ -72,6 +72,9 @@ type WorkoutSummary = {
       reps: number;
       rpe: number | null;
       setType: "working" | "warmup" | "drop" | "failure";
+      /** Фактический отдых перед подходом — по нему тренер видит протоколы
+       *  вроде миорепсов (серия коротких 10–20-секундных пауз). */
+      restSeconds: number | null;
     }>;
   }>;
 };
@@ -280,6 +283,7 @@ async function loadWorkoutSummary(
         reps: s.reps,
         rpe: s.rpe,
         setType: s.setType,
+        restSeconds: s.restSeconds,
       })),
     })),
   };
@@ -356,6 +360,7 @@ async function loadPastWorkouts(
         reps: s.reps,
         rpe: s.rpe,
         setType: s.setType,
+        restSeconds: s.restSeconds,
       })),
     });
     exsByWorkout.set(ex.workoutId, arr);
@@ -564,7 +569,13 @@ function formatWorkout(
           s.setType !== "working"
             ? ` (${s.setType})`
             : "";
-        return `${i + 1}) ${s.weightKg}×${s.reps}${rpe}${tag}`;
+        // Короткий отдых (<60 с) показываем тренеру: серия 10–20-секундных
+        // пауз после тяжёлого подхода = миорепсы, а не «слитые» подходы.
+        const rest =
+          s.restSeconds != null && s.restSeconds < 60
+            ? ` [отдых ${s.restSeconds}с]`
+            : "";
+        return `${i + 1}) ${s.weightKg}×${s.reps}${rpe}${tag}${rest}`;
       })
       .join(", ");
     const tv = totalVolume(e.sets);

@@ -89,9 +89,17 @@ export default async function TemplateDetailPage({ params }: Props) {
                 {item.exerciseNameRu}
               </p>
               <div className="text-muted-foreground tabular mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                <span>
-                  {item.targetSets}×{item.targetRepsMin}–{item.targetRepsMax}
-                </span>
+                {item.myoReps ? (
+                  <span className="text-primary font-medium">
+                    миорепсы: {item.targetRepsMin}–{item.targetRepsMax} +{" "}
+                    {item.myoMiniSets}×{item.myoMiniReps} (отдых{" "}
+                    {item.myoMiniRestSeconds}с)
+                  </span>
+                ) : (
+                  <span>
+                    {item.targetSets}×{item.targetRepsMin}–{item.targetRepsMax}
+                  </span>
+                )}
                 {item.targetWeightKg ? (
                   <span>{item.targetWeightKg} кг</span>
                 ) : null}

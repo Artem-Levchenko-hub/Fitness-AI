@@ -256,18 +256,29 @@ export async function applyRefinedTemplateAction(
     return { status: "error", message: "Нет валидных упражнений для применения" };
   }
 
+  // Миорепс-протокол — настройка атлета: улучшение тренера правит подбор/объём,
+  // но мио переносим по exerciseId (новые упражнения — без протокола).
+  const myoByExercise = new Map(tpl.items.map((x) => [x.exerciseId, x]));
+
   await updateTemplate(user.id, parsed.data.templateId, {
     name: tpl.name,
     description: tpl.description,
-    items: items.map((it) => ({
-      exerciseId: it.exerciseId,
-      targetSets: it.sets,
-      targetRepsMin: it.repsMin,
-      targetRepsMax: Math.max(it.repsMin, it.repsMax),
-      targetWeightKg: null,
-      targetRestSeconds: it.restSeconds,
-      notes: it.note,
-    })),
+    items: items.map((it) => {
+      const prev = myoByExercise.get(it.exerciseId);
+      return {
+        exerciseId: it.exerciseId,
+        targetSets: it.sets,
+        targetRepsMin: it.repsMin,
+        targetRepsMax: Math.max(it.repsMin, it.repsMax),
+        targetWeightKg: null,
+        targetRestSeconds: it.restSeconds,
+        myoReps: prev?.myoReps ?? false,
+        myoMiniSets: prev?.myoMiniSets ?? 4,
+        myoMiniReps: prev?.myoMiniReps ?? 4,
+        myoMiniRestSeconds: prev?.myoMiniRestSeconds ?? 15,
+        notes: it.note,
+      };
+    }),
   });
 
   revalidatePath("/templates");

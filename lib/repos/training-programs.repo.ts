@@ -557,6 +557,10 @@ export async function adaptTemplateInPlace(
           targetRepsMax: schema.templateExercises.targetRepsMax,
           targetWeightKg: schema.templateExercises.targetWeightKg,
           targetRestSeconds: schema.templateExercises.targetRestSeconds,
+          myoReps: schema.templateExercises.myoReps,
+          myoMiniSets: schema.templateExercises.myoMiniSets,
+          myoMiniReps: schema.templateExercises.myoMiniReps,
+          myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
           notes: schema.templateExercises.notes,
         })
         .from(schema.templateExercises)
@@ -564,23 +568,46 @@ export async function adaptTemplateInPlace(
         .orderBy(asc(schema.templateExercises.position));
     }
 
+    // Миорепс-протокол — настройка атлета, тренерская адаптация правит только
+    // вес/повторы/отдых: переносим мио по exerciseId через delete+reinsert.
+    // Заменённое упражнение (substitute) стартует без мио (протокол привязан
+    // к выбору движения). Домен AdaptItem про мио не знает (R-02).
+    const myoRows = await tx
+      .select({
+        exerciseId: schema.templateExercises.exerciseId,
+        myoReps: schema.templateExercises.myoReps,
+        myoMiniSets: schema.templateExercises.myoMiniSets,
+        myoMiniReps: schema.templateExercises.myoMiniReps,
+        myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
+      })
+      .from(schema.templateExercises)
+      .where(eq(schema.templateExercises.templateId, templateId));
+    const myoByExercise = new Map(myoRows.map((m) => [m.exerciseId, m]));
+
     await tx
       .delete(schema.templateExercises)
       .where(eq(schema.templateExercises.templateId, templateId));
 
     if (items.length > 0) {
       await tx.insert(schema.templateExercises).values(
-        items.map((it, i) => ({
-          templateId,
-          exerciseId: it.exerciseId,
-          position: i,
-          targetSets: it.targetSets,
-          targetRepsMin: it.targetRepsMin,
-          targetRepsMax: it.targetRepsMax,
-          targetWeightKg: it.targetWeightKg,
-          targetRestSeconds: it.targetRestSeconds,
-          notes: it.notes ?? null,
-        })),
+        items.map((it, i) => {
+          const myo = myoByExercise.get(it.exerciseId);
+          return {
+            templateId,
+            exerciseId: it.exerciseId,
+            position: i,
+            targetSets: it.targetSets,
+            targetRepsMin: it.targetRepsMin,
+            targetRepsMax: it.targetRepsMax,
+            targetWeightKg: it.targetWeightKg,
+            targetRestSeconds: it.targetRestSeconds,
+            myoReps: myo?.myoReps ?? false,
+            myoMiniSets: myo?.myoMiniSets ?? 4,
+            myoMiniReps: myo?.myoMiniReps ?? 4,
+            myoMiniRestSeconds: myo?.myoMiniRestSeconds ?? 15,
+            notes: it.notes ?? null,
+          };
+        }),
       );
     }
 
