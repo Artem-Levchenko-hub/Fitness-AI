@@ -13,9 +13,9 @@ const templateItemSchema = z.object({
   /** Миорепсы: активационный подход + мини-сеты. Дефолты повторяют колонки БД —
    *  старые payload без этих полей остаются валидными (протокол выключен). */
   myoReps: z.coerce.boolean().default(false),
-  myoMiniSets: z.coerce.number().int().min(1).max(10).default(4),
-  myoMiniReps: z.coerce.number().int().min(1).max(10).default(4),
-  myoMiniRestSeconds: z.coerce.number().int().min(5).max(60).default(15),
+  myoMiniSets: z.coerce.number().int().min(1).max(10).default(5),
+  myoMiniReps: z.coerce.number().int().min(1).max(10).default(5),
+  myoMiniRestSeconds: z.coerce.number().int().min(5).max(60).default(20),
   notes: z
     .string()
     .max(500)

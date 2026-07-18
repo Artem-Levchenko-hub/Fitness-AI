@@ -41,9 +41,9 @@ export default async function EditTemplatePage({ params }: Props) {
     targetWeightKg: it.targetWeightKg,
     targetRestSeconds: it.targetRestSeconds,
     myoReps: it.myoReps ?? false,
-    myoMiniSets: it.myoMiniSets ?? 4,
-    myoMiniReps: it.myoMiniReps ?? 4,
-    myoMiniRestSeconds: it.myoMiniRestSeconds ?? 15,
+    myoMiniSets: it.myoMiniSets ?? 5,
+    myoMiniReps: it.myoMiniReps ?? 5,
+    myoMiniRestSeconds: it.myoMiniRestSeconds ?? 20,
     notes: it.notes ?? "",
   }));
 

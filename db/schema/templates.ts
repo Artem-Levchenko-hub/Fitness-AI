@@ -122,9 +122,12 @@ export const templateExercises = pgTable(
      *  пишутся обычными working-строками (объём/PR/статистика работают без
      *  спец-логики; мини никогда не перебьёт активационный по weight×reps). */
     myoReps: boolean("myo_reps").notNull().default(false),
-    myoMiniSets: integer("myo_mini_sets").notNull().default(4),
-    myoMiniReps: integer("myo_mini_reps").notNull().default(4),
-    myoMiniRestSeconds: integer("myo_mini_rest_seconds").notNull().default(15),
+    /** Дефолты 5×5×20с — самая обоснованная вариация (Bradshaw 2026 JSCR:
+     *  тот же рост при ~30% меньшем объёме; Barbell Medicine/Fagerli: мини 3–5
+     *  повторов, отдых 20–30 с, стоп после ~5 мини). */
+    myoMiniSets: integer("myo_mini_sets").notNull().default(5),
+    myoMiniReps: integer("myo_mini_reps").notNull().default(5),
+    myoMiniRestSeconds: integer("myo_mini_rest_seconds").notNull().default(20),
     notes: text("notes"),
   },
   (t) => [

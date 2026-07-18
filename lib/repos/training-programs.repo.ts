@@ -602,9 +602,9 @@ export async function adaptTemplateInPlace(
             targetWeightKg: it.targetWeightKg,
             targetRestSeconds: it.targetRestSeconds,
             myoReps: myo?.myoReps ?? false,
-            myoMiniSets: myo?.myoMiniSets ?? 4,
-            myoMiniReps: myo?.myoMiniReps ?? 4,
-            myoMiniRestSeconds: myo?.myoMiniRestSeconds ?? 15,
+            myoMiniSets: myo?.myoMiniSets ?? 5,
+            myoMiniReps: myo?.myoMiniReps ?? 5,
+            myoMiniRestSeconds: myo?.myoMiniRestSeconds ?? 20,
             notes: it.notes ?? null,
           };
         }),

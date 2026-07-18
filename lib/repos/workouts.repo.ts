@@ -231,9 +231,9 @@ export async function getActiveWorkoutForUser(
       targetWeightKg: t?.targetWeightKg ?? null,
       targetRestSeconds: t?.targetRestSeconds ?? 120,
       myoReps: t?.myoReps ?? false,
-      myoMiniSets: t?.myoMiniSets ?? 4,
-      myoMiniReps: t?.myoMiniReps ?? 4,
-      myoMiniRestSeconds: t?.myoMiniRestSeconds ?? 15,
+      myoMiniSets: t?.myoMiniSets ?? 5,
+      myoMiniReps: t?.myoMiniReps ?? 5,
+      myoMiniRestSeconds: t?.myoMiniRestSeconds ?? 20,
       sets: setsByWe.get(r.id) ?? [],
     };
   });

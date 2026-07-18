@@ -211,6 +211,13 @@
       "when": 1784332993835,
       "tag": "0029_lively_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784334726569,
+      "tag": "0030_rainy_shooting_star",
+      "breakpoints": true
     }
   ]
 }
