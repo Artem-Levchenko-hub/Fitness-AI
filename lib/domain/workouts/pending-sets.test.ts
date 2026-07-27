@@ -40,6 +40,7 @@ describe("pendingSetsFromOutbox", () => {
       weightKg: 60,
       reps: 8,
       rpe: null,
+      completedAt: new Date(1000),
     });
   });
 

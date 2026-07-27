@@ -92,7 +92,7 @@ export default async function TemplateDetailPage({ params }: Props) {
                 {item.myoReps ? (
                   <span className="text-primary font-medium">
                     миорепсы: {item.targetRepsMin}–{item.targetRepsMax} +{" "}
-                    {item.myoMiniSets}×{item.myoMiniReps} (отдых{" "}
+                    {item.myoMiniSets}×30% от активации (отдых{" "}
                     {item.myoMiniRestSeconds}с)
                   </span>
                 ) : (

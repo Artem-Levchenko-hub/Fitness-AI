@@ -20,6 +20,7 @@ export type PendingSet = {
   weightKg: number;
   reps: number;
   rpe: number | null;
+  completedAt: Date;
 };
 
 function num(value: unknown): number | null {
@@ -58,6 +59,7 @@ function toPendingSet(
     weightKg,
     reps,
     rpe: num(p.rpe),
+    completedAt: new Date(mutation.queuedAt),
   };
 }
 

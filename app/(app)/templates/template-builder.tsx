@@ -74,11 +74,10 @@ const DEFAULT_ITEM: Omit<BuilderItem, "uid" | "exerciseId"> = {
   targetWeightKg: null,
   targetRestSeconds: 120,
   myoReps: false,
-  // 5×5×20с — самая обоснованная вариация (Bradshaw 2026; Fagerli/BBM:
-  // мини 3–5 повторов, отдых 20–30 с, ~5 мини-сетов). См. MyoRepsInfo.
-  myoMiniSets: 5,
+  // Протокол владельца: 3 мини-сета по 30% повторов активации, отдых 30 с.
+  myoMiniSets: 3,
   myoMiniReps: 5,
-  myoMiniRestSeconds: 20,
+  myoMiniRestSeconds: 30,
   notes: "",
 };
 
@@ -399,33 +398,26 @@ function SortableItem({
         </div>
         {item.myoReps ? (
           <>
-            <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <NumField
                 label="Мини-сеты"
                 value={item.myoMiniSets}
                 min={1}
                 max={10}
-                onChange={(v) => onChange({ myoMiniSets: v ?? 5 })}
-              />
-              <NumField
-                label="Повт. мини"
-                value={item.myoMiniReps}
-                min={1}
-                max={10}
-                onChange={(v) => onChange({ myoMiniReps: v ?? 5 })}
+                onChange={(v) => onChange({ myoMiniSets: v ?? 3 })}
               />
               <NumField
                 label="Отдых мини"
                 value={item.myoMiniRestSeconds}
                 min={5}
                 max={60}
-                onChange={(v) => onChange({ myoMiniRestSeconds: v ?? 20 })}
+                onChange={(v) => onChange({ myoMiniRestSeconds: v ?? 30 })}
               />
             </div>
             <p className="text-muted-foreground/80 mt-2 text-[11px] leading-relaxed">
               1 активационный подход ({item.targetRepsMin}–{item.targetRepsMax}{" "}
-              повт. почти до отказа) + {item.myoMiniSets} мини по{" "}
-              {item.myoMiniReps} повт. с отдыхом {item.myoMiniRestSeconds} с.
+              повт. почти до отказа) + {item.myoMiniSets} мини по 30% от
+              активации с отдыхом {item.myoMiniRestSeconds} с.
               Поле «Подходы» здесь не участвует.
             </p>
             <MyoRepsInfo />

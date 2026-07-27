@@ -273,9 +273,9 @@ export async function applyRefinedTemplateAction(
         targetWeightKg: null,
         targetRestSeconds: it.restSeconds,
         myoReps: prev?.myoReps ?? false,
-        myoMiniSets: prev?.myoMiniSets ?? 5,
+        myoMiniSets: prev?.myoMiniSets ?? 3,
         myoMiniReps: prev?.myoMiniReps ?? 5,
-        myoMiniRestSeconds: prev?.myoMiniRestSeconds ?? 20,
+        myoMiniRestSeconds: prev?.myoMiniRestSeconds ?? 30,
         notes: it.note,
       };
     }),

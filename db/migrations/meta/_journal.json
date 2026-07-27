@@ -218,6 +218,13 @@
       "when": 1784334726569,
       "tag": "0030_rainy_shooting_star",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785186518422,
+      "tag": "0031_outstanding_silver_samurai",
+      "breakpoints": true
     }
   ]
 }

@@ -318,6 +318,18 @@ function ExerciseCard({
   // отдых/повторы следующего подхода зависят от фазы (см. domain/workouts/myo).
   const planned = plannedSetCount(exercise.targetSets, exercise);
   const completed = totalDone >= planned;
+  const activationReps =
+    exercise.sets[0]?.reps ?? pending[0]?.reps ?? null;
+  const lastSet = exercise.sets[exercise.sets.length - 1];
+  const lastPendingSet = pending[pending.length - 1];
+  const lastCompletedAt =
+    lastPendingSet?.completedAt ?? lastSet?.completedAt ?? null;
+  const nextSetIndex =
+    Math.max(
+      -1,
+      ...exercise.sets.map((s) => s.setIndex),
+      ...pending.map((s) => s.setIndex),
+    ) + 1;
   const nextRestSeconds = restBeforeNextSet(
     exercise.targetRestSeconds,
     exercise,
@@ -328,9 +340,9 @@ function ExerciseCard({
     exercise.targetRepsMax,
     exercise,
     totalDone,
+    activationReps,
   );
   const phase = myoPhaseLabel(exercise, totalDone);
-  const lastSet = exercise.sets[exercise.sets.length - 1];
 
   return (
     <li
@@ -467,10 +479,10 @@ function ExerciseCard({
                   в точке решения. Нет цели → ничего (R-37). */}
               {goal ? <GoalTrackBar view={goal} /> : null}
 
-              {lastSet ? (
+              {lastCompletedAt ? (
                 <RestTimer
                   targetSeconds={nextRestSeconds}
-                  startedAt={lastSet.completedAt}
+                  startedAt={lastCompletedAt}
                   demoSlug={exercise.exerciseSlug}
                 />
               ) : null}
@@ -482,7 +494,7 @@ function ExerciseCard({
                 <p className="bg-primary/10 text-primary tabular rounded-lg px-3 py-2 text-xs font-medium">
                   Сейчас: {phase} ·{" "}
                   {nextReps.min === nextReps.max
-                    ? `${nextReps.max} повт.`
+                    ? `${nextReps.max} повт.${totalDone >= 1 ? " (30% от активации)" : ""}`
                     : `${nextReps.min}–${nextReps.max} повт. почти до отказа`}
                   {totalDone >= 1 ? ` · отдых ${nextRestSeconds} с` : ""}
                 </p>
@@ -491,15 +503,16 @@ function ExerciseCard({
               <SetInput
                 workoutId={workoutId}
                 workoutExerciseId={exercise.id}
-                nextSetIndex={totalDone}
+                nextSetIndex={nextSetIndex}
                 defaultWeightKg={
+                  lastPendingSet?.weightKg ??
                   lastSet?.weightKg ??
                   previous?.prefillWeightKg ??
                   exercise.targetWeightKg ??
                   null
                 }
                 defaultRepsMax={nextReps.max}
-                restSeconds={nextRestSeconds}
+                restStartedAt={lastCompletedAt}
                 onOfflineRecord={onOfflineRecord}
               />
             </>

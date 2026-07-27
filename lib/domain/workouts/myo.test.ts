@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  elapsedRestSeconds,
+  MYO_MINI_REPS_PERCENT,
+  myoMiniRepsFromActivation,
   myoPhaseLabel,
   plannedSetCount,
   repsTargetForNextSet,
@@ -51,12 +54,45 @@ describe("repsTargetForNextSet", () => {
     expect(repsTargetForNextSet(12, 20, ON, 0)).toEqual({ min: 12, max: 20 });
   });
 
-  it("мини-сет — фиксированные myoMiniReps", () => {
+  it("мини-сет — 30% от фактической активации", () => {
+    expect(repsTargetForNextSet(12, 20, ON, 1, 10)).toEqual({
+      min: 3,
+      max: 3,
+    });
+    expect(repsTargetForNextSet(12, 20, ON, 1, 12)).toEqual({
+      min: 4,
+      max: 4,
+    });
+  });
+
+  it("без данных активации использует legacy myoMiniReps", () => {
     expect(repsTargetForNextSet(12, 20, ON, 1)).toEqual({ min: 4, max: 4 });
   });
 
   it("обычный режим — диапазон шаблона всегда", () => {
     expect(repsTargetForNextSet(8, 12, OFF, 2)).toEqual({ min: 8, max: 12 });
+  });
+});
+
+describe("myoMiniRepsFromActivation", () => {
+  it("округляет 30% и не опускается ниже одного повтора", () => {
+    expect(MYO_MINI_REPS_PERCENT).toBe(30);
+    expect(myoMiniRepsFromActivation(8)).toBe(2);
+    expect(myoMiniRepsFromActivation(12)).toBe(4);
+    expect(myoMiniRepsFromActivation(1)).toBe(1);
+  });
+});
+
+describe("elapsedRestSeconds", () => {
+  it("считает реальную паузу и ограничивает серверным максимумом", () => {
+    const startedAt = new Date("2026-07-28T10:00:00.000Z");
+    expect(
+      elapsedRestSeconds(startedAt, Date.parse("2026-07-28T10:00:30.000Z")),
+    ).toBe(30);
+    expect(
+      elapsedRestSeconds(startedAt, Date.parse("2026-07-28T12:00:00.000Z")),
+    ).toBe(3600);
+    expect(elapsedRestSeconds(null)).toBeNull();
   });
 });
 
