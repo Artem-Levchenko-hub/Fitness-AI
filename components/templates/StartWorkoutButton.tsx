@@ -19,16 +19,26 @@ import { startWorkoutFromTemplateAction } from "@/server/actions/workouts";
  * redirect() серверного экшена вызывается ВНЕ try/catch — навигация
  * пробрасывается фреймворком (context7 Next.js 16: form action + redirect).
  */
-export function StartWorkoutButton({ templateId }: { templateId: string }) {
+export function StartWorkoutButton({
+  templateId,
+  compact = false,
+}: {
+  templateId: string;
+  compact?: boolean;
+}) {
   async function start(formData: FormData) {
     formData.set("clientWorkoutId", makeClientId());
     await startWorkoutFromTemplateAction(formData);
   }
 
   return (
-    <form action={start} className="mb-6">
+    <form action={start} className={compact ? "" : "mb-6"}>
       <input type="hidden" name="templateId" value={templateId} />
-      <Button type="submit" size="xl" className="w-full">
+      <Button
+        type="submit"
+        size={compact ? "lg" : "xl"}
+        className="w-full"
+      >
         <Play className="size-5" />
         Начать тренировку
       </Button>

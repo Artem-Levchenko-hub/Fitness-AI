@@ -188,15 +188,9 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
   try {
     const done = await getActiveWorkoutForUser(user.id, workoutId);
     if (done && done.status === "completed") {
-      const performed = done.exercises.map((e) => ({
-        exerciseId: e.exerciseId,
-        sets: e.sets,
-      }));
-
       const adaptation = await adaptTemplateAfterWorkout(
         user.id,
         workoutId,
-        performed,
       );
       if (adaptation) {
         revalidatePath("/programs");

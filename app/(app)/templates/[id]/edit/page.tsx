@@ -40,6 +40,11 @@ export default async function EditTemplatePage({ params }: Props) {
     targetRepsMax: it.targetRepsMax,
     targetWeightKg: it.targetWeightKg,
     targetRestSeconds: it.targetRestSeconds,
+    setScheme: it.setScheme,
+    myoMiniSets: it.myoMiniSets,
+    myoRepsPercent: it.myoRepsPercent,
+    myoRestSeconds: it.myoRestSeconds,
+    myoFirstRestSeconds: it.myoFirstRestSeconds,
     notes: it.notes ?? "",
   }));
 
@@ -67,6 +72,11 @@ export default async function EditTemplatePage({ params }: Props) {
           description: tpl.description ?? "",
           items: initialItems,
         }}
+        initialDefaultScheme={
+          initialItems.some((item) => item.setScheme === "myo_reps")
+            ? "myo_reps"
+            : "straight"
+        }
         action={action}
         submitLabel="Сохранить"
       />

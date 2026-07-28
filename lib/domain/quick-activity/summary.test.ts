@@ -4,9 +4,10 @@ import { summarizeQuickDay, type QuickDayEntry } from "./summary";
 
 const e = (
   exerciseName: string,
-  mode: "sets" | "total",
+  mode: "sets" | "total" | "myo_reps",
   reps: number,
-): QuickDayEntry => ({ exerciseName, mode, reps });
+  extra: Partial<QuickDayEntry> = {},
+): QuickDayEntry => ({ exerciseName, mode, reps, ...extra });
 
 describe("summarizeQuickDay", () => {
   it("пустой день → пустая сводка", () => {
@@ -52,5 +53,41 @@ describe("summarizeQuickDay", () => {
       e("Эспандер кистевой", "total", 100),
     ]);
     expect(out[0]).toMatchObject({ detail: "100+50", totalReps: 150 });
+  });
+
+  it("одиночный myo-кластер показывает структуру активация+мини", () => {
+    const out = summarizeQuickDay([
+      e("Разгибание рук", "myo_reps", 21, {
+        myoActivationReps: 12,
+        myoMiniSets: 3,
+        myoMiniReps: 3,
+      }),
+    ]);
+    expect(out[0]).toMatchObject({
+      detail: "12+3×3",
+      totalReps: 21,
+      entries: 1,
+    });
+  });
+
+  it("структурированный myo-кластер показывает реальные повторы каждого мини-подхода", () => {
+    const out = summarizeQuickDay([
+      e("Разгибание рук", "myo_reps", 21, {
+        myoActivationReps: 12,
+        myoMiniSets: 3,
+        myoMiniReps: 3,
+        myoSets: [
+          { role: "activation", reps: 12 },
+          { role: "mini", reps: 4 },
+          { role: "mini", reps: 3 },
+          { role: "mini", reps: 2 },
+        ],
+      }),
+    ]);
+    expect(out[0]).toMatchObject({
+      detail: "12+4+3+2",
+      totalReps: 21,
+      entries: 1,
+    });
   });
 });

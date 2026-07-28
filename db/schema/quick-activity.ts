@@ -3,6 +3,7 @@ import {
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -11,6 +12,13 @@ import {
 import { users } from "./auth";
 import { quickActivityMode } from "./enums";
 import { exercises } from "./exercises";
+
+export type QuickMyoSet = {
+  role: "activation" | "mini";
+  reps: number;
+  weightKg: number | null;
+  restSeconds: number | null;
+};
 
 /** Доп. активность — быстрый лог «сделал подход между делом» БЕЗ создания
  *  тренировки (подошёл к турнику → записал подход; пожал эспандер 100 раз →
@@ -37,6 +45,16 @@ export const quickActivities = pgTable(
     mode: quickActivityMode("mode").notNull().default("sets"),
     reps: integer("reps").notNull(),
     weightKg: doublePrecision("weight_kg"),
+    /** Myo-reps: активационный подход; для обычных режимов NULL. */
+    myoActivationReps: integer("myo_activation_reps"),
+    /** Myo-reps: число мини-подходов; для обычных режимов NULL. */
+    myoMiniSets: integer("myo_mini_sets"),
+    /** Myo-reps: повторы в одном мини-подходе; для обычных режимов NULL. */
+    myoMiniReps: integer("myo_mini_reps"),
+    /** Короткий отдых внутри Myo-кластера; это НЕ длинный межсетовый отдых. */
+    myoRestSeconds: integer("myo_rest_seconds"),
+    myoFirstRestSeconds: integer("myo_first_rest_seconds"),
+    myoSets: jsonb("myo_sets").$type<QuickMyoSet[]>(),
     performedAt: timestamp("performed_at", { mode: "date", withTimezone: true })
       .notNull()
       .defaultNow(),

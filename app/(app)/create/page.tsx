@@ -14,6 +14,7 @@ import Link from "next/link";
 
 import { SwipeToDelete } from "@/components/app/swipe-to-delete";
 import { Button } from "@/components/ui/button";
+import { MyoRepsResearchNote } from "@/components/templates/MyoRepsResearchNote";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   buildCardioTemplateRows,
@@ -76,6 +77,7 @@ export default async function CreateWorkoutPage() {
 
       <section className="space-y-3">
         <StrengthStartCard templates={strengthSorted} />
+        <MyoStarterCard />
 
         {circuitRows.length > 0 ? (
           <FormatTemplateCard
@@ -158,6 +160,12 @@ function StrengthStartCard({ templates }: { templates: TemplateListItem[] }) {
                     <p className="text-muted-foreground mt-0.5 text-xs">
                       {formatExerciseCount(t.exerciseCount)}
                     </p>
+                    {t.hasMyoReps ? (
+                      <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+                        <Zap className="size-3" aria-hidden="true" />
+                        Myo-reps
+                      </span>
+                    ) : null}
                     {t.adapted || t.source === "trainer" ? (
                       <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
                         <Wand2 className="size-3" aria-hidden="true" />
@@ -202,6 +210,41 @@ function StrengthStartCard({ templates }: { templates: TemplateListItem[] }) {
         <Library className="size-3.5" aria-hidden="true" />
         Библиотека силовых
       </Link>
+    </div>
+  );
+}
+
+function MyoStarterCard() {
+  return (
+    <div className="bg-card border-border rounded-2xl border p-5">
+      <div className="flex items-start gap-4">
+        <div className="bg-primary/10 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
+          <Zap className="size-5" aria-hidden="true" />
+        </div>
+        <div className="flex-1">
+          <p className="text-muted-foreground text-[10px] font-medium tracking-[0.18em] uppercase">
+            Силовая · отдельный формат
+          </p>
+          <h2 className="mt-0.5 text-base font-semibold tracking-tight">
+            Myo-reps
+          </h2>
+          <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+            Отдельный вход для короткого кластера: активационный подход и
+            мини-подходы с коротким отдыхом. Не прячется внутри «своего
+            формата».
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <MyoRepsResearchNote compact />
+        <Button asChild size="lg" className="min-h-[56px] w-full">
+          <Link href="/templates/new?scheme=myo_reps">
+            <Zap className="size-4" />
+            Создать Myo-reps шаблон
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 }

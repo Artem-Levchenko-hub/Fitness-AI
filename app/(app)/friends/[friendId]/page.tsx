@@ -1,4 +1,4 @@
-import { Activity, ChevronLeft, Dumbbell, Sparkles, Wand2 } from "lucide-react";
+import { Activity, ChevronLeft, Dumbbell, Sparkles, Wand2, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -177,6 +177,12 @@ function FriendTemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
       <p className="text-muted-foreground mt-0.5 text-xs">
         {formatTemplateMeta(tpl)}
       </p>
+      {tpl.format === "strength" && tpl.hasMyoReps ? (
+        <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+          <Zap className="size-3" aria-hidden="true" />
+          Myo-reps
+        </span>
+      ) : null}
       {tpl.adapted ? (
         <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
           <Wand2 className="size-3" aria-hidden="true" />

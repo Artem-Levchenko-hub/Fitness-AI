@@ -31,6 +31,10 @@ export async function QuickActivityTile({
       exerciseName: e.exerciseName,
       mode: e.mode,
       reps: e.reps,
+      myoActivationReps: e.myoActivationReps,
+      myoMiniSets: e.myoMiniSets,
+      myoMiniReps: e.myoMiniReps,
+      myoSets: e.myoSets,
     })),
   );
 
@@ -39,10 +43,17 @@ export async function QuickActivityTile({
       summary={summary}
       todayEntries={entries.map((e) => ({
         id: e.id,
+        exerciseId: e.exerciseId,
         exerciseName: e.exerciseName,
         mode: e.mode,
         reps: e.reps,
         weightKg: e.weightKg,
+        myoActivationReps: e.myoActivationReps,
+        myoMiniSets: e.myoMiniSets,
+        myoMiniReps: e.myoMiniReps,
+        myoRestSeconds: e.myoRestSeconds,
+        myoFirstRestSeconds: e.myoFirstRestSeconds,
+        myoSets: e.myoSets,
       }))}
       recent={recent}
       exercises={exercises.map((ex) => ({

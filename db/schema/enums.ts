@@ -1,5 +1,10 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 
+import {
+  MYO_SET_ROLES,
+  SET_SCHEMES,
+} from "../../lib/domain/workouts/myo-reps";
+
 export const weightUnit = pgEnum("weight_unit", ["kg", "lb"]);
 
 export const experienceLevel = pgEnum("experience_level", [
@@ -46,6 +51,10 @@ export const setType = pgEnum("set_type", [
   "failure",
 ]);
 
+export const setScheme = pgEnum("set_scheme", SET_SCHEMES);
+
+export const myoSetRole = pgEnum("myo_set_role", MYO_SET_ROLES);
+
 export const noteEntityType = pgEnum("note_entity_type", [
   "exercise",
   "workout",
@@ -83,6 +92,7 @@ export const pushKind = pgEnum("push_kind", [
 export const quickActivityMode = pgEnum("quick_activity_mode", [
   "sets",
   "total",
+  "myo_reps",
 ]);
 
 export const cardioPreset = pgEnum("cardio_preset", [

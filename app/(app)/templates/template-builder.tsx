@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Loader2, Plus, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, Plus, Trash2, Zap } from "lucide-react";
 import { startTransition, useActionState, useState } from "react";
 
 import {
@@ -30,8 +30,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NumberField } from "@/components/ui/number-field";
 import { Textarea } from "@/components/ui/textarea";
+import { MyoRepsResearchNote } from "@/components/templates/MyoRepsResearchNote";
 import type { TemplateActionState } from "@/server/actions/templates";
 import type { TemplateFormValues } from "@/server/schemas/templates";
+import {
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_FIRST_REST_SECONDS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+  myoTotalSets,
+  type SetScheme,
+} from "@/lib/domain/workouts/myo-reps";
 import { cn } from "@/lib/utils";
 import { clampNumber } from "@/lib/utils/numeric";
 
@@ -44,6 +53,11 @@ export type BuilderItem = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  setScheme: SetScheme;
+  myoMiniSets: number;
+  myoRepsPercent: number;
+  myoRestSeconds: number;
+  myoFirstRestSeconds: number;
   notes: string;
 };
 
@@ -54,6 +68,7 @@ type Props = {
     description: string;
     items: BuilderItem[];
   };
+  initialDefaultScheme?: SetScheme;
   action: (
     prev: TemplateActionState,
     formData: FormData,
@@ -67,12 +82,18 @@ const DEFAULT_ITEM: Omit<BuilderItem, "uid" | "exerciseId"> = {
   targetRepsMax: 12,
   targetWeightKg: null,
   targetRestSeconds: 120,
+  setScheme: "straight",
+  myoMiniSets: DEFAULT_MYO_MINI_SETS,
+  myoRepsPercent: DEFAULT_MYO_REPS_PERCENT,
+  myoRestSeconds: DEFAULT_MYO_REST_SECONDS,
+  myoFirstRestSeconds: DEFAULT_MYO_FIRST_REST_SECONDS,
   notes: "",
 };
 
 export function TemplateBuilder({
   exercises,
   initial,
+  initialDefaultScheme = "straight",
   action,
   submitLabel = "Сохранить шаблон",
 }: Props) {
@@ -80,6 +101,11 @@ export function TemplateBuilder({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [items, setItems] = useState<BuilderItem[]>(
     initial?.items ?? [],
+  );
+  const [defaultScheme, setDefaultScheme] = useState<SetScheme>(() =>
+    initial?.items.some((item) => item.setScheme === "myo_reps")
+      ? "myo_reps"
+      : initialDefaultScheme,
   );
 
   const [state, formAction, pending] = useActionState<
@@ -108,7 +134,16 @@ export function TemplateBuilder({
   function addItem() {
     setItems((prev) => [
       ...prev,
-      { uid: crypto.randomUUID(), exerciseId: "", ...DEFAULT_ITEM },
+      {
+        uid: crypto.randomUUID(),
+        exerciseId: "",
+        ...DEFAULT_ITEM,
+        setScheme: defaultScheme,
+        targetSets:
+          defaultScheme === "myo_reps"
+            ? myoTotalSets(DEFAULT_MYO_MINI_SETS)
+            : DEFAULT_ITEM.targetSets,
+      },
     ]);
   }
 
@@ -136,6 +171,11 @@ export function TemplateBuilder({
           targetRepsMax: i.targetRepsMax,
           targetWeightKg: i.targetWeightKg ?? "",
           targetRestSeconds: i.targetRestSeconds,
+          setScheme: i.setScheme,
+          myoMiniSets: i.myoMiniSets,
+          myoRepsPercent: i.myoRepsPercent,
+          myoRestSeconds: i.myoRestSeconds,
+          myoFirstRestSeconds: i.myoFirstRestSeconds,
           notes: i.notes,
         })),
     };
@@ -178,6 +218,81 @@ export function TemplateBuilder({
           <h2 className="text-sm font-semibold tracking-tight">
             Упражнения ({items.length})
           </h2>
+        </div>
+
+        <div className="bg-card border-border mb-4 rounded-2xl border p-4">
+          <p className="text-muted-foreground text-[10px] font-medium tracking-[0.18em] uppercase">
+            Формат шаблона
+          </p>
+          <h2 className="mt-1 text-base font-semibold tracking-tight">
+            Что добавлять по умолчанию
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+            Это делает Myo-reps видимым отдельным форматом уже на старте. Для
+            каждого упражнения режим всё равно можно переключить ниже.
+          </p>
+
+          <div className="bg-muted/50 mt-3 grid grid-cols-2 gap-1 rounded-xl p-1">
+            <button
+              type="button"
+              aria-pressed={defaultScheme === "straight"}
+              onClick={() => setDefaultScheme("straight")}
+              className={cn(
+                "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
+                defaultScheme === "straight"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Классические подходы
+            </button>
+            <button
+              type="button"
+              aria-pressed={defaultScheme === "myo_reps"}
+              onClick={() => setDefaultScheme("myo_reps")}
+              className={cn(
+                "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
+                defaultScheme === "myo_reps"
+                  ? "bg-foreground text-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Zap className="size-4" aria-hidden />
+                Myo-reps
+              </span>
+            </button>
+          </div>
+
+          {defaultScheme === "myo_reps" ? (
+            <div className="mt-3 space-y-3">
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Новые упражнения будут добавляться как Myo-reps: один тяжёлый
+                активационный подход плюс короткий кластер мини-подходов.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setItems((previous) =>
+                    previous.map((item) =>
+                      item.setScheme === "myo_reps"
+                        ? {
+                            ...item,
+                            myoFirstRestSeconds: 40,
+                            myoRestSeconds: 20,
+                          }
+                        : item,
+                    ),
+                  )
+                }
+              >
+                Исследовательский пресет 40/20
+              </Button>
+              <MyoRepsResearchNote compact />
+            </div>
+          ) : null}
         </div>
 
         {items.length === 0 ? (
@@ -316,36 +431,169 @@ function SortableItem({
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <NumField
-          label="Подходы"
-          value={item.targetSets}
-          min={1}
-          max={20}
-          onChange={(v) => onChange({ targetSets: v ?? 1 })}
-        />
-        <RangeField
-          label="Повторения"
-          min={item.targetRepsMin}
-          max={item.targetRepsMax}
-          onMinChange={(v) => onChange({ targetRepsMin: v })}
-          onMaxChange={(v) => onChange({ targetRepsMax: v })}
-        />
-        <NumField
-          label="Вес (кг)"
-          value={item.targetWeightKg}
-          decimal
-          allowEmpty
-          onChange={(v) => onChange({ targetWeightKg: v })}
-        />
-        <NumField
-          label="Отдых (сек)"
-          value={item.targetRestSeconds}
-          min={15}
-          max={900}
-          onChange={(v) => onChange({ targetRestSeconds: v ?? 60 })}
-        />
+      <div
+        className="bg-muted/50 mb-3 grid grid-cols-2 gap-1 rounded-xl p-1"
+        aria-label="Система подходов"
+      >
+        <button
+          type="button"
+          aria-pressed={item.setScheme === "straight"}
+          onClick={() => onChange({ setScheme: "straight" })}
+          className={cn(
+            "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
+            item.setScheme === "straight"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Классические
+        </button>
+        <button
+          type="button"
+          aria-pressed={item.setScheme === "myo_reps"}
+          onClick={() =>
+            onChange({
+              setScheme: "myo_reps",
+              targetSets: myoTotalSets(item.myoMiniSets),
+            })
+          }
+          className={cn(
+            "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
+            item.setScheme === "myo_reps"
+              ? "bg-foreground text-background shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Zap className="size-3.5" aria-hidden />
+            Myo-reps
+          </span>
+        </button>
       </div>
+
+      {item.setScheme === "myo_reps" ? (
+        <MyoRepsResearchNote
+          compact
+          summary={`${item.targetRepsMin}–${item.targetRepsMax} активация · ${item.myoMiniSets} мини по ${item.myoRepsPercent}% · отдых ${item.myoFirstRestSeconds}/${item.myoRestSeconds}с`}
+        >
+          <p className="text-muted-foreground mb-3 text-xs leading-relaxed">
+            1 активационный подход почти или до отказа, затем короткие
+            мини-подходы с тем же весом. Цель повторов считается от первого
+            подхода, а мини-подходы не приравниваются к длинным классическим
+            сетам один к одному. Подбирай вес консервативно; при боли,
+            головокружении или иных противопоказаниях используй метод только с
+            тренером или врачом.
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <RangeField
+              label="Активация"
+              min={item.targetRepsMin}
+              max={item.targetRepsMax}
+              onMinChange={(v) => onChange({ targetRepsMin: v })}
+              onMaxChange={(v) => onChange({ targetRepsMax: v })}
+            />
+            <NumField
+              label="Вес (кг)"
+              value={item.targetWeightKg}
+              decimal
+              allowEmpty
+              onChange={(v) => onChange({ targetWeightKg: v })}
+            />
+            <NumField
+              label="Мини-подходы"
+              value={item.myoMiniSets}
+              min={1}
+              max={5}
+              onChange={(v) => {
+                const myoMiniSets = v ?? DEFAULT_MYO_MINI_SETS;
+                onChange({
+                  myoMiniSets,
+                  targetSets: myoTotalSets(myoMiniSets),
+                });
+              }}
+            />
+            <NumField
+              label="% повторов"
+              value={item.myoRepsPercent}
+              min={10}
+              max={50}
+              onChange={(v) =>
+                onChange({
+                  myoRepsPercent: v ?? DEFAULT_MYO_REPS_PERCENT,
+                })
+              }
+            />
+            <NumField
+              label="До 1-го мини (сек)"
+              value={item.myoFirstRestSeconds}
+              min={10}
+              max={90}
+              onChange={(v) =>
+                onChange({
+                  myoFirstRestSeconds:
+                    v ?? DEFAULT_MYO_FIRST_REST_SECONDS,
+                })
+              }
+            />
+            <NumField
+              label="Между мини (сек)"
+              value={item.myoRestSeconds}
+              min={10}
+              max={60}
+              onChange={(v) =>
+                onChange({
+                  myoRestSeconds: v ?? DEFAULT_MYO_REST_SECONDS,
+                })
+              }
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            onClick={() =>
+              onChange({
+                myoFirstRestSeconds: 40,
+                myoRestSeconds: 20,
+              })
+            }
+          >
+            Исследовательский пресет 40/20
+          </Button>
+        </MyoRepsResearchNote>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <NumField
+            label="Подходы"
+            value={item.targetSets}
+            min={1}
+            max={20}
+            onChange={(v) => onChange({ targetSets: v ?? 1 })}
+          />
+          <RangeField
+            label="Повторения"
+            min={item.targetRepsMin}
+            max={item.targetRepsMax}
+            onMinChange={(v) => onChange({ targetRepsMin: v })}
+            onMaxChange={(v) => onChange({ targetRepsMax: v })}
+          />
+          <NumField
+            label="Вес (кг)"
+            value={item.targetWeightKg}
+            decimal
+            allowEmpty
+            onChange={(v) => onChange({ targetWeightKg: v })}
+          />
+          <NumField
+            label="Отдых (сек)"
+            value={item.targetRestSeconds}
+            min={15}
+            max={900}
+            onChange={(v) => onChange({ targetRestSeconds: v ?? 60 })}
+          />
+        </div>
+      )}
     </li>
   );
 }

@@ -1514,6 +1514,7 @@ export async function exerciseSetHistory(
       reps: schema.workoutSets.reps,
       rpe: schema.workoutSets.rpe,
       setType: schema.workoutSets.setType,
+      myoRole: schema.workoutSets.myoRole,
     })
     .from(schema.workoutSets)
     .innerJoin(
@@ -1648,10 +1649,11 @@ export type WeeklyAgg = {
   /** Тоннаж доп. активности (вес×повт; без веса → 0). */
   quickTonnage: number;
   /** Разбивка доп. активности по упражнениям×режиму для промпта тренера
-   *  (mode='sets': entries = подходы; mode='total': entries = записи). */
+   *  (mode='sets': entries = подходы; mode='total': entries = записи;
+   *  mode='myo_reps': entries = кластеры). */
   quickByExercise: {
     name: string;
-    mode: "sets" | "total";
+    mode: "sets" | "total" | "myo_reps";
     entries: number;
     reps: number;
   }[];

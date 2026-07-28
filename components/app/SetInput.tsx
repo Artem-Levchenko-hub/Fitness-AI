@@ -13,6 +13,10 @@ import {
 } from "@/lib/storage/set-input-draft";
 import { enqueue, listPending, makeClientId } from "@/lib/storage/outbox";
 import type { PendingSet } from "@/lib/domain/workouts/pending-sets";
+import {
+  elapsedRestSeconds,
+  type MyoSetRole,
+} from "@/lib/domain/workouts/myo-reps";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -21,7 +25,10 @@ type Props = {
   nextSetIndex: number;
   defaultWeightKg: number | null;
   defaultRepsMax: number;
-  restSeconds: number;
+  defaultRpe?: number | null;
+  restStartedAt: Date | null;
+  myoRole: MyoSetRole | null;
+  myoMiniIndex: number | null;
   /** H15.3b-2 — офлайн-сабвмит кладёт подход сюда (оптимистичный стейт). */
   onOfflineRecord: (set: PendingSet) => void;
 };
@@ -32,17 +39,23 @@ export function SetInput({
   nextSetIndex,
   defaultWeightKg,
   defaultRepsMax,
-  restSeconds,
+  defaultRpe = null,
+  restStartedAt,
+  myoRole,
+  myoMiniIndex,
   onOfflineRecord,
 }: Props) {
   const [weight, setWeight] = useState<string>(
     defaultWeightKg ? String(defaultWeightKg) : "",
   );
   const [reps, setReps] = useState<string>(String(defaultRepsMax));
-  const [rpe, setRpe] = useState<string>("");
+  const [rpe, setRpe] = useState<string>(
+    defaultRpe == null ? "" : String(defaultRpe),
+  );
 
   const weightRef = useRef<HTMLInputElement>(null);
   const wasPendingRef = useRef(false);
+  const previousSetIndexRef = useRef(nextSetIndex);
   const [state, formAction, pending] = useActionState<RecordSetState, FormData>(
     recordSetAction,
     { status: "idle" },
@@ -63,6 +76,24 @@ export function SetInput({
     setRpe(draft.rpe);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [workoutExerciseId]);
+
+  // После подтверждённого подхода родитель передаёт следующий индекс. Сбрасываем
+  // форму на новые defaults; для myo-reps это меняет повторы активации на
+  // рассчитанные 30% мини-подхода без remount/race с черновиком.
+  useEffect(() => {
+    if (previousSetIndexRef.current === nextSetIndex) return;
+    previousSetIndexRef.current = nextSetIndex;
+    clearSetDraft(workoutExerciseId);
+    setWeight(defaultWeightKg ? String(defaultWeightKg) : "");
+    setReps(String(defaultRepsMax));
+    setRpe(defaultRpe == null ? "" : String(defaultRpe));
+  }, [
+    defaultRepsMax,
+    defaultRpe,
+    defaultWeightKg,
+    nextSetIndex,
+    workoutExerciseId,
+  ]);
 
   useEffect(() => {
     if (state.status === "idle" && !pending) {
@@ -114,8 +145,13 @@ export function SetInput({
   function resetFields() {
     setWeight(defaultWeightKg ? String(defaultWeightKg) : "");
     setReps(String(defaultRepsMax));
-    setRpe("");
+    setRpe(defaultRpe == null ? "" : String(defaultRpe));
     weightRef.current?.focus();
+  }
+
+  function measuredRestSeconds(): string {
+    const seconds = elapsedRestSeconds(restStartedAt);
+    return seconds == null ? "" : String(seconds);
   }
 
   // H15.3b-2 — офлайн-запись подхода через outbox. При отсутствии сети action
@@ -128,6 +164,7 @@ export function SetInput({
     const reps = Number(fd.get("reps"));
     const rpeRaw = fd.get("rpe");
     const rpe = rpeRaw === "" || rpeRaw == null ? null : Number(rpeRaw);
+    const completedAt = new Date();
 
     await enqueue({
       clientId: clientSetId,
@@ -141,20 +178,11 @@ export function SetInput({
         weightKg: String(fd.get("weightKg") ?? ""),
         reps: String(fd.get("reps") ?? ""),
         rpe: String(rpeRaw ?? ""),
-        restSeconds: String(restSeconds),
+        restSeconds: String(fd.get("restSeconds") ?? ""),
+        myoRole: myoRole ?? "",
         clientSetId,
       },
-      queuedAt: Date.now(),
-    });
-
-    // Оптимистичная строка видна сразу (вне зависимости от persist).
-    onOfflineRecord({
-      clientId: clientSetId,
-      workoutExerciseId,
-      setIndex: nextSetIndex,
-      weightKg,
-      reps,
-      rpe: rpe != null && Number.isFinite(rpe) ? rpe : null,
+      queuedAt: completedAt.getTime(),
     });
 
     // Черновик H10.4 чистим ТОЛЬКО когда outbox реально удержал строку
@@ -168,11 +196,25 @@ export function SetInput({
       clearSetDraft(workoutExerciseId);
       resetFields();
     }
+
+    // Обновляем родителя после очистки черновика: следующий myo-подход получит
+    // рассчитанные повторы, а не старые значения активации из localStorage.
+    onOfflineRecord({
+      clientId: clientSetId,
+      workoutExerciseId,
+      setIndex: nextSetIndex,
+      weightKg,
+      reps,
+      rpe: rpe != null && Number.isFinite(rpe) ? rpe : null,
+      myoRole,
+      completedAt,
+    });
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    fd.set("restSeconds", measuredRestSeconds());
 
     // H15.3b-2 — офлайн (navigator.onLine=false) идёт в outbox, не на сервер.
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
@@ -193,7 +235,8 @@ export function SetInput({
       <input type="hidden" name="workoutId" value={workoutId} />
       <input type="hidden" name="workoutExerciseId" value={workoutExerciseId} />
       <input type="hidden" name="setIndex" value={nextSetIndex} />
-      <input type="hidden" name="restSeconds" value={restSeconds} />
+      <input type="hidden" name="restSeconds" value="" />
+      <input type="hidden" name="myoRole" value={myoRole ?? ""} />
 
       <div className="grid grid-cols-2 gap-2">
         <div>
@@ -314,7 +357,11 @@ export function SetInput({
             Сохраняем…
           </>
         ) : (
-          `Завершить подход ${nextSetIndex + 1}`
+          myoRole === "activation"
+            ? "Записать активационный подход"
+            : myoRole === "mini"
+              ? `Записать мини-подход ${myoMiniIndex ?? nextSetIndex}`
+              : `Завершить подход ${nextSetIndex + 1}`
         )}
       </Button>
     </form>

@@ -1,4 +1,4 @@
-import { ChevronLeft, Pencil, Wand2 } from "lucide-react";
+import { ChevronLeft, Pencil, Pin, PinOff, Wand2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,12 +8,17 @@ import { RevertAdaptationButton } from "@/components/templates/RevertAdaptationB
 import { StartWorkoutButton } from "@/components/templates/StartWorkoutButton";
 import { TemplateCoachPanel } from "@/components/templates/TemplateCoachPanel";
 import { TemplateFocusHint } from "@/components/templates/TemplateFocusHint";
+import { TemplateVersionHistory } from "@/components/templates/TemplateVersionHistory";
 import { Button } from "@/components/ui/button";
 import { extractPastAdvice } from "@/lib/ai/trainer-memory";
 import { requireUser } from "@/lib/auth/require-user";
 import { getTemplateWithItems } from "@/lib/repos/templates.repo";
+import { listTemplateVersions } from "@/lib/repos/template-versions.repo";
 import { getLastTemplateAnalysis } from "@/lib/repos/workouts.repo";
-import { deleteTemplateAction } from "@/server/actions/templates";
+import {
+  deleteTemplateAction,
+  setTemplatePinnedAction,
+} from "@/server/actions/templates";
 
 export const metadata: Metadata = { title: "Шаблон" };
 
@@ -25,7 +30,10 @@ export default async function TemplateDetailPage({ params }: Props) {
   const tpl = await getTemplateWithItems(user.id, id);
   if (!tpl) notFound();
 
-  const lastAnalysis = await getLastTemplateAnalysis(user.id, id);
+  const [lastAnalysis, versions] = await Promise.all([
+    getLastTemplateAnalysis(user.id, id),
+    listTemplateVersions(user.id, id),
+  ]);
   const lastFocus = lastAnalysis ? extractPastAdvice(lastAnalysis).focus : null;
 
   // Подпись «обновлён тренером · <дата>». adaptedAt может быть null у шаблонов,
@@ -52,6 +60,24 @@ export default async function TemplateDetailPage({ params }: Props) {
         {tpl.description ? (
           <p className="text-muted-foreground mt-2 text-sm">{tpl.description}</p>
         ) : null}
+        <form action={setTemplatePinnedAction} className="mt-3">
+          <input type="hidden" name="templateId" value={tpl.id} />
+          <input
+            type="hidden"
+            name="pinned"
+            value={tpl.pinnedPosition == null ? "true" : "false"}
+          />
+          <Button type="submit" size="sm" variant="outline">
+            {tpl.pinnedPosition == null ? (
+              <Pin className="size-4" />
+            ) : (
+              <PinOff className="size-4" />
+            )}
+            {tpl.pinnedPosition == null
+              ? "Закрепить в «Твоих тренировках»"
+              : "Открепить"}
+          </Button>
+        </form>
       </header>
 
       {tpl.lastAdaptedWorkoutId ? (
@@ -89,13 +115,33 @@ export default async function TemplateDetailPage({ params }: Props) {
                 {item.exerciseNameRu}
               </p>
               <div className="text-muted-foreground tabular mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                <span>
-                  {item.targetSets}×{item.targetRepsMin}–{item.targetRepsMax}
-                </span>
+                {item.setScheme === "myo_reps" ? (
+                  <>
+                    <span className="text-foreground font-semibold">
+                      Myo-reps
+                    </span>
+                    <span>
+                      активация {item.targetRepsMin}–{item.targetRepsMax}
+                    </span>
+                    <span>
+                      {item.myoMiniSets} мини по {item.myoRepsPercent}%
+                    </span>
+                    <span>
+                      отдых {item.myoFirstRestSeconds}/{item.myoRestSeconds}с
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {item.targetSets}×{item.targetRepsMin}–
+                      {item.targetRepsMax}
+                    </span>
+                    <span>отдых {Math.round(item.targetRestSeconds)}с</span>
+                  </>
+                )}
                 {item.targetWeightKg ? (
                   <span>{item.targetWeightKg} кг</span>
                 ) : null}
-                <span>отдых {Math.round(item.targetRestSeconds)}с</span>
               </div>
               {item.notes ? (
                 <p className="text-muted-foreground/80 mt-2 text-xs leading-relaxed">
@@ -106,6 +152,12 @@ export default async function TemplateDetailPage({ params }: Props) {
           </li>
         ))}
       </ol>
+
+      <TemplateVersionHistory
+        templateId={tpl.id}
+        versions={versions}
+        currentVersion={tpl.currentVersion}
+      />
 
       <TemplateCoachPanel templateId={tpl.id} />
 
