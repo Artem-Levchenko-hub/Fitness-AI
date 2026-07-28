@@ -196,6 +196,11 @@ function CompletedView({
   const performed = workout.exercises.map((e) => ({
     exerciseId: e.exerciseId,
     sets: e.sets,
+    setScheme: e.setScheme,
+    myoMiniSets: e.myoMiniSets,
+    myoRepsPercent: e.myoRepsPercent,
+    myoRestSeconds: e.myoRestSeconds,
+    myoFirstRestSeconds: e.myoFirstRestSeconds,
   }));
   const progressed = buildNextTemplateItems(performed);
   const nextItems =
@@ -280,7 +285,9 @@ function CompletedView({
                   {nameById.get(it.exerciseId) ?? "Упражнение"}
                 </span>
                 <span className="text-muted-foreground tabular shrink-0 text-xs">
-                  {it.targetSets}×{it.targetRepsMin}–{it.targetRepsMax}
+                  {it.setScheme === "myo_reps"
+                    ? `Myo: ${it.targetRepsMin}–${it.targetRepsMax} + ${it.myoMiniSets ?? 3} мини`
+                    : `${it.targetSets}×${it.targetRepsMin}–${it.targetRepsMax}`}
                   {it.targetWeightKg ? ` · ${formatNum(it.targetWeightKg)} кг` : ""}
                 </span>
               </li>
@@ -421,7 +428,11 @@ function ExerciseBlock({ exercise }: { exercise: ActiveWorkoutExercise }) {
               {formatNum(s.weightKg)} <span className="text-muted-foreground">кг</span>{" "}
               × {s.reps}{" "}
               <span className="text-muted-foreground text-xs">
-                {s.setType !== "working" ? `· ${labelSetType(s.setType)}` : ""}
+                {s.myoRole
+                  ? `· ${s.myoRole === "activation" ? "myo: активация" : "myo: мини"}`
+                  : s.setType !== "working"
+                    ? `· ${labelSetType(s.setType)}`
+                    : ""}
               </span>
             </span>
             {s.rpe != null ? (

@@ -10,9 +10,15 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
-import { setType, workoutStatus } from "./enums";
+import { myoSetRole, setScheme, setType, workoutStatus } from "./enums";
 import { exercises } from "./exercises";
 import { workoutTemplates } from "./templates";
+import {
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_FIRST_REST_SECONDS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+} from "../../lib/domain/workouts/myo-reps";
 
 /** Тренировка — выполненная (или активная) сессия. Может быть создана
  *  по шаблону (templateId) или ad-hoc (templateId IS NULL). */
@@ -70,6 +76,19 @@ export const workoutExercises = pgTable(
       .notNull()
       .references(() => exercises.id, { onDelete: "restrict" }),
     position: integer("position").notNull(),
+    setScheme: setScheme("set_scheme").notNull().default("straight"),
+    myoMiniSets: integer("myo_mini_sets")
+      .notNull()
+      .default(DEFAULT_MYO_MINI_SETS),
+    myoRepsPercent: integer("myo_reps_percent")
+      .notNull()
+      .default(DEFAULT_MYO_REPS_PERCENT),
+    myoRestSeconds: integer("myo_rest_seconds")
+      .notNull()
+      .default(DEFAULT_MYO_REST_SECONDS),
+    myoFirstRestSeconds: integer("myo_first_rest_seconds")
+      .notNull()
+      .default(DEFAULT_MYO_FIRST_REST_SECONDS),
     notes: text("notes"),
   },
   (t) => [
@@ -94,6 +113,9 @@ export const workoutSets = pgTable(
       .references(() => workoutExercises.id, { onDelete: "cascade" }),
     setIndex: integer("set_index").notNull(),
     setType: setType("set_type").notNull().default("working"),
+    /** Роль внутри myo-reps-кластера. Сам подход остаётся working, поэтому
+     *  тоннаж, история и общая статистика считают его обычной работой. */
+    myoRole: myoSetRole("myo_role"),
     weightKg: doublePrecision("weight_kg").notNull(),
     reps: integer("reps").notNull(),
     rpe: doublePrecision("rpe"),

@@ -12,6 +12,7 @@ export type TemplateListSource = {
   name: string;
   description: string | null;
   exerciseCount: number;
+  hasMyoReps?: boolean;
   updatedAt: Date;
   /** Авторство — для бейджа «Тренер» (авто-«следующая тренировка»). Опционально:
    *  у круговых/кардио источника нет → трактуем как ручной. */
@@ -146,7 +147,9 @@ export function buildStrengthTemplateRows(
     id: t.id,
     name: t.name,
     href: `/templates/${t.id}`,
-    meta: formatExerciseCount(t.exerciseCount),
+    meta: t.hasMyoReps
+      ? `Myo-reps · ${formatExerciseCount(t.exerciseCount)}`
+      : formatExerciseCount(t.exerciseCount),
   }));
 }
 

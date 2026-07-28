@@ -6,6 +6,7 @@ import {
   Play,
   Plus,
   Wand2,
+  Zap,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -151,6 +152,12 @@ function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
         {formatTemplateMeta(tpl)}
         {tpl.description ? ` · ${tpl.description}` : ""}
       </p>
+      {tpl.format === "strength" && tpl.hasMyoReps ? (
+        <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+          <Zap className="size-3" aria-hidden="true" />
+          Myo-reps
+        </span>
+      ) : null}
       {tpl.adapted ? (
         // Тренер подогнал шаблон под факт последней тренировки (R-41 — не только
         // цвет: иконка + текст).

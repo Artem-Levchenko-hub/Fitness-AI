@@ -8,6 +8,10 @@ import {
 } from "@/lib/ai/insight-query";
 import { resumeCutoff } from "@/lib/domain";
 import { extractOverallScore } from "@/lib/domain/friends/friend-score";
+import {
+  type MyoSetRole,
+  type SetScheme,
+} from "@/lib/domain/workouts/myo-reps";
 
 type WorkoutStatusLiteral = (typeof schema.workoutStatus.enumValues)[number];
 type SetTypeLiteral = (typeof schema.setType.enumValues)[number];
@@ -16,6 +20,7 @@ export type ActiveWorkoutSet = {
   id: string;
   setIndex: number;
   setType: SetTypeLiteral;
+  myoRole: MyoSetRole | null;
   weightKg: number;
   reps: number;
   rpe: number | null;
@@ -35,6 +40,11 @@ export type ActiveWorkoutExercise = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  setScheme: SetScheme;
+  myoMiniSets: number;
+  myoRepsPercent: number;
+  myoRestSeconds: number;
+  myoFirstRestSeconds: number;
   sets: ActiveWorkoutSet[];
 };
 
@@ -120,6 +130,11 @@ export async function startWorkoutFromTemplate(
           workoutId,
           exerciseId: it.exerciseId,
           position: it.position,
+          setScheme: it.setScheme,
+          myoMiniSets: it.myoMiniSets,
+          myoRepsPercent: it.myoRepsPercent,
+          myoRestSeconds: it.myoRestSeconds,
+          myoFirstRestSeconds: it.myoFirstRestSeconds,
           notes: it.notes,
         })),
       );
@@ -153,6 +168,11 @@ export async function getActiveWorkoutForUser(
       exerciseNameRu: schema.exercises.nameRu,
       exerciseNameEn: schema.exercises.nameEn,
       exerciseSlug: schema.exercises.slug,
+      setScheme: schema.workoutExercises.setScheme,
+      myoMiniSets: schema.workoutExercises.myoMiniSets,
+      myoRepsPercent: schema.workoutExercises.myoRepsPercent,
+      myoRestSeconds: schema.workoutExercises.myoRestSeconds,
+      myoFirstRestSeconds: schema.workoutExercises.myoFirstRestSeconds,
     })
     .from(schema.workoutExercises)
     .innerJoin(
@@ -217,6 +237,11 @@ export async function getActiveWorkoutForUser(
       targetRepsMax: t?.targetRepsMax ?? 12,
       targetWeightKg: t?.targetWeightKg ?? null,
       targetRestSeconds: t?.targetRestSeconds ?? 120,
+      setScheme: r.setScheme,
+      myoMiniSets: r.myoMiniSets,
+      myoRepsPercent: r.myoRepsPercent,
+      myoRestSeconds: r.myoRestSeconds,
+      myoFirstRestSeconds: r.myoFirstRestSeconds,
       sets: setsByWe.get(r.id) ?? [],
     };
   });
@@ -264,7 +289,10 @@ export async function recordSet(
     if (!w) throw new Error("Workout not found or not yours");
 
     const [we] = await tx
-      .select({ id: schema.workoutExercises.id })
+      .select({
+        id: schema.workoutExercises.id,
+        setScheme: schema.workoutExercises.setScheme,
+      })
       .from(schema.workoutExercises)
       .where(
         and(
@@ -275,12 +303,31 @@ export async function recordSet(
       .limit(1);
     if (!we) throw new Error("Exercise not part of this workout");
 
+    let myoRole: MyoSetRole | null = null;
+    if (we.setScheme === "myo_reps") {
+      const [activation] = await tx
+        .select({ id: schema.workoutSets.id })
+        .from(schema.workoutSets)
+        .where(
+          and(
+            eq(
+              schema.workoutSets.workoutExerciseId,
+              input.workoutExerciseId,
+            ),
+            eq(schema.workoutSets.myoRole, "activation"),
+          ),
+        )
+        .limit(1);
+      myoRole = activation ? "mini" : "activation";
+    }
+
     await tx
       .insert(schema.workoutSets)
       .values({
         workoutExerciseId: input.workoutExerciseId,
         setIndex: input.setIndex,
         setType: input.setType ?? "working",
+        myoRole,
         weightKg: input.weightKg,
         reps: input.reps,
         rpe: input.rpe ?? null,
@@ -305,7 +352,11 @@ export async function deleteSet(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [chk] = await tx
-      .select({ workoutId: schema.workoutExercises.workoutId })
+      .select({
+        workoutId: schema.workoutExercises.workoutId,
+        workoutExerciseId: schema.workoutSets.workoutExerciseId,
+        myoRole: schema.workoutSets.myoRole,
+      })
       .from(schema.workoutSets)
       .innerJoin(
         schema.workoutExercises,
@@ -324,6 +375,31 @@ export async function deleteSet(
       )
       .limit(1);
     if (!chk) throw new Error("Set not yours or not in this workout");
+
+    // Без активационного подхода уже записанные myo-мини остаются без опоры:
+    // следующий сабмит стал бы новой "активацией", а история блока сломалась бы.
+    // Поэтому активацию разрешаем удалять только пока мини-подходов ещё нет.
+    if (chk.myoRole === "activation") {
+      const [mini] = await tx
+        .select({ id: schema.workoutSets.id })
+        .from(schema.workoutSets)
+        .where(
+          and(
+            eq(
+              schema.workoutSets.workoutExerciseId,
+              chk.workoutExerciseId,
+            ),
+            eq(schema.workoutSets.myoRole, "mini"),
+            ne(schema.workoutSets.id, setId),
+          ),
+        )
+        .limit(1);
+      if (mini) {
+        throw new Error(
+          "Delete myo mini-sets before deleting the activation set",
+        );
+      }
+    }
 
     await tx.delete(schema.workoutSets).where(eq(schema.workoutSets.id, setId));
   });

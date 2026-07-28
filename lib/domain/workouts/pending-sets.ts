@@ -11,6 +11,7 @@
  */
 
 import type { OutboxMutation } from "../../storage/outbox";
+import type { MyoSetRole } from "./myo-reps";
 
 export type PendingSet = {
   /** Канонический client-UUID — он же ключ строки и идемпотентности. */
@@ -20,6 +21,8 @@ export type PendingSet = {
   weightKg: number;
   reps: number;
   rpe: number | null;
+  myoRole: MyoSetRole | null;
+  completedAt: Date;
 };
 
 function num(value: unknown): number | null {
@@ -58,6 +61,11 @@ function toPendingSet(
     weightKg,
     reps,
     rpe: num(p.rpe),
+    myoRole:
+      p.myoRole === "activation" || p.myoRole === "mini"
+        ? p.myoRole
+        : null,
+    completedAt: new Date(mutation.queuedAt),
   };
 }
 

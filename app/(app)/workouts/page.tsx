@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { SwipeableHistoryCard } from "@/components/workouts/swipeable-history-card";
+import { YourWorkouts } from "@/components/workouts/YourWorkouts";
 import {
   buildHistory,
   type HistoryItem,
@@ -14,16 +15,18 @@ import { getUserProfile } from "@/lib/repos/body.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
 import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
+import { listPinnedTemplates } from "@/lib/repos/templates.repo";
 
 export const metadata: Metadata = { title: "Тренировки" };
 
 export default async function WorkoutsPage() {
   const user = await requireUser();
-  const [strength, circuits, cardio, profile] = await Promise.all([
+  const [strength, circuits, cardio, profile, pinnedTemplates] = await Promise.all([
     listRecentWorkouts(user.id, 60),
     listCircuits(user.id, 60),
     listRecentCardio(user.id, 60),
     getUserProfile(user.id),
+    listPinnedTemplates(user.id),
   ]);
 
   // Группировка истории по неделям — в TZ юзера, иначе тренировка у границы
@@ -37,6 +40,8 @@ export default async function WorkoutsPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
+      <YourWorkouts templates={pinnedTemplates} />
+
       <header className="mb-6">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
           История

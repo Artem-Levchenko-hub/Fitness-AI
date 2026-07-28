@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import type { QuickActivity } from "@/db/schema";
+import type { QuickMyoSet } from "@/db/schema";
 
 /** Доп. активность (быстрый лог вне тренировки) — CRUD. DAL: каждая функция
  *  принимает userId и фильтрует по нему (нет RLS — защищаемся сами, R-7).
@@ -11,9 +12,15 @@ import type { QuickActivity } from "@/db/schema";
 
 export type LogQuickActivityInput = {
   exerciseId: string;
-  mode: "sets" | "total";
+  mode: "sets" | "total" | "myo_reps";
   reps: number;
   weightKg: number | null;
+  myoActivationReps?: number | null;
+  myoMiniSets?: number | null;
+  myoMiniReps?: number | null;
+  myoRestSeconds?: number | null;
+  myoFirstRestSeconds?: number | null;
+  myoSets?: QuickMyoSet[] | null;
 };
 
 export async function logQuickActivity(
@@ -26,6 +33,24 @@ export async function logQuickActivity(
     .returning();
   if (!row) throw new Error("logQuickActivity вернул пустой результат");
   return row;
+}
+
+export async function updateQuickActivity(
+  userId: string,
+  id: string,
+  input: LogQuickActivityInput,
+): Promise<QuickActivity | null> {
+  const [row] = await db
+    .update(schema.quickActivities)
+    .set(input)
+    .where(
+      and(
+        eq(schema.quickActivities.id, id),
+        eq(schema.quickActivities.userId, userId),
+      ),
+    )
+    .returning();
+  return row ?? null;
 }
 
 /** Удаление своей записи. Возвращает true, если строка существовала. */
@@ -49,9 +74,15 @@ export type QuickActivityEntry = {
   id: string;
   exerciseId: string;
   exerciseName: string;
-  mode: "sets" | "total";
+  mode: "sets" | "total" | "myo_reps";
   reps: number;
   weightKg: number | null;
+  myoActivationReps: number | null;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
+  myoRestSeconds: number | null;
+  myoFirstRestSeconds: number | null;
+  myoSets: QuickMyoSet[] | null;
   performedAt: Date;
 };
 
@@ -71,6 +102,12 @@ export async function listQuickActivityForDay(
       mode: schema.quickActivities.mode,
       reps: schema.quickActivities.reps,
       weightKg: schema.quickActivities.weightKg,
+      myoActivationReps: schema.quickActivities.myoActivationReps,
+      myoMiniSets: schema.quickActivities.myoMiniSets,
+      myoMiniReps: schema.quickActivities.myoMiniReps,
+      myoRestSeconds: schema.quickActivities.myoRestSeconds,
+      myoFirstRestSeconds: schema.quickActivities.myoFirstRestSeconds,
+      myoSets: schema.quickActivities.myoSets,
       performedAt: schema.quickActivities.performedAt,
     })
     .from(schema.quickActivities)
@@ -93,10 +130,16 @@ export type RecentQuickExercise = {
   exerciseName: string;
   /** Последний использованный режим — префилл шита (эспандер помнит «тотал»,
    *  подтягивания — «подходами»). */
-  mode: "sets" | "total";
+  mode: "sets" | "total" | "myo_reps";
   /** Последние повторы — префилл степпера. */
   reps: number;
   weightKg: number | null;
+  myoActivationReps: number | null;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
+  myoRestSeconds: number | null;
+  myoFirstRestSeconds: number | null;
+  myoSets: QuickMyoSet[] | null;
 };
 
 /** Последние РАЗНЫЕ упражнения доп. активности (по свежести) с их последней
@@ -113,6 +156,12 @@ export async function listRecentQuickExercises(
       mode: schema.quickActivities.mode,
       reps: schema.quickActivities.reps,
       weightKg: schema.quickActivities.weightKg,
+      myoActivationReps: schema.quickActivities.myoActivationReps,
+      myoMiniSets: schema.quickActivities.myoMiniSets,
+      myoMiniReps: schema.quickActivities.myoMiniReps,
+      myoRestSeconds: schema.quickActivities.myoRestSeconds,
+      myoFirstRestSeconds: schema.quickActivities.myoFirstRestSeconds,
+      myoSets: schema.quickActivities.myoSets,
     })
     .from(schema.quickActivities)
     .innerJoin(

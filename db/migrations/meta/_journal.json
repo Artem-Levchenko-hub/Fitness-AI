@@ -197,6 +197,62 @@
       "when": 1783512120763,
       "tag": "0027_quiet_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785183610607,
+      "tag": "0028_steep_praxagora",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785273000000,
+      "tag": "0029_myo_quick_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1785273100000,
+      "tag": "0030_template_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785273200000,
+      "tag": "0031_template_versions_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785273300000,
+      "tag": "0033_myo_first_rest",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1785273400000,
+      "tag": "0034_dedupe_system_exercises",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785273500000,
+      "tag": "0035_unique_system_exercise_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1785273900000,
+      "tag": "0036_quick_activity_myo_sets",
+      "breakpoints": true
     }
   ]
 }

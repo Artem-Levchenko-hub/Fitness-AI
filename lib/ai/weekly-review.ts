@@ -32,10 +32,11 @@ export type WeekAgg = {
   /** Тоннаж доп. активности (вес×повт; без веса → 0). */
   quickTonnage: number;
   /** Разбивка доп. активности по упражнениям×режиму (mode='sets': entries =
-   *  подходы; mode='total': entries = записи, reps = суммарные повторы). */
+   *  подходы; mode='total': entries = записи, reps = суммарные повторы;
+   *  mode='myo_reps': один кластер Myo-reps с суммарными повторами записи). */
   quickByExercise: {
     name: string;
-    mode: "sets" | "total";
+    mode: "sets" | "total" | "myo_reps";
     entries: number;
     reps: number;
   }[];
@@ -230,6 +231,8 @@ function formatActivityBlock(current: WeekAgg, previous: WeekAgg): string[] {
       lines.push(
         q.mode === "total"
           ? `  - ${q.name}: ${q.reps} повт (тотал)`
+          : q.mode === "myo_reps"
+            ? `  - ${q.name}: ${q.entries} myo-кластер(а) · ${q.reps} повт`
           : `  - ${q.name}: ${q.entries} подх · ${q.reps} повт`,
       );
     }
