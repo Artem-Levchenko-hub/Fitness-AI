@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import type { SetScheme } from "@/lib/domain/workouts/myo-reps";
 import { requireUser } from "@/lib/auth/require-user";
 import { listExercises } from "@/lib/repos/exercises.repo";
 import { createTemplateAction } from "@/server/actions/templates";
@@ -11,8 +12,15 @@ import { TemplateBuilder } from "../template-builder";
 
 export const metadata: Metadata = { title: "Новый шаблон" };
 
-export default async function NewTemplatePage() {
+type Props = {
+  searchParams?: Promise<{ scheme?: string }>;
+};
+
+export default async function NewTemplatePage({ searchParams }: Props) {
   const user = await requireUser();
+  const schemeParam = (await searchParams)?.scheme;
+  const initialDefaultScheme: SetScheme =
+    schemeParam === "myo_reps" ? "myo_reps" : "straight";
   const exercises = await listExercises(user.id);
   const pickerData = exercises.map((e) => ({
     id: e.id,
@@ -42,8 +50,13 @@ export default async function NewTemplatePage() {
 
       <TemplateBuilder
         exercises={pickerData}
+        initialDefaultScheme={initialDefaultScheme}
         action={createTemplateAction}
-        submitLabel="Создать шаблон"
+        submitLabel={
+          initialDefaultScheme === "myo_reps"
+            ? "Создать Myo-reps шаблон"
+            : "Создать шаблон"
+        }
       />
     </main>
   );

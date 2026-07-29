@@ -52,6 +52,7 @@ describe("recordSetFormData", () => {
     expect(fd.get("reps")).toBe("8");
     expect(fd.get("rpe")).toBe("");
     expect(fd.get("restSeconds")).toBe("90");
+    expect(fd.get("myoRole")).toBe("");
     expect(fd.get("clientSetId")).toBe("cid-1");
   });
 

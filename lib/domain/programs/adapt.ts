@@ -9,6 +9,7 @@ import {
   type NextTemplateItem,
   type WorkoutExerciseInput,
 } from "@/lib/domain/templates/next-template";
+import type { SetScheme } from "@/lib/domain/workouts/myo-reps";
 
 export type AdaptItem = {
   exerciseId: string;
@@ -18,6 +19,11 @@ export type AdaptItem = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  setScheme?: SetScheme;
+  myoMiniSets?: number;
+  myoRepsPercent?: number;
+  myoRestSeconds?: number;
+  myoFirstRestSeconds?: number;
   notes?: string | null;
 };
 
@@ -38,6 +44,17 @@ export function mergeProgressionIntoItems(
   return current.map((cur) => {
     const n = byId.get(cur.exerciseId);
     if (!n) return cur;
+    const setScheme = n.setScheme ?? cur.setScheme;
+    const method = setScheme
+      ? {
+          setScheme,
+          myoMiniSets: n.myoMiniSets ?? cur.myoMiniSets,
+          myoRepsPercent: n.myoRepsPercent ?? cur.myoRepsPercent,
+          myoRestSeconds: n.myoRestSeconds ?? cur.myoRestSeconds,
+          myoFirstRestSeconds:
+            n.myoFirstRestSeconds ?? cur.myoFirstRestSeconds,
+        }
+      : {};
     return {
       ...cur,
       targetSets: n.targetSets,
@@ -45,6 +62,7 @@ export function mergeProgressionIntoItems(
       targetRepsMax: n.targetRepsMax,
       targetWeightKg: n.targetWeightKg,
       targetRestSeconds: n.targetRestSeconds,
+      ...method,
     };
   });
 }

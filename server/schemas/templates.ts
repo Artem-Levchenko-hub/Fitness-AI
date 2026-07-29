@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+import {
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_FIRST_REST_SECONDS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+  myoTotalSets,
+  SET_SCHEMES,
+} from "@/lib/domain/workouts/myo-reps";
+
 const templateItemSchema = z.object({
   exerciseId: z.string().uuid(),
   targetSets: z.coerce.number().int().min(1).max(20),
@@ -10,18 +19,43 @@ const templateItemSchema = z.object({
     .optional()
     .transform((v) => (v === "" || v == null ? null : Number(v))),
   targetRestSeconds: z.coerce.number().int().min(15).max(900),
-  /** Миорепсы: активационный подход + мини-сеты. Дефолты повторяют колонки БД —
-   *  старые payload без этих полей остаются валидными (протокол выключен). */
-  myoReps: z.coerce.boolean().default(false),
-  myoMiniSets: z.coerce.number().int().min(1).max(10).default(3),
-  myoMiniReps: z.coerce.number().int().min(1).max(10).default(5),
-  myoMiniRestSeconds: z.coerce.number().int().min(5).max(60).default(30),
+  setScheme: z.enum(SET_SCHEMES).default("straight"),
+  myoMiniSets: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .default(DEFAULT_MYO_MINI_SETS),
+  myoRepsPercent: z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(50)
+    .default(DEFAULT_MYO_REPS_PERCENT),
+  myoRestSeconds: z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(60)
+    .default(DEFAULT_MYO_REST_SECONDS),
+  myoFirstRestSeconds: z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(90)
+    .default(DEFAULT_MYO_FIRST_REST_SECONDS),
   notes: z
     .string()
     .max(500)
     .optional()
     .transform((v) => (v === "" ? null : (v ?? null))),
-});
+}).transform((item) => ({
+  ...item,
+  targetSets:
+    item.setScheme === "myo_reps"
+      ? myoTotalSets(item.myoMiniSets)
+      : item.targetSets,
+}));
 
 export const templateInputSchema = z.object({
   name: z

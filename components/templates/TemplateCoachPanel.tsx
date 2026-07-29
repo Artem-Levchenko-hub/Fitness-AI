@@ -58,6 +58,10 @@ export function TemplateCoachPanel({ templateId }: { templateId: string }) {
           repsMin: it.repsMin,
           repsMax: it.repsMax,
           restSeconds: it.restSeconds,
+          setScheme: it.setScheme,
+          myoMiniSets: it.myoMiniSets,
+          myoRepsPercent: it.myoRepsPercent,
+          myoRestSeconds: it.myoRestSeconds,
           note: it.note,
         })),
       });
@@ -150,10 +154,25 @@ export function TemplateCoachPanel({ templateId }: { templateId: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{it.nameRu}</p>
                     <div className="text-muted-foreground tabular mt-0.5 flex flex-wrap gap-x-3 text-xs">
-                      <span>
-                        {it.sets}×{it.repsMin}–{it.repsMax}
-                      </span>
-                      <span>отдых {it.restSeconds}с</span>
+                      {it.setScheme === "myo_reps" ? (
+                        <>
+                          <span>Myo-reps</span>
+                          <span>
+                            активация {it.repsMin}–{it.repsMax}
+                          </span>
+                          <span>
+                            {it.myoMiniSets} мини по {it.myoRepsPercent}%
+                          </span>
+                          <span>отдых {it.myoRestSeconds}с</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            {it.sets}×{it.repsMin}–{it.repsMax}
+                          </span>
+                          <span>отдых {it.restSeconds}с</span>
+                        </>
+                      )}
                     </div>
                     {it.note ? (
                       <p className="text-muted-foreground/80 mt-1 text-xs leading-relaxed">

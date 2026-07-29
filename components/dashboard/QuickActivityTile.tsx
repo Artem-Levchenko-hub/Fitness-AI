@@ -31,6 +31,9 @@ export async function QuickActivityTile({
       exerciseName: e.exerciseName,
       mode: e.mode,
       reps: e.reps,
+      myoActivationReps: e.myoActivationReps,
+      myoMiniSets: e.myoMiniSets,
+      myoMiniReps: e.myoMiniReps,
     })),
   );
 
@@ -43,6 +46,11 @@ export async function QuickActivityTile({
         mode: e.mode,
         reps: e.reps,
         weightKg: e.weightKg,
+        myoActivationReps: e.myoActivationReps,
+        myoMiniSets: e.myoMiniSets,
+        myoMiniReps: e.myoMiniReps,
+        myoRestSeconds: e.myoRestSeconds,
+        myoFirstRestSeconds: e.myoFirstRestSeconds,
       }))}
       recent={recent}
       exercises={exercises.map((ex) => ({

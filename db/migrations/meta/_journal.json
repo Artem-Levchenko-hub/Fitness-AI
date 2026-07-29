@@ -201,29 +201,50 @@
     {
       "idx": 28,
       "version": "7",
-      "when": 1784321864777,
-      "tag": "0028_bright_greymalkin",
+      "when": 1785183610607,
+      "tag": "0028_steep_praxagora",
       "breakpoints": true
     },
     {
       "idx": 29,
       "version": "7",
-      "when": 1784332993835,
-      "tag": "0029_lively_glorian",
+      "when": 1785277200000,
+      "tag": "0029_myo_quick_activity",
       "breakpoints": true
     },
     {
       "idx": 30,
       "version": "7",
-      "when": 1784334726569,
-      "tag": "0030_rainy_shooting_star",
+      "when": 1785280800000,
+      "tag": "0030_template_versions",
       "breakpoints": true
     },
     {
       "idx": 31,
       "version": "7",
-      "when": 1785186518422,
-      "tag": "0031_outstanding_silver_samurai",
+      "when": 1785284400000,
+      "tag": "0031_template_versions_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785288000000,
+      "tag": "0033_myo_first_rest",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1785291600000,
+      "tag": "0034_dedupe_system_exercises",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785295200000,
+      "tag": "0035_unique_system_exercise_slug",
       "breakpoints": true
     }
   ]

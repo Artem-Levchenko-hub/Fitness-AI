@@ -16,12 +16,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
-import {
-  myoPhaseLabel,
-  plannedSetCount,
-  repsTargetForNextSet,
-  restBeforeNextSet,
-} from "@/lib/domain/workouts/myo";
 import { GoalTrackBar } from "@/components/progression/GoalTrackBar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +29,7 @@ import {
   pendingSetsFromOutbox,
   type PendingSet,
 } from "@/lib/domain/workouts/pending-sets";
+import { myoMiniReps } from "@/lib/domain/workouts/myo-reps";
 import { enqueue, listPending } from "@/lib/storage/outbox";
 import type { PreviousSessionSummary } from "@/lib/domain/exercise/previous-session";
 import type { GoalProgressView } from "@/lib/domain/progression/goal-projection";
@@ -99,7 +94,7 @@ export function ActiveWorkoutView({
       workout.exercises.filter(
         (e) =>
           e.sets.length + (pendingByExerciseId.get(e.id)?.length ?? 0) >=
-          plannedSetCount(e.targetSets, e),
+          e.targetSets,
       ).length,
     [workout.exercises, pendingByExerciseId],
   );
@@ -314,35 +309,39 @@ function ExerciseCard({
   // завершённость и следующий индекс монотонны (line H15.3b-2 sharpen — иначе
   // N офлайн-подходов слились бы на одном setIndex).
   const totalDone = exercise.sets.length + pending.length;
-  // Миорепсы: план = активационный + мини-сеты (targetSets игнорируется),
-  // отдых/повторы следующего подхода зависят от фазы (см. domain/workouts/myo).
-  const planned = plannedSetCount(exercise.targetSets, exercise);
-  const completed = totalDone >= planned;
-  const activationReps =
-    exercise.sets[0]?.reps ?? pending[0]?.reps ?? null;
+  const completed = totalDone >= exercise.targetSets;
   const lastSet = exercise.sets[exercise.sets.length - 1];
   const lastPendingSet = pending[pending.length - 1];
   const lastCompletedAt =
     lastPendingSet?.completedAt ?? lastSet?.completedAt ?? null;
+  const isMyo = exercise.setScheme === "myo_reps";
+  const activationSet =
+    exercise.sets.find((s) => s.myoRole === "activation") ??
+    pending.find((s) => s.myoRole === "activation");
+  const nextMyoRole = isMyo
+    ? activationSet
+      ? "mini"
+      : "activation"
+    : null;
+  const activationReps = activationSet?.reps ?? exercise.targetRepsMax;
+  const miniDone =
+    exercise.sets.filter((s) => s.myoRole === "mini").length +
+    pending.filter((s) => s.myoRole === "mini").length;
+  const hasMyoMiniSets = miniDone > 0;
   const nextSetIndex =
     Math.max(
       -1,
       ...exercise.sets.map((s) => s.setIndex),
       ...pending.map((s) => s.setIndex),
     ) + 1;
-  const nextRestSeconds = restBeforeNextSet(
-    exercise.targetRestSeconds,
-    exercise,
-    totalDone,
-  );
-  const nextReps = repsTargetForNextSet(
-    exercise.targetRepsMin,
-    exercise.targetRepsMax,
-    exercise,
-    totalDone,
-    activationReps,
-  );
-  const phase = myoPhaseLabel(exercise, totalDone);
+  const nextReps = isMyo && nextMyoRole === "mini"
+    ? myoMiniReps(activationReps, exercise.myoRepsPercent)
+    : exercise.targetRepsMax;
+  const activeRestSeconds = isMyo
+    ? nextMyoRole === "mini" && !hasMyoMiniSets
+      ? exercise.myoFirstRestSeconds
+      : exercise.myoRestSeconds
+    : exercise.targetRestSeconds;
 
   return (
     <li
@@ -375,15 +374,19 @@ function ExerciseCard({
             {exercise.exerciseNameRu}
           </h3>
           <p className="text-muted-foreground tabular mt-0.5 text-xs">
-            <span>
-              {totalDone}/{planned} ·{" "}
-              {exercise.targetRepsMin}–{exercise.targetRepsMax} повт.
-            </span>
+            {isMyo ? (
+              <span>
+                Myo-reps · {totalDone}/{exercise.targetSets} · активация{" "}
+                {exercise.targetRepsMin}–{exercise.targetRepsMax}
+              </span>
+            ) : (
+              <span>
+                {totalDone}/{exercise.targetSets} ·{" "}
+                {exercise.targetRepsMin}–{exercise.targetRepsMax} повт.
+              </span>
+            )}
             {exercise.targetWeightKg ? (
               <span> · цель {exercise.targetWeightKg} кг</span>
-            ) : null}
-            {exercise.myoReps ? (
-              <span className="text-primary font-medium"> · миорепсы</span>
             ) : null}
           </p>
         </div>
@@ -408,6 +411,13 @@ function ExerciseCard({
                   </span>
                   <span className="tabular flex-1 text-sm font-medium">
                     {s.weightKg} кг × {s.reps}
+                    {s.myoRole ? (
+                      <span className="text-muted-foreground ml-2 text-xs font-normal">
+                        {s.myoRole === "activation"
+                          ? "активация"
+                          : "мини-подход"}
+                      </span>
+                    ) : null}
                     {s.rpe != null ? (
                       <span className="text-muted-foreground ml-2 text-xs font-normal">
                         RPE {s.rpe}
@@ -422,7 +432,13 @@ function ExerciseCard({
                       variant="ghost"
                       size="icon"
                       aria-label="Удалить подход"
+                      title={
+                        s.myoRole === "activation" && hasMyoMiniSets
+                          ? "Сначала удалите или дождитесь синхронизации мини-подходов"
+                          : undefined
+                      }
                       className="text-muted-foreground hover:text-destructive size-8"
+                      disabled={s.myoRole === "activation" && hasMyoMiniSets}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -442,6 +458,13 @@ function ExerciseCard({
                   </span>
                   <span className="tabular flex-1 text-sm font-medium">
                     {s.weightKg} кг × {s.reps}
+                    {s.myoRole ? (
+                      <span className="text-muted-foreground ml-2 text-xs font-normal">
+                        {s.myoRole === "activation"
+                          ? "активация"
+                          : "мини-подход"}
+                      </span>
+                    ) : null}
                     {s.rpe != null ? (
                       <span className="text-muted-foreground ml-2 text-xs font-normal">
                         RPE {s.rpe}
@@ -479,25 +502,42 @@ function ExerciseCard({
                   в точке решения. Нет цели → ничего (R-37). */}
               {goal ? <GoalTrackBar view={goal} /> : null}
 
+              {isMyo ? (
+                <div className="border-border bg-muted/40 rounded-xl border px-3 py-2 text-xs leading-relaxed">
+                  {nextMyoRole === "activation" ? (
+                    <p>
+                      Активация: тот же рабочий вес, почти или до технического
+                      отказа. Если техника начинает плыть, остановись раньше и
+                      снизь вес. После записи таймер поставит{" "}
+                      {exercise.myoFirstRestSeconds}с до первого мини-подхода,
+                      затем {exercise.myoRestSeconds}с.
+                    </p>
+                  ) : (
+                    <p>
+                      Мини-подход {miniDone + 1} из {exercise.myoMiniSets}: цель{" "}
+                      <span className="font-semibold">{nextReps} повт.</span>{" "}
+                      ({exercise.myoRepsPercent}% от активации), тот же вес,
+                      пока техника сохраняется: первый отдых{" "}
+                      {exercise.myoFirstRestSeconds}с, затем{" "}
+                      {exercise.myoRestSeconds}с.
+                    </p>
+                  )}
+                  <p className="text-muted-foreground mt-2">
+                    Метод для экономии времени и вариативности, а не
+                    автоматический эквивалент обычных длинных сетов. Подбирай
+                    нагрузку консервативно; при боли, головокружении,
+                    сердечно-сосудистых ограничениях или других
+                    противопоказаниях работай только с тренером или врачом.
+                  </p>
+                </div>
+              ) : null}
+
               {lastCompletedAt ? (
                 <RestTimer
-                  targetSeconds={nextRestSeconds}
+                  targetSeconds={activeRestSeconds}
                   startedAt={lastCompletedAt}
                   demoSlug={exercise.exerciseSlug}
                 />
-              ) : null}
-
-              {/* Фаза миорепсов в точке решения: что сейчас — активационный
-                  почти до отказа или короткий мини-сет (R-37: без протокола
-                  строки нет). */}
-              {phase ? (
-                <p className="bg-primary/10 text-primary tabular rounded-lg px-3 py-2 text-xs font-medium">
-                  Сейчас: {phase} ·{" "}
-                  {nextReps.min === nextReps.max
-                    ? `${nextReps.max} повт.${totalDone >= 1 ? " (30% от активации)" : ""}`
-                    : `${nextReps.min}–${nextReps.max} повт. почти до отказа`}
-                  {totalDone >= 1 ? ` · отдых ${nextRestSeconds} с` : ""}
-                </p>
               ) : null}
 
               <SetInput
@@ -511,8 +551,11 @@ function ExerciseCard({
                   exercise.targetWeightKg ??
                   null
                 }
-                defaultRepsMax={nextReps.max}
+                defaultRepsMax={nextReps}
+                defaultRpe={nextMyoRole === "activation" ? 9 : null}
                 restStartedAt={lastCompletedAt}
+                myoRole={nextMyoRole}
+                myoMiniIndex={nextMyoRole === "mini" ? miniDone + 1 : null}
                 onOfflineRecord={onOfflineRecord}
               />
             </>

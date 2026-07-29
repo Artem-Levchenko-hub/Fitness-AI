@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { ExercisePicker, type PickerExercise } from "@/components/app/ExercisePicker";
+import { MyoRepsResearchNote } from "@/components/templates/MyoRepsResearchNote";
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import {
@@ -16,6 +17,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { QuickDaySummary } from "@/lib/domain/quick-activity/summary";
+import {
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+  myoMiniReps,
+} from "@/lib/domain/workouts/myo-reps";
 import type { RecentQuickExercise } from "@/lib/repos/quick-activity.repo";
 import {
   deleteQuickActivityAction,
@@ -23,20 +30,50 @@ import {
 } from "@/server/actions/quick-activity";
 import { cn } from "@/lib/utils";
 
+type QuickMode = "sets" | "total" | "myo_reps";
+
 type TodayEntry = {
   id: string;
   exerciseName: string;
-  mode: "sets" | "total";
+  mode: QuickMode;
   reps: number;
   weightKg: number | null;
+  myoActivationReps: number | null;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
+  myoRestSeconds: number | null;
+  myoFirstRestSeconds: number | null;
 };
 
 type Prefill = {
   exerciseId: string;
-  mode: "sets" | "total";
+  mode: QuickMode;
   reps: number;
   weightKg: number | null;
+  myoActivationReps: number | null;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
+  myoRestSeconds: number | null;
+  myoFirstRestSeconds: number | null;
 };
+
+function quickEntryDetail(entry: {
+  mode: QuickMode;
+  reps: number;
+  myoActivationReps: number | null;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
+}) {
+  if (
+    entry.mode === "myo_reps" &&
+    entry.myoActivationReps != null &&
+    entry.myoMiniSets != null &&
+    entry.myoMiniReps != null
+  ) {
+    return `Myo ${entry.myoActivationReps}+${entry.myoMiniSets}×${entry.myoMiniReps}`;
+  }
+  return `${entry.reps}${entry.mode === "total" ? " (тотал)" : ""}`;
+}
 
 /** Карточка «Доп. активность»: сводка сегодня + чипы-повторы + bottom-sheet
  *  быстрой записи. Цель — 2 тапа на повтор привычного (чип → «Сохранить»).
@@ -56,9 +93,20 @@ export function QuickActivityCard({
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [exerciseId, setExerciseId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"sets" | "total">("sets");
+  const [mode, setMode] = useState<QuickMode>("sets");
   const [repsText, setRepsText] = useState("10");
   const [weightText, setWeightText] = useState("");
+  const [myoActivationText, setMyoActivationText] = useState("10");
+  const [myoMiniSetsText, setMyoMiniSetsText] = useState(
+    String(DEFAULT_MYO_MINI_SETS),
+  );
+  const [myoMiniRepsText, setMyoMiniRepsText] = useState(
+    String(myoMiniReps(10, DEFAULT_MYO_REPS_PERCENT)),
+  );
+  const [myoRestText, setMyoRestText] = useState(
+    String(DEFAULT_MYO_REST_SECONDS),
+  );
+  const [myoFirstRestText, setMyoFirstRestText] = useState("40");
 
   const exerciseName =
     exercises.find((e) => e.id === exerciseId)?.nameRu ?? null;
@@ -69,14 +117,54 @@ export function QuickActivityCard({
       setMode(prefill.mode);
       setRepsText(String(prefill.reps));
       setWeightText(prefill.weightKg == null ? "" : String(prefill.weightKg));
+      setMyoActivationText(
+        String(prefill.myoActivationReps ?? Math.max(1, prefill.reps)),
+      );
+      setMyoMiniSetsText(
+        String(prefill.myoMiniSets ?? DEFAULT_MYO_MINI_SETS),
+      );
+      setMyoMiniRepsText(
+        String(
+          prefill.myoMiniReps ??
+            myoMiniReps(
+              prefill.myoActivationReps ?? Math.max(1, prefill.reps),
+              DEFAULT_MYO_REPS_PERCENT,
+            ),
+        ),
+      );
+      setMyoRestText(
+        String(prefill.myoRestSeconds ?? DEFAULT_MYO_REST_SECONDS),
+      );
+      setMyoFirstRestText(
+        String(prefill.myoFirstRestSeconds ?? 40),
+      );
     } else if (!exerciseId && recent[0]) {
-      // Пустой старт: префилл последним использованным упражнением — режим и
-      // повторы оно «помнит» само (эспандер → тотал 100, турник → подход 10).
       setExerciseId(recent[0].exerciseId);
       setMode(recent[0].mode);
       setRepsText(String(recent[0].reps));
       setWeightText(
         recent[0].weightKg == null ? "" : String(recent[0].weightKg),
+      );
+      setMyoActivationText(
+        String(recent[0].myoActivationReps ?? Math.max(1, recent[0].reps)),
+      );
+      setMyoMiniSetsText(
+        String(recent[0].myoMiniSets ?? DEFAULT_MYO_MINI_SETS),
+      );
+      setMyoMiniRepsText(
+        String(
+          recent[0].myoMiniReps ??
+            myoMiniReps(
+              recent[0].myoActivationReps ?? Math.max(1, recent[0].reps),
+              DEFAULT_MYO_REPS_PERCENT,
+            ),
+        ),
+      );
+      setMyoRestText(
+        String(recent[0].myoRestSeconds ?? DEFAULT_MYO_REST_SECONDS),
+      );
+      setMyoFirstRestText(
+        String(recent[0].myoFirstRestSeconds ?? 40),
       );
     }
     setOpen(true);
@@ -87,24 +175,76 @@ export function QuickActivityCard({
     setRepsText(String(Math.max(1, cur + delta)));
   };
 
+  const bumpMyoActivation = (delta: number) => {
+    const next = Math.max(1, (parseInt(myoActivationText || "0", 10) || 0) + delta);
+    setMyoActivationText(String(next));
+  };
+
   const save = (keepOpen: boolean) => {
-    const reps = parseInt(repsText || "0", 10) || 0;
     if (!exerciseId) {
       toast.error("Выберите упражнение");
       return;
     }
+
+    const weightRaw =
+      weightText.trim() === "" ? null : Number(weightText.replace(",", "."));
+    const weightKg =
+      weightRaw != null && Number.isFinite(weightRaw) ? weightRaw : null;
+
+    if (mode === "myo_reps") {
+      const myoActivationReps = parseInt(myoActivationText || "0", 10) || 0;
+      const myoMiniSets = parseInt(myoMiniSetsText || "0", 10) || 0;
+      const myoMiniSetReps = parseInt(myoMiniRepsText || "0", 10) || 0;
+      const myoRestSeconds = parseInt(myoRestText || "0", 10) || 0;
+      const myoFirstRestSeconds =
+        parseInt(myoFirstRestText || "0", 10) || 0;
+      if (
+        myoActivationReps < 1 ||
+        myoMiniSets < 1 ||
+        myoMiniSetReps < 1 ||
+        myoRestSeconds < 10
+        || myoFirstRestSeconds < 10
+      ) {
+        toast.error("Проверьте параметры Myo-reps");
+        return;
+      }
+      const reps = myoActivationReps + myoMiniSets * myoMiniSetReps;
+      startTransition(async () => {
+        const res = await logQuickActivityAction({
+          exerciseId,
+          mode,
+          reps,
+          weightKg,
+          myoActivationReps,
+          myoMiniSets,
+          myoMiniReps: myoMiniSetReps,
+          myoRestSeconds,
+          myoFirstRestSeconds,
+        });
+        if (res.status === "success") {
+          toast.success(
+            `${exerciseName ?? "Записано"}: Myo ${myoActivationReps}+${myoMiniSets}×${myoMiniSetReps}`,
+          );
+          setOpen(false);
+          router.refresh();
+        } else {
+          toast.error(res.message);
+        }
+      });
+      return;
+    }
+
+    const reps = parseInt(repsText || "0", 10) || 0;
     if (reps < 1) {
       toast.error("Повторы ≥ 1");
       return;
     }
-    const weightRaw =
-      weightText.trim() === "" ? null : Number(weightText.replace(",", "."));
     startTransition(async () => {
       const res = await logQuickActivityAction({
         exerciseId,
         mode,
         reps,
-        weightKg: weightRaw != null && Number.isFinite(weightRaw) ? weightRaw : null,
+        weightKg,
       });
       if (res.status === "success") {
         toast.success(
@@ -142,7 +282,7 @@ export function QuickActivityCard({
             </p>
           ) : (
             <p className="text-muted-foreground mt-0.5 text-sm">
-              Подход между делом — турник, эспандер, отжимания
+              Подход между делом — турник, эспандер, отжимания, Myo-reps
             </p>
           )}
         </div>
@@ -169,12 +309,26 @@ export function QuickActivityCard({
                   mode: r.mode,
                   reps: r.reps,
                   weightKg: r.weightKg,
+                  myoActivationReps: r.myoActivationReps,
+                  myoMiniSets: r.myoMiniSets,
+                  myoMiniReps: r.myoMiniReps,
+                  myoRestSeconds: r.myoRestSeconds,
+                  myoFirstRestSeconds: r.myoFirstRestSeconds,
                 })
               }
               className="border-border bg-background text-foreground hover:bg-accent inline-flex h-11 items-center gap-1.5 rounded-full border px-4 text-sm font-medium"
             >
               {r.exerciseName}
-              <span className="text-muted-foreground tabular">· {r.reps}</span>
+              <span className="text-muted-foreground tabular">
+                ·{" "}
+                {quickEntryDetail({
+                  mode: r.mode,
+                  reps: r.reps,
+                  myoActivationReps: r.myoActivationReps,
+                  myoMiniSets: r.myoMiniSets,
+                  myoMiniReps: r.myoMiniReps,
+                })}
+              </span>
             </button>
           ))}
         </div>
@@ -186,8 +340,8 @@ export function QuickActivityCard({
             <SheetHeader className="px-0">
               <SheetTitle>Доп. активность</SheetTitle>
               <SheetDescription>
-                Подход или тотал за день — без создания тренировки. Учтётся в
-                статистике, аватаре и недельном разборе.
+                Подход, тотал или Myo-reps-кластер — без создания тренировки.
+                Учтётся в статистике, аватаре и недельном разборе.
               </SheetDescription>
             </SheetHeader>
 
@@ -198,12 +352,12 @@ export function QuickActivityCard({
                 onChange={(id) => setExerciseId(id)}
               />
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <ModeButton
                   active={mode === "sets"}
                   onClick={() => setMode("sets")}
-                  title="Подходами"
-                  hint="подход = запись"
+                  title="Подход"
+                  hint="одна запись"
                 />
                 <ModeButton
                   active={mode === "total"}
@@ -211,34 +365,123 @@ export function QuickActivityCard({
                   title="Тотал"
                   hint="всего за день"
                 />
+                <ModeButton
+                  active={mode === "myo_reps"}
+                  onClick={() => setMode("myo_reps")}
+                  title="Myo-reps"
+                  hint="кластер"
+                />
               </div>
 
-              <div>
-                <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
-                  {mode === "total" ? "Повторов всего" : "Повторов в подходе"}
-                </p>
-                <div className="flex items-center gap-2">
-                  <StepBtn onClick={() => bumpReps(-5)} label="−5" />
-                  <StepBtn
-                    onClick={() => bumpReps(-1)}
-                    ariaLabel="Минус один"
-                    icon={<Minus className="size-5" />}
-                  />
-                  <NumberField
-                    value={repsText}
-                    onChange={setRepsText}
-                    className="tabular h-14 flex-1 text-center text-2xl font-semibold"
-                    aria-label="Повторы"
-                    data-testid="quick-activity-reps"
-                  />
-                  <StepBtn
-                    onClick={() => bumpReps(1)}
-                    ariaLabel="Плюс один"
-                    icon={<Plus className="size-5" />}
-                  />
-                  <StepBtn onClick={() => bumpReps(5)} label="+5" />
+              {mode === "myo_reps" ? (
+                <MyoRepsResearchNote
+                  compact
+                  summary={`${myoActivationText} активация · ${myoMiniSetsText}×${myoMiniRepsText} · отдых ${myoFirstRestText}/${myoRestText}с`}
+                >
+                  <div className="space-y-4">
+                  <div>
+                    <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+                      Активационный подход
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <StepBtn onClick={() => bumpMyoActivation(-1)} label="−1" />
+                      <NumberField
+                        value={myoActivationText}
+                        onChange={setMyoActivationText}
+                        className="tabular h-14 flex-1 text-center text-2xl font-semibold"
+                        aria-label="Активационные повторы"
+                      />
+                      <StepBtn onClick={() => bumpMyoActivation(1)} label="+1" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div>
+                      <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+                        Мини-подходы
+                      </p>
+                      <NumberField
+                        value={myoMiniSetsText}
+                        onChange={setMyoMiniSetsText}
+                        className="tabular h-11 text-center"
+                        aria-label="Число мини-подходов"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+                        До 1-го мини
+                      </p>
+                      <NumberField
+                        value={myoFirstRestText}
+                        onChange={setMyoFirstRestText}
+                        className="tabular h-11 text-center"
+                        aria-label="Отдых до первого мини-подхода"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+                        Повт/мини
+                      </p>
+                      <NumberField
+                        value={myoMiniRepsText}
+                        onChange={setMyoMiniRepsText}
+                        className="tabular h-11 text-center"
+                        aria-label="Повторы в мини-подходе"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+                        Между мини
+                      </p>
+                      <NumberField
+                        value={myoRestText}
+                        onChange={setMyoRestText}
+                        className="tabular h-11 text-center"
+                        aria-label="Короткий отдых в секундах"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setMyoFirstRestText("40");
+                      setMyoRestText("20");
+                    }}
+                  >
+                    Исследовательский пресет 40/20
+                  </Button>
+                  </div>
+                </MyoRepsResearchNote>
+              ) : (
+                <div>
+                  <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+                    {mode === "total" ? "Повторов всего" : "Повторов в подходе"}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <StepBtn onClick={() => bumpReps(-5)} label="−5" />
+                    <StepBtn
+                      onClick={() => bumpReps(-1)}
+                      ariaLabel="Минус один"
+                      icon={<Minus className="size-5" />}
+                    />
+                    <NumberField
+                      value={repsText}
+                      onChange={setRepsText}
+                      className="tabular h-14 flex-1 text-center text-2xl font-semibold"
+                      aria-label="Повторы"
+                      data-testid="quick-activity-reps"
+                    />
+                    <StepBtn
+                      onClick={() => bumpReps(1)}
+                      ariaLabel="Плюс один"
+                      icon={<Plus className="size-5" />}
+                    />
+                    <StepBtn onClick={() => bumpReps(5)} label="+5" />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
@@ -293,8 +536,7 @@ export function QuickActivityCard({
                         <span className="min-w-0 truncate text-sm">
                           {e.exerciseName}
                           <span className="text-muted-foreground tabular ml-1.5">
-                            {e.reps}
-                            {e.mode === "total" ? " (тотал)" : ""}
+                            {quickEntryDetail(e)}
                             {e.weightKg != null ? ` · +${e.weightKg} кг` : ""}
                           </span>
                         </span>
@@ -337,7 +579,7 @@ function ModeButton({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex h-14 flex-col items-center justify-center rounded-xl border text-sm font-medium",
+        "flex min-h-14 flex-col items-center justify-center rounded-xl border px-2 text-sm font-medium",
         active
           ? "border-primary bg-primary/10 text-foreground"
           : "border-border bg-background text-muted-foreground",

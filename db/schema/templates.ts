@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
@@ -8,12 +8,20 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
-import { templateSource } from "./enums";
+import { setScheme, templateSource } from "./enums";
 import { exercises } from "./exercises";
 import { trainingPrograms } from "./training-programs";
+import {
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_FIRST_REST_SECONDS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+  type SetScheme,
+} from "../../lib/domain/workouts/myo-reps";
 
 /** Один элемент снимка-оригинала шаблона (template_exercises минус identity-id):
  *  ровно то, что нужно восстановить при откате адаптации. Зеркалит вставку в
@@ -26,13 +34,12 @@ export type PreAdaptSnapshotItem = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
-  notes: string | null;
-  /** Миорепс-протокол. Опциональны: старые снимки (до 0029) их не содержат —
-   *  восстановление подставляет дефолты (выкл). */
-  myoReps?: boolean;
+  setScheme?: SetScheme;
   myoMiniSets?: number;
-  myoMiniReps?: number;
-  myoMiniRestSeconds?: number;
+  myoRepsPercent?: number;
+  myoRestSeconds?: number;
+  myoFirstRestSeconds?: number;
+  notes: string | null;
 };
 
 /** Шаблон тренировки. Принадлежит пользователю — стабильный набор
@@ -80,6 +87,10 @@ export const workoutTemplates = pgTable(
      *  этот шаблон сам (атлет вернул свой вариант и не хочет правок), пока заново
      *  не включит. true → finish пропускает адаптацию этого шаблона. */
     adaptOptOut: boolean("adapt_opt_out").notNull().default(false),
+    /** Позиция в основном потоке «Твои тренировки». null = не закреплён. */
+    pinnedPosition: integer("pinned_position"),
+    /** Номер активного неизменяемого снимка в template_versions. */
+    currentVersion: integer("current_version").notNull().default(1),
     archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()
@@ -92,6 +103,56 @@ export const workoutTemplates = pgTable(
   (t) => [
     index("workout_templates_user_idx").on(t.userId),
     index("workout_templates_program_idx").on(t.programId, t.dayOrder),
+    uniqueIndex("workout_templates_user_pinned_position_uk")
+      .on(t.userId, t.pinnedPosition)
+      .where(sql`${t.pinnedPosition} is not null`),
+  ],
+);
+
+export type TemplateVersionSource = "manual" | "trainer" | "rollback";
+
+/** Неизменяемый снимок рабочего шаблона. Текущие template_exercises остаются
+ *  быстрым read-model для старта тренировки, а эта таблица даёт сравнение,
+ *  подтверждение и безопасный откат без потери предыдущих вариантов. */
+export const templateVersions = pgTable(
+  "template_versions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    templateId: text("template_id")
+      .notNull()
+      .references(() => workoutTemplates.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    source: text("source").$type<TemplateVersionSource>().notNull(),
+    sourceWorkoutId: text("source_workout_id"),
+    snapshot: jsonb("snapshot").$type<PreAdaptSnapshotItem[]>().notNull(),
+    summary: text("summary").notNull(),
+    rationale: text("rationale"),
+    confidence: doublePrecision("confidence"),
+    requiresConfirmation: boolean("requires_confirmation")
+      .notNull()
+      .default(false),
+    confirmedAt: timestamp("confirmed_at", {
+      mode: "date",
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("template_versions_template_number_uk").on(
+      t.templateId,
+      t.versionNumber,
+    ),
+    uniqueIndex("template_versions_template_source_workout_uk")
+      .on(t.templateId, t.sourceWorkoutId)
+      .where(sql`${t.sourceWorkoutId} is not null`),
+    index("template_versions_template_created_idx").on(
+      t.templateId,
+      t.createdAt,
+    ),
   ],
 );
 
@@ -116,17 +177,19 @@ export const templateExercises = pgTable(
     targetRepsMax: integer("target_reps_max").notNull().default(12),
     targetWeightKg: doublePrecision("target_weight_kg"),
     targetRestSeconds: integer("target_rest_seconds").notNull().default(120),
-    /** Миорепсы: targetSets игнорируется как счётчик — план = 1 активационный
-     *  подход (targetRepsMin–Max почти до отказа) + myoMiniSets мини-сетов по
-     *  30% повторов активации с отдыхом myoMiniRestSeconds. Подходы
-     *  пишутся обычными working-строками (объём/PR/статистика работают без
-     *  спец-логики; мини никогда не перебьёт активационный по weight×reps). */
-    myoReps: boolean("myo_reps").notNull().default(false),
-    /** Product-default: три мини-сета по запросу владельца. */
-    myoMiniSets: integer("myo_mini_sets").notNull().default(3),
-    /** Legacy fallback, если фактические повторы активации недоступны. */
-    myoMiniReps: integer("myo_mini_reps").notNull().default(5),
-    myoMiniRestSeconds: integer("myo_mini_rest_seconds").notNull().default(30),
+    setScheme: setScheme("set_scheme").notNull().default("straight"),
+    myoMiniSets: integer("myo_mini_sets")
+      .notNull()
+      .default(DEFAULT_MYO_MINI_SETS),
+    myoRepsPercent: integer("myo_reps_percent")
+      .notNull()
+      .default(DEFAULT_MYO_REPS_PERCENT),
+    myoRestSeconds: integer("myo_rest_seconds")
+      .notNull()
+      .default(DEFAULT_MYO_REST_SECONDS),
+    myoFirstRestSeconds: integer("myo_first_rest_seconds")
+      .notNull()
+      .default(DEFAULT_MYO_FIRST_REST_SECONDS),
     notes: text("notes"),
   },
   (t) => [
@@ -164,6 +227,17 @@ export const templateExercisesRelations = relations(
   }),
 );
 
+export const templateVersionsRelations = relations(
+  templateVersions,
+  ({ one }) => ({
+    template: one(workoutTemplates, {
+      fields: [templateVersions.templateId],
+      references: [workoutTemplates.id],
+    }),
+  }),
+);
+
 export type WorkoutTemplate = typeof workoutTemplates.$inferSelect;
 export type NewWorkoutTemplate = typeof workoutTemplates.$inferInsert;
 export type TemplateExercise = typeof templateExercises.$inferSelect;
+export type TemplateVersion = typeof templateVersions.$inferSelect;

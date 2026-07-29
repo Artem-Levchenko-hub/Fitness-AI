@@ -56,6 +56,10 @@ import {
   formatTrainerMemoryBlock,
 } from "./trainer-memory";
 import { buildTrainerMemoryFilter } from "./trainer-memory-filter";
+import type {
+  MyoSetRole,
+  SetScheme,
+} from "@/lib/domain/workouts/myo-reps";
 
 type AiJobKindLiteral = (typeof schema.aiJobKind.enumValues)[number];
 
@@ -67,14 +71,18 @@ type WorkoutSummary = {
     exerciseId: string;
     nameRu: string;
     isBodyweight: boolean;
+    setScheme: SetScheme;
+    myoMiniSets: number;
+    myoRepsPercent: number;
+    myoRestSeconds: number;
+    myoFirstRestSeconds: number;
     sets: Array<{
       weightKg: number;
       reps: number;
       rpe: number | null;
-      setType: "working" | "warmup" | "drop" | "failure";
-      /** Отдых перед подходом — по нему тренер видит протоколы вроде
-       *  миорепсов (серия коротких пауз около 30 секунд). */
       restSeconds: number | null;
+      setType: "working" | "warmup" | "drop" | "failure";
+      myoRole: MyoSetRole | null;
     }>;
   }>;
 };
@@ -245,6 +253,11 @@ async function loadWorkoutSummary(
       position: schema.workoutExercises.position,
       nameRu: schema.exercises.nameRu,
       isBodyweight: schema.exercises.isBodyweight,
+      setScheme: schema.workoutExercises.setScheme,
+      myoMiniSets: schema.workoutExercises.myoMiniSets,
+      myoRepsPercent: schema.workoutExercises.myoRepsPercent,
+      myoRestSeconds: schema.workoutExercises.myoRestSeconds,
+      myoFirstRestSeconds: schema.workoutExercises.myoFirstRestSeconds,
     })
     .from(schema.workoutExercises)
     .innerJoin(
@@ -278,12 +291,18 @@ async function loadWorkoutSummary(
       exerciseId: r.exerciseId,
       nameRu: r.nameRu,
       isBodyweight: r.isBodyweight,
+      setScheme: r.setScheme,
+      myoMiniSets: r.myoMiniSets,
+      myoRepsPercent: r.myoRepsPercent,
+      myoRestSeconds: r.myoRestSeconds,
+      myoFirstRestSeconds: r.myoFirstRestSeconds,
       sets: (setsByWe.get(r.id) ?? []).map((s) => ({
         weightKg: s.weightKg,
         reps: s.reps,
         rpe: s.rpe,
-        setType: s.setType,
         restSeconds: s.restSeconds,
+        setType: s.setType,
+        myoRole: s.myoRole,
       })),
     })),
   };
@@ -322,6 +341,11 @@ async function loadPastWorkouts(
       exerciseId: schema.workoutExercises.exerciseId,
       nameRu: schema.exercises.nameRu,
       isBodyweight: schema.exercises.isBodyweight,
+      setScheme: schema.workoutExercises.setScheme,
+      myoMiniSets: schema.workoutExercises.myoMiniSets,
+      myoRepsPercent: schema.workoutExercises.myoRepsPercent,
+      myoRestSeconds: schema.workoutExercises.myoRestSeconds,
+      myoFirstRestSeconds: schema.workoutExercises.myoFirstRestSeconds,
       position: schema.workoutExercises.position,
     })
     .from(schema.workoutExercises)
@@ -355,12 +379,18 @@ async function loadPastWorkouts(
       exerciseId: ex.exerciseId,
       nameRu: ex.nameRu,
       isBodyweight: ex.isBodyweight,
+      setScheme: ex.setScheme,
+      myoMiniSets: ex.myoMiniSets,
+      myoRepsPercent: ex.myoRepsPercent,
+      myoRestSeconds: ex.myoRestSeconds,
+      myoFirstRestSeconds: ex.myoFirstRestSeconds,
       sets: (setsByWe.get(ex.we_id) ?? []).map((s) => ({
         weightKg: s.weightKg,
         reps: s.reps,
         rpe: s.rpe,
-        setType: s.setType,
         restSeconds: s.restSeconds,
+        setType: s.setType,
+        myoRole: s.myoRole,
       })),
     });
     exsByWorkout.set(ex.workoutId, arr);
@@ -565,17 +595,14 @@ function formatWorkout(
     const setsStr = e.sets
       .map((s, i) => {
         const rpe = s.rpe != null ? ` @${s.rpe}` : "";
-        const tag =
-          s.setType !== "working"
+        const rest =
+          s.restSeconds != null ? ` отдых=${s.restSeconds}с` : "";
+        const tag = s.myoRole
+          ? ` (myo-${s.myoRole})`
+          : s.setType !== "working"
             ? ` (${s.setType})`
             : "";
-        // Фактический отдых показываем всегда: тренер отличает штатные 30 с
-        // Myo-reps от незапланированно длинной паузы и не гадает по повторам.
-        const rest =
-          s.restSeconds != null
-            ? ` [отдых ${s.restSeconds}с]`
-            : "";
-        return `${i + 1}) ${s.weightKg}×${s.reps}${rpe}${tag}${rest}`;
+        return `${i + 1}) ${s.weightKg}×${s.reps}${rpe}${rest}${tag}`;
       })
       .join(", ");
     const tv = totalVolume(e.sets);
@@ -589,8 +616,12 @@ function formatWorkout(
     const bwLine = bwLoad
       ? `\n  вес тела ${bodyweightKg} кг → эфф. нагрузка top-set ≈ ${bwLoad.effectiveKg} кг (добавка ${bwLoad.addedKg} кг = ${bwLoad.pct}% тотала)`
       : "";
+    const scheme =
+      e.setScheme === "myo_reps"
+        ? ` [MYO-REPS: 1 активационный + ${e.myoMiniSets} мини, цель мини ${e.myoRepsPercent}% повторов, отдых ${e.myoFirstRestSeconds}с до первого мини и ${e.myoRestSeconds}с между следующими]`
+        : "";
     lines.push(
-      `- **${e.nameRu}**: ${setsStr}\n  vol=${Math.round(tv)} kg·reps, e1RM=${e1rm.toFixed(1)} kg${bwLine}`,
+      `- **${e.nameRu}**${scheme}: ${setsStr}\n  vol=${Math.round(tv)} kg·reps, e1RM=${e1rm.toFixed(1)} kg${bwLine}`,
     );
   }
   return lines.join("\n");

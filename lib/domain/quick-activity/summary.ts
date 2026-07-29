@@ -9,8 +9,11 @@
 
 export type QuickDayEntry = {
   exerciseName: string;
-  mode: "sets" | "total";
+  mode: "sets" | "total" | "myo_reps";
   reps: number;
+  myoActivationReps?: number | null;
+  myoMiniSets?: number | null;
+  myoMiniReps?: number | null;
 };
 
 export type QuickDaySummary = {
@@ -20,6 +23,18 @@ export type QuickDaySummary = {
   totalReps: number;
   entries: number;
 };
+
+function entryDetail(entry: QuickDayEntry): string {
+  if (
+    entry.mode === "myo_reps" &&
+    entry.myoActivationReps != null &&
+    entry.myoMiniSets != null &&
+    entry.myoMiniReps != null
+  ) {
+    return `${entry.myoActivationReps}+${entry.myoMiniSets}×${entry.myoMiniReps}`;
+  }
+  return String(entry.reps);
+}
 
 /** Вход — записи в порядке УБЫВАНИЯ свежести (как отдаёт repo).
  *  Выход — группы по упражнению, свежайшая группа первой; внутри группы
@@ -37,9 +52,12 @@ export function summarizeQuickDay(entries: QuickDayEntry[]): QuickDaySummary[] {
     const chrono = [...list].reverse();
     const totalReps = chrono.reduce((s, e) => s + e.reps, 0);
     const isSingleTotal = chrono.length === 1 && chrono[0]!.mode === "total";
+    const isSingleMyo = chrono.length === 1 && chrono[0]!.mode === "myo_reps";
     const detail = isSingleTotal
       ? String(totalReps)
-      : chrono.map((e) => e.reps).join("+");
+      : isSingleMyo
+        ? entryDetail(chrono[0]!)
+        : chrono.map(entryDetail).join("+");
     out.push({ exerciseName, detail, totalReps, entries: chrono.length });
   }
   return out;

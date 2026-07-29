@@ -85,6 +85,39 @@ describe("buildNextTemplateItems", () => {
     const out = buildNextTemplateItems([ex("curl", [{ weightKg: 10, reps: 12, setType: "warmup" }])]);
     expect(out).toEqual([]);
   });
+
+  it("прогрессирует myo-reps по активации, а не по коротким мини-подходам", () => {
+    const out = buildNextTemplateItems([
+      {
+        exerciseId: "fly",
+        setScheme: "myo_reps",
+        myoMiniSets: 3,
+        myoRepsPercent: 30,
+        myoRestSeconds: 30,
+        sets: [
+          {
+            weightKg: 20,
+            reps: 12,
+            setType: "working",
+            myoRole: "activation",
+          },
+          { weightKg: 20, reps: 4, setType: "working", myoRole: "mini" },
+          { weightKg: 20, reps: 3, setType: "working", myoRole: "mini" },
+        ],
+      },
+    ]);
+
+    expect(out[0]).toMatchObject({
+      targetSets: 4,
+      targetRepsMin: 8,
+      targetRepsMax: 12,
+      targetWeightKg: 22.5,
+      setScheme: "myo_reps",
+      myoMiniSets: 3,
+      myoRepsPercent: 30,
+      myoRestSeconds: 30,
+    });
+  });
 });
 
 describe("templateItemsFromWorkout (точная передача без прогрессии)", () => {
@@ -140,5 +173,34 @@ describe("templateItemsFromWorkout (точная передача без про�
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ exerciseId: "ohp", targetSets: 1, targetWeightKg: 40 });
+  });
+
+  it("сохраняет myo-reps и диапазон активации без мини-повторов", () => {
+    const out = templateItemsFromWorkout([
+      {
+        exerciseId: "curl",
+        setScheme: "myo_reps",
+        myoMiniSets: 3,
+        myoRepsPercent: 30,
+        myoRestSeconds: 25,
+        sets: [
+          {
+            weightKg: 15,
+            reps: 10,
+            setType: "working",
+            myoRole: "activation",
+          },
+          { weightKg: 15, reps: 3, setType: "working", myoRole: "mini" },
+        ],
+      },
+    ]);
+
+    expect(out[0]).toMatchObject({
+      targetSets: 4,
+      targetRepsMin: 10,
+      targetRepsMax: 10,
+      setScheme: "myo_reps",
+      myoRestSeconds: 25,
+    });
   });
 });

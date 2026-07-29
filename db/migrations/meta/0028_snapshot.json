@@ -1,5 +1,5 @@
 {
-  "id": "741f16e9-cd3e-4da7-bdc6-a8fb8b18f6d6",
+  "id": "0d328317-fd7d-4865-9223-89b23a0a3da0",
   "prevId": "ed390529-a482-456c-86f6-44a7a7e5e1d3",
   "version": "7",
   "dialect": "postgresql",
@@ -267,13 +267,6 @@
         },
         "share_programs_with_friends": {
           "name": "share_programs_with_friends",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_admin": {
-          "name": "is_admin",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -635,6 +628,35 @@
           "primaryKey": false,
           "notNull": true,
           "default": 120
+        },
+        "set_scheme": {
+          "name": "set_scheme",
+          "type": "set_scheme",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'straight'"
+        },
+        "myo_mini_sets": {
+          "name": "myo_mini_sets",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 3
+        },
+        "myo_reps_percent": {
+          "name": "myo_reps_percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
+        "myo_rest_seconds": {
+          "name": "myo_rest_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
         },
         "notes": {
           "name": "notes",
@@ -1011,6 +1033,35 @@
           "primaryKey": false,
           "notNull": true
         },
+        "set_scheme": {
+          "name": "set_scheme",
+          "type": "set_scheme",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'straight'"
+        },
+        "myo_mini_sets": {
+          "name": "myo_mini_sets",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 3
+        },
+        "myo_reps_percent": {
+          "name": "myo_reps_percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
+        "myo_rest_seconds": {
+          "name": "myo_rest_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
         "notes": {
           "name": "notes",
           "type": "text",
@@ -1119,6 +1170,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'working'"
+        },
+        "myo_role": {
+          "name": "myo_role",
+          "type": "myo_set_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         },
         "weight_kg": {
           "name": "weight_kg",
@@ -5021,6 +5079,14 @@
         "secondary"
       ]
     },
+    "public.myo_set_role": {
+      "name": "myo_set_role",
+      "schema": "public",
+      "values": [
+        "activation",
+        "mini"
+      ]
+    },
     "public.note_entity_type": {
       "name": "note_entity_type",
       "schema": "public",
@@ -5065,6 +5131,14 @@
       "values": [
         "sets",
         "total"
+      ]
+    },
+    "public.set_scheme": {
+      "name": "set_scheme",
+      "schema": "public",
+      "values": [
+        "straight",
+        "myo_reps"
       ]
     },
     "public.set_type": {

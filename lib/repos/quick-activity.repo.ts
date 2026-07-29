@@ -11,9 +11,14 @@ import type { QuickActivity } from "@/db/schema";
 
 export type LogQuickActivityInput = {
   exerciseId: string;
-  mode: "sets" | "total";
+  mode: "sets" | "total" | "myo_reps";
   reps: number;
   weightKg: number | null;
+  myoActivationReps?: number | null;
+  myoMiniSets?: number | null;
+  myoMiniReps?: number | null;
+  myoRestSeconds?: number | null;
+  myoFirstRestSeconds?: number | null;
 };
 
 export async function logQuickActivity(
@@ -49,9 +54,14 @@ export type QuickActivityEntry = {
   id: string;
   exerciseId: string;
   exerciseName: string;
-  mode: "sets" | "total";
+  mode: "sets" | "total" | "myo_reps";
   reps: number;
   weightKg: number | null;
+  myoActivationReps: number | null;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
+  myoRestSeconds: number | null;
+  myoFirstRestSeconds: number | null;
   performedAt: Date;
 };
 
@@ -71,6 +81,11 @@ export async function listQuickActivityForDay(
       mode: schema.quickActivities.mode,
       reps: schema.quickActivities.reps,
       weightKg: schema.quickActivities.weightKg,
+      myoActivationReps: schema.quickActivities.myoActivationReps,
+      myoMiniSets: schema.quickActivities.myoMiniSets,
+      myoMiniReps: schema.quickActivities.myoMiniReps,
+      myoRestSeconds: schema.quickActivities.myoRestSeconds,
+      myoFirstRestSeconds: schema.quickActivities.myoFirstRestSeconds,
       performedAt: schema.quickActivities.performedAt,
     })
     .from(schema.quickActivities)
@@ -93,10 +108,15 @@ export type RecentQuickExercise = {
   exerciseName: string;
   /** Последний использованный режим — префилл шита (эспандер помнит «тотал»,
    *  подтягивания — «подходами»). */
-  mode: "sets" | "total";
+  mode: "sets" | "total" | "myo_reps";
   /** Последние повторы — префилл степпера. */
   reps: number;
   weightKg: number | null;
+  myoActivationReps: number | null;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
+  myoRestSeconds: number | null;
+  myoFirstRestSeconds: number | null;
 };
 
 /** Последние РАЗНЫЕ упражнения доп. активности (по свежести) с их последней
@@ -113,6 +133,11 @@ export async function listRecentQuickExercises(
       mode: schema.quickActivities.mode,
       reps: schema.quickActivities.reps,
       weightKg: schema.quickActivities.weightKg,
+      myoActivationReps: schema.quickActivities.myoActivationReps,
+      myoMiniSets: schema.quickActivities.myoMiniSets,
+      myoMiniReps: schema.quickActivities.myoMiniReps,
+      myoRestSeconds: schema.quickActivities.myoRestSeconds,
+      myoFirstRestSeconds: schema.quickActivities.myoFirstRestSeconds,
     })
     .from(schema.quickActivities)
     .innerJoin(
