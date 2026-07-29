@@ -7,6 +7,12 @@ import {
   templateItemsFromWorkout,
   type NextTemplateItem,
 } from "@/lib/domain/templates/next-template";
+import {
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_FIRST_REST_SECONDS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+} from "@/lib/domain/workouts/myo-reps";
 import { getActiveWorkoutForUser } from "@/lib/repos/workouts.repo";
 
 /** «Собери план / шаблон прямо из истории тренировок». Атлет тренируется по
@@ -25,7 +31,15 @@ async function itemsFromWorkout(
   const w = await getActiveWorkoutForUser(userId, workoutId);
   if (!w || w.status !== "completed") return null;
   const items = templateItemsFromWorkout(
-    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+    w.exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      sets: e.sets,
+      setScheme: e.setScheme,
+      myoMiniSets: e.myoMiniSets,
+      myoRepsPercent: e.myoRepsPercent,
+      myoRestSeconds: e.myoRestSeconds,
+      myoFirstRestSeconds: e.myoFirstRestSeconds,
+    })),
   );
   if (items.length === 0) return null;
   return { name: w.name, items };
@@ -46,6 +60,12 @@ function insertItems(
       targetRepsMax: it.targetRepsMax,
       targetWeightKg: it.targetWeightKg,
       targetRestSeconds: it.targetRestSeconds,
+      setScheme: it.setScheme ?? "straight",
+      myoMiniSets: it.myoMiniSets ?? DEFAULT_MYO_MINI_SETS,
+      myoRepsPercent: it.myoRepsPercent ?? DEFAULT_MYO_REPS_PERCENT,
+      myoRestSeconds: it.myoRestSeconds ?? DEFAULT_MYO_REST_SECONDS,
+      myoFirstRestSeconds:
+        it.myoFirstRestSeconds ?? DEFAULT_MYO_FIRST_REST_SECONDS,
     })),
   );
 }
@@ -94,7 +114,15 @@ export async function nextWorkoutPreview(
   if (!w || w.status !== "completed") return [];
   const nameById = new Map(w.exercises.map((e) => [e.exerciseId, e.exerciseNameRu]));
   return buildNextTemplateItems(
-    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+    w.exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      sets: e.sets,
+      setScheme: e.setScheme,
+      myoMiniSets: e.myoMiniSets,
+      myoRepsPercent: e.myoRepsPercent,
+      myoRestSeconds: e.myoRestSeconds,
+      myoFirstRestSeconds: e.myoFirstRestSeconds,
+    })),
   ).map((it) => ({
     exerciseId: it.exerciseId,
     nameRu: nameById.get(it.exerciseId) ?? "Упражнение",
@@ -132,7 +160,15 @@ export async function getOrCreateNextWorkoutTemplate(
   const w = await getActiveWorkoutForUser(userId, workoutId);
   if (!w || w.status !== "completed") return null;
   const items = buildNextTemplateItems(
-    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+    w.exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      sets: e.sets,
+      setScheme: e.setScheme,
+      myoMiniSets: e.myoMiniSets,
+      myoRepsPercent: e.myoRepsPercent,
+      myoRestSeconds: e.myoRestSeconds,
+      myoFirstRestSeconds: e.myoFirstRestSeconds,
+    })),
   );
   if (items.length === 0) return null;
 

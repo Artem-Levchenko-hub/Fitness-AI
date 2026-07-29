@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -48,6 +48,9 @@ export const exercises = pgTable(
   },
   (t) => [
     uniqueIndex("exercises_slug_owner_unq").on(t.slug, t.ownerUserId),
+    uniqueIndex("exercises_system_slug_unq")
+      .on(t.slug)
+      .where(sql`${t.ownerUserId} is null`),
     index("exercises_owner_idx").on(t.ownerUserId),
   ],
 );

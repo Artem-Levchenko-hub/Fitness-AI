@@ -2,12 +2,12 @@ import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import type { AdaptItem } from "@/lib/domain/programs/adapt";
 import {
-  buildInPlaceAdaptation,
-  pickSubstitute,
-  type AdaptItem,
-  type SubstituteCandidate,
-} from "@/lib/domain/programs/adapt";
+  analyzeTemplateTrends,
+  type TrendLifeFactors,
+  type TrendSession,
+} from "@/lib/domain/coach/trend-analyzer";
 import type { AiPlan } from "@/lib/domain/programs/ai-plan";
 import { getLibraryProgram } from "@/lib/domain/programs/library";
 import type {
@@ -15,12 +15,18 @@ import type {
   ProgramReviewResult,
 } from "@/lib/domain/programs/program-review";
 import type { ProgramReviewSnapshot } from "@/db/schema";
-import type { WorkoutExerciseInput } from "@/lib/domain/templates/next-template";
+import { getActiveWorkoutForUser } from "@/lib/repos/workouts.repo";
 import {
-  detectStagnation,
-  E1RM_STAGNATION_EPSILON_KG,
-} from "@/lib/domain/progression/stagnation";
-import { exerciseSetHistory } from "@/lib/repos/stats.repo";
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_FIRST_REST_SECONDS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+} from "@/lib/domain/workouts/myo-reps";
+import {
+  appendTemplateVersion,
+  createPendingTemplateVersion,
+  createInitialTemplateVersion,
+} from "@/lib/repos/template-versions.repo";
 
 export type ProgramListItem = {
   id: string;
@@ -508,6 +514,11 @@ async function getTemplateAdaptItems(templateId: string): Promise<AdaptItem[]> {
       targetRepsMax: schema.templateExercises.targetRepsMax,
       targetWeightKg: schema.templateExercises.targetWeightKg,
       targetRestSeconds: schema.templateExercises.targetRestSeconds,
+      setScheme: schema.templateExercises.setScheme,
+      myoMiniSets: schema.templateExercises.myoMiniSets,
+      myoRepsPercent: schema.templateExercises.myoRepsPercent,
+      myoRestSeconds: schema.templateExercises.myoRestSeconds,
+      myoFirstRestSeconds: schema.templateExercises.myoFirstRestSeconds,
       notes: schema.templateExercises.notes,
     })
     .from(schema.templateExercises)
@@ -526,6 +537,12 @@ export async function adaptTemplateInPlace(
   templateId: string,
   items: AdaptItem[],
   workoutId: string,
+  metadata: {
+    summary: string;
+    rationale: string;
+    confidence: number;
+    requiresConfirmation?: boolean;
+  },
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [owned] = await tx
@@ -543,6 +560,10 @@ export async function adaptTemplateInPlace(
       .limit(1);
     if (!owned) throw new Error("Template not found or not yours");
 
+    // Legacy, библиотечные и AI-шаблоны не всегда проходят через createTemplate.
+    // Исходная версия должна появиться до первой автоматической замены строк.
+    await createInitialTemplateVersion(tx, templateId);
+
     // Снимок оригинала — РОВНО один раз, ДО первой правки: то, к чему вернёт
     // откат. Снимаем текущие строки (их же сейчас и перезапишем). Повторная
     // адаптация снимок не трогает (snapshot остаётся undefined → не пишем).
@@ -557,10 +578,11 @@ export async function adaptTemplateInPlace(
           targetRepsMax: schema.templateExercises.targetRepsMax,
           targetWeightKg: schema.templateExercises.targetWeightKg,
           targetRestSeconds: schema.templateExercises.targetRestSeconds,
-          myoReps: schema.templateExercises.myoReps,
+          setScheme: schema.templateExercises.setScheme,
           myoMiniSets: schema.templateExercises.myoMiniSets,
-          myoMiniReps: schema.templateExercises.myoMiniReps,
-          myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
+          myoRepsPercent: schema.templateExercises.myoRepsPercent,
+          myoRestSeconds: schema.templateExercises.myoRestSeconds,
+          myoFirstRestSeconds: schema.templateExercises.myoFirstRestSeconds,
           notes: schema.templateExercises.notes,
         })
         .from(schema.templateExercises)
@@ -568,46 +590,29 @@ export async function adaptTemplateInPlace(
         .orderBy(asc(schema.templateExercises.position));
     }
 
-    // Миорепс-протокол — настройка атлета, тренерская адаптация правит только
-    // вес/повторы/отдых: переносим мио по exerciseId через delete+reinsert.
-    // Заменённое упражнение (substitute) стартует без мио (протокол привязан
-    // к выбору движения). Домен AdaptItem про мио не знает (R-02).
-    const myoRows = await tx
-      .select({
-        exerciseId: schema.templateExercises.exerciseId,
-        myoReps: schema.templateExercises.myoReps,
-        myoMiniSets: schema.templateExercises.myoMiniSets,
-        myoMiniReps: schema.templateExercises.myoMiniReps,
-        myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
-      })
-      .from(schema.templateExercises)
-      .where(eq(schema.templateExercises.templateId, templateId));
-    const myoByExercise = new Map(myoRows.map((m) => [m.exerciseId, m]));
-
     await tx
       .delete(schema.templateExercises)
       .where(eq(schema.templateExercises.templateId, templateId));
 
     if (items.length > 0) {
       await tx.insert(schema.templateExercises).values(
-        items.map((it, i) => {
-          const myo = myoByExercise.get(it.exerciseId);
-          return {
-            templateId,
-            exerciseId: it.exerciseId,
-            position: i,
-            targetSets: it.targetSets,
-            targetRepsMin: it.targetRepsMin,
-            targetRepsMax: it.targetRepsMax,
-            targetWeightKg: it.targetWeightKg,
-            targetRestSeconds: it.targetRestSeconds,
-            myoReps: myo?.myoReps ?? false,
-            myoMiniSets: myo?.myoMiniSets ?? 3,
-            myoMiniReps: myo?.myoMiniReps ?? 5,
-            myoMiniRestSeconds: myo?.myoMiniRestSeconds ?? 30,
-            notes: it.notes ?? null,
-          };
-        }),
+        items.map((it, i) => ({
+          templateId,
+          exerciseId: it.exerciseId,
+          position: i,
+          targetSets: it.targetSets,
+          targetRepsMin: it.targetRepsMin,
+          targetRepsMax: it.targetRepsMax,
+          targetWeightKg: it.targetWeightKg,
+          targetRestSeconds: it.targetRestSeconds,
+          setScheme: it.setScheme ?? "straight",
+          myoMiniSets: it.myoMiniSets ?? DEFAULT_MYO_MINI_SETS,
+          myoRepsPercent: it.myoRepsPercent ?? DEFAULT_MYO_REPS_PERCENT,
+          myoRestSeconds: it.myoRestSeconds ?? DEFAULT_MYO_REST_SECONDS,
+          myoFirstRestSeconds:
+            it.myoFirstRestSeconds ?? DEFAULT_MYO_FIRST_REST_SECONDS,
+          notes: it.notes ?? null,
+        })),
       );
     }
 
@@ -619,6 +624,17 @@ export async function adaptTemplateInPlace(
         ...(snapshot !== undefined ? { preAdaptSnapshot: snapshot } : {}),
       })
       .where(eq(schema.workoutTemplates.id, templateId));
+
+    await appendTemplateVersion(tx, {
+      templateId,
+      source: "trainer",
+      sourceWorkoutId: workoutId,
+      summary: metadata.summary,
+      rationale: metadata.rationale,
+      confidence: metadata.confidence,
+      requiresConfirmation: metadata.requiresConfirmation ?? false,
+      confirmed: !(metadata.requiresConfirmation ?? false),
+    });
   });
 }
 
@@ -656,81 +672,137 @@ async function getTemplateBindingForWorkout(
   return row ?? null;
 }
 
-/** Подбор замены застойному упражнению среди СИСТЕМНЫХ упражнений той же
- *  первичной группы (R-04: решение чистым `pickSubstitute`, данные — из БД).
- *  Исключаем то, что уже есть в шаблоне, и сам застойный id. null — нет замены. */
-async function findSubstitute(
-  stagnantExerciseId: string,
-  excludeIds: string[],
-): Promise<string | null> {
-  const prim = await db
-    .select({ m: schema.exerciseMuscleGroups.muscleGroupKey })
-    .from(schema.exerciseMuscleGroups)
-    .where(
-      and(
-        eq(schema.exerciseMuscleGroups.exerciseId, stagnantExerciseId),
-        eq(schema.exerciseMuscleGroups.role, "primary"),
-      ),
-    );
-  const muscles = prim.map((r) => r.m);
-  if (muscles.length === 0) return null;
-
-  const rows = await db
-    .select({
-      id: schema.exercises.id,
-      slug: schema.exercises.slug,
-      muscle: schema.exerciseMuscleGroups.muscleGroupKey,
-    })
-    .from(schema.exercises)
-    .innerJoin(
-      schema.exerciseMuscleGroups,
-      and(
-        eq(schema.exerciseMuscleGroups.exerciseId, schema.exercises.id),
-        eq(schema.exerciseMuscleGroups.role, "primary"),
-      ),
-    )
-    .where(
-      and(
-        isNull(schema.exercises.ownerUserId),
-        inArray(schema.exerciseMuscleGroups.muscleGroupKey, muscles),
-      ),
-    )
-    .orderBy(asc(schema.exercises.slug));
-
-  // Группируем строки по упражнению → его первичные группы.
-  const byId = new Map<string, SubstituteCandidate>();
-  for (const r of rows) {
-    const c = byId.get(r.id);
-    if (c) (c.primaryMuscles as string[]).push(r.muscle);
-    else byId.set(r.id, { exerciseId: r.id, primaryMuscles: [r.muscle], isStagnant: false });
-  }
-  const candidates = [...byId.values()];
-
-  return pickSubstitute(muscles, candidates, [...excludeIds, stagnantExerciseId]);
-}
-
-/** Застойно ли упражнение (e1RM не растёт ≥3 сессии) — тот же источник, что
- *  питает бейдж застоя и флаги тренера (R-04: exerciseSetHistory +
- *  detectStagnation + единый epsilon). */
-async function isExerciseStagnant(
-  userId: string,
-  exerciseId: string,
-): Promise<boolean> {
-  const history = await exerciseSetHistory(userId, exerciseId);
-  const series = history
-    .filter((s) => s.best1rm > 0)
-    .map((s) => s.best1rm)
-    .reverse();
-  return detectStagnation(series, 3, { epsilon: E1RM_STAGNATION_EPSILON_KG })
-    .stale;
-}
-
 export type TemplateAdaptationResult = {
   /** true — шаблон адаптирован на месте сейчас (false — идемпотентный пропуск). */
   adapted: boolean;
   /** Сделанный свап упражнения (id→id) или null. */
   swap: { fromExerciseId: string; toExerciseId: string } | null;
+  /** Число релевантных завершённых тренировок этого же шаблона. */
+  relevantWorkoutCount: number;
 };
+
+async function loadTrendSessions(
+  userId: string,
+  templateId: string,
+): Promise<TrendSession[]> {
+  const rows = await db
+    .select({ id: schema.workouts.id, startedAt: schema.workouts.startedAt })
+    .from(schema.workouts)
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.templateId, templateId),
+        eq(schema.workouts.status, "completed"),
+      ),
+    )
+    .orderBy(desc(schema.workouts.startedAt))
+    .limit(10);
+  if (rows.length === 0) return [];
+
+  const notes = await db
+    .select({
+      workoutId: schema.workoutNotes.workoutId,
+      content: schema.workoutNotes.content,
+    })
+    .from(schema.workoutNotes)
+    .where(inArray(schema.workoutNotes.workoutId, rows.map((row) => row.id)));
+  const feelingByWorkout = new Map<string, TrendSession["feeling"]>();
+  for (const note of notes) {
+    const content = note.content.toLocaleLowerCase("ru-RU");
+    const feeling = content.includes("тяжело")
+      ? "hard"
+      : content.includes("легко")
+        ? "easy"
+        : content.includes("норм")
+          ? "normal"
+          : null;
+    if (feeling) feelingByWorkout.set(note.workoutId, feeling);
+  }
+
+  const details = await Promise.all(
+    rows.map((row) => getActiveWorkoutForUser(userId, row.id)),
+  );
+  return rows.flatMap((row, index) => {
+    const detail = details[index];
+    if (!detail) return [];
+    return [
+      {
+        id: row.id,
+        startedAt: row.startedAt,
+        feeling: feelingByWorkout.get(row.id) ?? null,
+        exercises: detail.exercises.map((exercise) => ({
+          exerciseId: exercise.exerciseId,
+          sets: exercise.sets.map((set) => ({
+            weightKg: set.weightKg,
+            reps: set.reps,
+            rpe: set.rpe,
+            restSeconds: set.restSeconds,
+            setType: set.setType,
+            myoRole: set.myoRole,
+          })),
+        })),
+      },
+    ];
+  });
+}
+
+async function loadTrendLifeFactors(userId: string): Promise<TrendLifeFactors> {
+  const [sleep, nutrition] = await Promise.all([
+    db
+      .select({
+        hours: schema.sleepLogs.hours,
+        quality: schema.sleepLogs.quality,
+      })
+      .from(schema.sleepLogs)
+      .where(eq(schema.sleepLogs.userId, userId))
+      .orderBy(desc(schema.sleepLogs.date))
+      .limit(14),
+    db
+      .select({ kcal: schema.nutritionEntries.kcal })
+      .from(schema.nutritionEntries)
+      .where(eq(schema.nutritionEntries.userId, userId))
+      .orderBy(desc(schema.nutritionEntries.date))
+      .limit(14),
+  ]);
+  const calories = nutrition
+    .map((row) => row.kcal)
+    .filter((value): value is number => value != null);
+  return {
+    sleepHours: sleep.map((row) => row.hours),
+    sleepQuality: sleep
+      .map((row) => row.quality)
+      .filter((value): value is number => value != null),
+    nutritionDays: nutrition.length,
+    averageCalories:
+      calories.length > 0
+        ? calories.reduce((sum, value) => sum + value, 0) / calories.length
+        : null,
+  };
+}
+
+async function loadEvidenceCitation(): Promise<string> {
+  try {
+    const { retrieveRelevant } = await import("@/lib/ai/rag/retrieve");
+    const chunks = await retrieveRelevant(
+      "resistance training progressive overload fatigue management RPE rest intervals",
+      { topK: 2, minSimilarity: 0.35, domains: ["training"] },
+    );
+    const citations = [
+      ...new Set(
+        chunks.map((chunk) => {
+          const author = chunk.sourceAuthor ? `${chunk.sourceAuthor}, ` : "";
+          const page = chunk.page != null ? `, с. ${chunk.page}` : "";
+          return `${author}«${chunk.sourceTitle}»${page}`;
+        }),
+      ),
+    ];
+    return citations.length > 0
+      ? `Контекст литературы: ${citations.join("; ")}.`
+      : "Релевантный фрагмент в загруженной базе знаний не найден.";
+  } catch {
+    return "База знаний недоступна; решение основано только на фактических логах.";
+  }
+}
 
 /** Оркестратор адаптации СИЛОВОГО шаблона ПОСЛЕ завершённой тренировки — единый
  *  путь для программного дня И одиночного шаблона (оба ставят workouts.templateId
@@ -745,7 +817,6 @@ export type TemplateAdaptationResult = {
 export async function adaptTemplateAfterWorkout(
   userId: string,
   workoutId: string,
-  performed: WorkoutExerciseInput[],
 ): Promise<TemplateAdaptationResult | null> {
   const binding = await getTemplateBindingForWorkout(userId, workoutId);
   if (!binding) return null; // ad-hoc без шаблона → адаптировать нечего
@@ -753,26 +824,75 @@ export async function adaptTemplateAfterWorkout(
 
   // Идемпотентность: этот шаблон уже адаптирован по этой тренировке.
   if (binding.lastAdaptedWorkoutId === workoutId) {
-    return { adapted: false, swap: null };
+    return { adapted: false, swap: null, relevantWorkoutCount: 0 };
+  }
+  const [existingVersion] = await db
+    .select({ id: schema.templateVersions.id })
+    .from(schema.templateVersions)
+    .where(
+      and(
+        eq(schema.templateVersions.templateId, binding.templateId),
+        eq(schema.templateVersions.sourceWorkoutId, workoutId),
+      ),
+    )
+    .limit(1);
+  if (existingVersion) {
+    return { adapted: false, swap: null, relevantWorkoutCount: 0 };
   }
 
   const current = await getTemplateAdaptItems(binding.templateId);
-  const excludeIds = current.map((c) => c.exerciseId);
+  const [sessions, life] = await Promise.all([
+    loadTrendSessions(userId, binding.templateId),
+    loadTrendLifeFactors(userId),
+  ]);
+  const analysis = analyzeTemplateTrends({ current, sessions, life });
+  if (!analysis.eligible) {
+    return {
+      adapted: false,
+      swap: null,
+      relevantWorkoutCount: analysis.relevantSessionCount,
+    };
+  }
+  const citation = await loadEvidenceCitation();
+  const rationale = `${analysis.rationale} ${citation}`;
 
-  // Ищем ПЕРВОЕ застойное упражнение, которому есть замена. Не более одного
-  // свапа — «изредка», чтобы не выпотрошить шаблон.
-  const substitutes: Record<string, string> = {};
-  for (const it of current) {
-    if (!(await isExerciseStagnant(userId, it.exerciseId))) continue;
-    const sub = await findSubstitute(it.exerciseId, excludeIds);
-    if (sub) {
-      substitutes[it.exerciseId] = sub;
-      break;
-    }
+  if (analysis.requiresConfirmation) {
+    await db.transaction(async (tx) => {
+      await createInitialTemplateVersion(tx, binding.templateId);
+      await createPendingTemplateVersion(tx, {
+        templateId: binding.templateId,
+        source: "trainer",
+        sourceWorkoutId: workoutId,
+        snapshot: analysis.items.map((item) => ({
+          ...item,
+          notes: item.notes ?? null,
+        })),
+        summary: analysis.summary,
+        rationale,
+        confidence: analysis.confidence,
+      });
+    });
+    return {
+      adapted: false,
+      swap: null,
+      relevantWorkoutCount: analysis.relevantSessionCount,
+    };
   }
 
-  const { items, swap } = buildInPlaceAdaptation(current, performed, substitutes);
-  await adaptTemplateInPlace(userId, binding.templateId, items, workoutId);
-
-  return { adapted: true, swap };
+  await adaptTemplateInPlace(
+    userId,
+    binding.templateId,
+    analysis.items,
+    workoutId,
+    {
+      summary: analysis.summary,
+      rationale,
+      confidence: analysis.confidence,
+    },
+  );
+  return {
+    adapted: true,
+    swap: null,
+    relevantWorkoutCount: analysis.relevantSessionCount,
+  };
 }

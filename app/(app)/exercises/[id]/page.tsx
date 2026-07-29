@@ -291,7 +291,11 @@ function SessionCard({ session }: { session: ExerciseSession }) {
               {formatNum(s.weightKg)}{" "}
               <span className="text-muted-foreground">кг</span> × {s.reps}{" "}
               <span className="text-muted-foreground text-xs">
-                {s.setType !== "working" ? `· ${labelSetType(s.setType)}` : ""}
+                {s.myoRole
+                  ? `· ${s.myoRole === "activation" ? "myo: активация" : "myo: мини"}`
+                  : s.setType !== "working"
+                    ? `· ${labelSetType(s.setType)}`
+                    : ""}
               </span>
             </span>
             {s.rpe != null ? (

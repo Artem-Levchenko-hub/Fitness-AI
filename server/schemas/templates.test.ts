@@ -8,8 +8,8 @@ function item(overrides: Record<string, unknown> = {}) {
   return {
     exerciseId,
     targetSets: 3,
-    targetRepsMin: 12,
-    targetRepsMax: 20,
+    targetRepsMin: 8,
+    targetRepsMax: 12,
     targetWeightKg: 20,
     targetRestSeconds: 120,
     notes: "",
@@ -17,26 +17,38 @@ function item(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("templateInputSchema Myo-reps", () => {
-  it("uses the 3 mini / 30 second defaults", () => {
+describe("templateInputSchema myo-reps", () => {
+  it("normalizes target sets to activation plus mini-sets", () => {
     const parsed = templateInputSchema.parse({
       name: "Myo day",
-      items: [item({ myoReps: true })],
+      items: [
+        item({
+          setScheme: "myo_reps",
+          myoMiniSets: 3,
+          myoRepsPercent: 30,
+          myoRestSeconds: 30,
+        }),
+      ],
     });
 
     expect(parsed.items[0]).toMatchObject({
-      myoReps: true,
+      setScheme: "myo_reps",
+      targetSets: 4,
       myoMiniSets: 3,
-      myoMiniRestSeconds: 30,
+      myoRepsPercent: 30,
+      myoRestSeconds: 30,
     });
   });
 
-  it("keeps legacy template payloads valid with Myo-reps disabled", () => {
+  it("keeps old template payloads compatible as straight sets", () => {
     const parsed = templateInputSchema.parse({
       name: "Classic day",
       items: [item()],
     });
 
-    expect(parsed.items[0].myoReps).toBe(false);
+    expect(parsed.items[0]).toMatchObject({
+      setScheme: "straight",
+      targetSets: 3,
+    });
   });
 });

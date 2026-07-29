@@ -25,6 +25,7 @@ const RECORD_SET_FIELDS = [
   "reps",
   "rpe",
   "restSeconds",
+  "myoRole",
   "clientSetId",
 ] as const;
 

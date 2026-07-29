@@ -1,4 +1,5 @@
 import { bestEstimatedOneRepMax } from "../progression/one-rep-max";
+import type { MyoSetRole } from "../workouts/myo-reps";
 
 /** Плоская строка истории подходов одного упражнения (как из SQL-джойна
  *  workout_sets→workout_exercises→workouts), упорядоченная startedAt DESC,
@@ -12,6 +13,7 @@ export type ExerciseHistoryRow = {
   reps: number;
   rpe: number | null;
   setType: "working" | "warmup" | "drop" | "failure";
+  myoRole?: MyoSetRole | null;
 };
 
 /** Один сеанс упражнения: дата + все его подходы + лучший расчётный 1RM. */
@@ -26,6 +28,7 @@ export type ExerciseSession = {
     reps: number;
     rpe: number | null;
     setType: ExerciseHistoryRow["setType"];
+    myoRole?: MyoSetRole;
   }>;
 };
 
@@ -56,6 +59,7 @@ export function groupExerciseSessions(
       reps: r.reps,
       rpe: r.rpe,
       setType: r.setType,
+      ...(r.myoRole ? { myoRole: r.myoRole } : {}),
     });
   }
 

@@ -40,8 +40,17 @@ describe("pendingSetsFromOutbox", () => {
       weightKg: 60,
       reps: 8,
       rpe: null,
+      myoRole: null,
       completedAt: new Date(1000),
     });
+  });
+
+  it("сохраняет роль myo-подхода из офлайн-очереди", () => {
+    const [s] = pendingSetsFromOutbox(
+      [mut({ clientId: "myo", payload: { myoRole: "mini" } })],
+      WORKOUT,
+    );
+    expect(s.myoRole).toBe("mini");
   });
 
   it("парсит численный rpe", () => {

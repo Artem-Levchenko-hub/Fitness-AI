@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import type { PlanCatalogEntry } from "@/lib/domain/programs/ai-plan";
+import type { SetScheme } from "@/lib/domain/workouts/myo-reps";
 
 /** Упражнение текущего шаблона (то, что атлет собрал сам). */
 export type RefineCurrentItem = {
@@ -20,6 +21,11 @@ export type RefineCurrentItem = {
   targetRepsMin: number;
   targetRepsMax: number;
   targetRestSeconds: number;
+  setScheme?: SetScheme;
+  myoMiniSets?: number;
+  myoRepsPercent?: number;
+  myoRestSeconds?: number;
+  myoFirstRestSeconds?: number;
   note: string | null;
 };
 
@@ -144,6 +150,7 @@ export const TEMPLATE_REFINE_SYSTEM_INSTRUCTION = `Ты — опытный пе�
 ## Жёсткие правила
 - Упражнения ТОЛЬКО из каталога по точному slug. Не выдумывай slug. Можешь оставить упражнения атлета (они в каталоге) — если они уместны.
 - Повторы/отдых — под цель из комментария: сила 3–6 повторов и отдых 150–240 с; рост мышц 8–15 и отдых 60–120 с; выносливость 15–25 и отдых 30–60 с.
+- Если строка помечена MYO-REPS, это один активационный подход почти/до отказа и короткие мини-подходы с тем же весом. Не считай падение повторов ошибкой и не превращай такой блок в обычные длинные подходы только из-за короткого отдыха. Myo-reps экономит время, но не доказан как универсально лучший способ роста.
 - Учитывай травмы и ограничения из комментария — не нагружай больной сустав.
 - Если шаблон уже хорош — верни его почти как есть, честно скажи об этом в assessment и оставь changes коротким.
 
@@ -174,7 +181,11 @@ function currentBlock(items: RefineCurrentItem[]): string {
     .map((it) => {
       const groups = it.primaryMuscles.join(", ");
       const note = it.note ? ` — заметка: ${it.note}` : "";
-      return `- slug=${it.slug} | ${it.nameRu} | ${it.targetSets}×${it.targetRepsMin}–${it.targetRepsMax}, отдых ${it.targetRestSeconds}с${groups ? ` [${groups}]` : ""}${note}`;
+      const scheme =
+        it.setScheme === "myo_reps"
+          ? `MYO-REPS: активация ${it.targetRepsMin}–${it.targetRepsMax}, затем ${it.myoMiniSets} мини-подхода по ${it.myoRepsPercent}% повторов, отдых ${it.myoFirstRestSeconds ?? 40}с до первого и ${it.myoRestSeconds}с между следующими`
+          : `${it.targetSets}×${it.targetRepsMin}–${it.targetRepsMax}, отдых ${it.targetRestSeconds}с`;
+      return `- slug=${it.slug} | ${it.nameRu} | ${scheme}${groups ? ` [${groups}]` : ""}${note}`;
     })
     .join("\n");
 }

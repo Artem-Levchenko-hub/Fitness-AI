@@ -7,6 +7,14 @@ import { z } from "zod";
 import { isAiConfigured, refineTemplate } from "@/lib/ai/template-refine";
 import { requireUser } from "@/lib/auth/require-user";
 import type { PlanCatalogEntry } from "@/lib/domain/programs/ai-plan";
+import {
+  DEFAULT_MYO_MINI_SETS,
+  DEFAULT_MYO_REPS_PERCENT,
+  DEFAULT_MYO_REST_SECONDS,
+  myoTotalSets,
+  SET_SCHEMES,
+  type SetScheme,
+} from "@/lib/domain/workouts/myo-reps";
 import { listExercises } from "@/lib/repos/exercises.repo";
 import { createTemplateFromWorkout } from "@/lib/repos/plan-from-history.repo";
 import {
@@ -15,8 +23,13 @@ import {
   getTemplateForRefine,
   getTemplateWithItems,
   revertTemplateAdaptation,
+  setTemplatePinned,
   updateTemplate,
 } from "@/lib/repos/templates.repo";
+import {
+  confirmTemplateVersion,
+  restoreTemplateVersion,
+} from "@/lib/repos/template-versions.repo";
 import { templateInputSchema } from "@/server/schemas/templates";
 
 export type TemplateActionState =
@@ -126,6 +139,10 @@ export type RefineProposalItem = {
   repsMin: number;
   repsMax: number;
   restSeconds: number;
+  setScheme: SetScheme;
+  myoMiniSets: number;
+  myoRepsPercent: number;
+  myoRestSeconds: number;
   note: string | null;
 };
 
@@ -187,13 +204,27 @@ export async function refineTemplateAction(
     for (const it of refined.items) {
       const ex = bySlug.get(it.exerciseSlug);
       if (!ex) continue; // недостижимо (validSlugs=catalog), но защищаемся
+      // Метод сохраняется для тех же упражнений. Новое/заменённое упражнение
+      // стартует как обычные подходы: AI не должен незаметно навязывать отказ.
+      const original = source.current.find((cur) => cur.slug === it.exerciseSlug);
+      const setScheme = original?.setScheme ?? "straight";
+      const myoMiniSets = original?.myoMiniSets ?? DEFAULT_MYO_MINI_SETS;
       items.push({
         exerciseId: ex.id,
         nameRu: ex.nameRu,
-        sets: it.sets,
+        sets:
+          setScheme === "myo_reps"
+            ? myoTotalSets(myoMiniSets)
+            : it.sets,
         repsMin: it.repsMin,
         repsMax: it.repsMax,
         restSeconds: it.restSeconds,
+        setScheme,
+        myoMiniSets,
+        myoRepsPercent:
+          original?.myoRepsPercent ?? DEFAULT_MYO_REPS_PERCENT,
+        myoRestSeconds:
+          original?.myoRestSeconds ?? DEFAULT_MYO_REST_SECONDS,
         note: it.note,
       });
     }
@@ -229,6 +260,20 @@ const applyRefineSchema = z.object({
         repsMin: z.number().int().min(1).max(50),
         repsMax: z.number().int().min(1).max(50),
         restSeconds: z.number().int().min(10).max(600),
+        setScheme: z.enum(SET_SCHEMES).default("straight"),
+        myoMiniSets: z.number().int().min(1).max(5).default(DEFAULT_MYO_MINI_SETS),
+        myoRepsPercent: z
+          .number()
+          .int()
+          .min(10)
+          .max(50)
+          .default(DEFAULT_MYO_REPS_PERCENT),
+        myoRestSeconds: z
+          .number()
+          .int()
+          .min(10)
+          .max(60)
+          .default(DEFAULT_MYO_REST_SECONDS),
         note: z.string().max(200).nullable(),
       }),
     )
@@ -256,29 +301,22 @@ export async function applyRefinedTemplateAction(
     return { status: "error", message: "Нет валидных упражнений для применения" };
   }
 
-  // Миорепс-протокол — настройка атлета: улучшение тренера правит подбор/объём,
-  // но мио переносим по exerciseId (новые упражнения — без протокола).
-  const myoByExercise = new Map(tpl.items.map((x) => [x.exerciseId, x]));
-
   await updateTemplate(user.id, parsed.data.templateId, {
     name: tpl.name,
     description: tpl.description,
-    items: items.map((it) => {
-      const prev = myoByExercise.get(it.exerciseId);
-      return {
-        exerciseId: it.exerciseId,
-        targetSets: it.sets,
-        targetRepsMin: it.repsMin,
-        targetRepsMax: Math.max(it.repsMin, it.repsMax),
-        targetWeightKg: null,
-        targetRestSeconds: it.restSeconds,
-        myoReps: prev?.myoReps ?? false,
-        myoMiniSets: prev?.myoMiniSets ?? 3,
-        myoMiniReps: prev?.myoMiniReps ?? 5,
-        myoMiniRestSeconds: prev?.myoMiniRestSeconds ?? 30,
-        notes: it.note,
-      };
-    }),
+    items: items.map((it) => ({
+      exerciseId: it.exerciseId,
+      targetSets: it.sets,
+      targetRepsMin: it.repsMin,
+      targetRepsMax: Math.max(it.repsMin, it.repsMax),
+      targetWeightKg: null,
+      targetRestSeconds: it.restSeconds,
+      setScheme: it.setScheme,
+      myoMiniSets: it.myoMiniSets,
+      myoRepsPercent: it.myoRepsPercent,
+      myoRestSeconds: it.myoRestSeconds,
+      notes: it.note,
+    })),
   });
 
   revalidatePath("/templates");
@@ -295,5 +333,37 @@ export async function revertTemplateAdaptationAction(formData: FormData) {
   if (!templateId) throw new Error("Missing templateId");
   await revertTemplateAdaptation(user.id, templateId);
   revalidatePath("/templates");
+  revalidatePath(`/templates/${templateId}`);
+}
+
+export async function setTemplatePinnedAction(formData: FormData) {
+  const user = await requireUser();
+  const templateId = String(formData.get("templateId") ?? "");
+  const pinned = String(formData.get("pinned") ?? "") === "true";
+  if (!templateId) throw new Error("Missing templateId");
+  await setTemplatePinned(user.id, templateId, pinned);
+  revalidatePath("/templates");
+  revalidatePath("/workouts");
+  revalidatePath(`/templates/${templateId}`);
+}
+
+export async function confirmTemplateVersionAction(formData: FormData) {
+  const user = await requireUser();
+  const templateId = String(formData.get("templateId") ?? "");
+  const versionId = String(formData.get("versionId") ?? "");
+  if (!templateId || !versionId) throw new Error("Missing template version");
+  await confirmTemplateVersion(user.id, templateId, versionId);
+  revalidatePath("/workouts");
+  revalidatePath(`/templates/${templateId}`);
+}
+
+export async function restoreTemplateVersionAction(formData: FormData) {
+  const user = await requireUser();
+  const templateId = String(formData.get("templateId") ?? "");
+  const versionId = String(formData.get("versionId") ?? "");
+  if (!templateId || !versionId) throw new Error("Missing template version");
+  await restoreTemplateVersion(user.id, templateId, versionId);
+  revalidatePath("/templates");
+  revalidatePath("/workouts");
   revalidatePath(`/templates/${templateId}`);
 }

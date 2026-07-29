@@ -8,7 +8,17 @@ function loadEnv(p) {
   try {
     for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
       const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
-      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+      if (!m) continue;
+      let value = m[2];
+      const quote = value[0];
+      if (
+        value.length >= 2 &&
+        (quote === '"' || quote === "'") &&
+        value[value.length - 1] === quote
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.env[m[1]] = value;
     }
   } catch {
     /* .env-файла может не быть — это ок */
