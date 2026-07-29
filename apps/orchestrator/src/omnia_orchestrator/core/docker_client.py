@@ -1,0 +1,964 @@
+"""Thin wrapper around docker SDK with async + structured errors.
+
+R-01 (deep module): callers see `start_container(spec)` / `stop_container(name)`
+methods that take dataclass specs. They never touch raw `docker.client.from_env()`
+or handle `docker.errors.APIError`. This makes mocking trivial in tests and
+keeps the rest of the codebase free of Docker SDK idioms.
+
+TODO sprint A1:
+  - implement spec → container_create with --read-only, --cap-drop=ALL, etc.
+  - port binding via PortAllocator
+  - --network proj-<id> per project
+  - log streaming → /var/log/omnia-runtime/projects/<id>/
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import subprocess
+import time
+from contextlib import suppress
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+import docker  # type: ignore[import-untyped]
+import requests  # docker SDK transport — its timeouts surface as requests errors
+import structlog
+
+from omnia_orchestrator.core.config import get_settings
+from omnia_orchestrator.core.errors import OrchestratorError
+
+log = structlog.get_logger("omnia_orchestrator.docker")
+
+# Docker network that hosts `omnia-postgres-users` (the per-project Postgres).
+# User containers join it so they reach the DB container-to-container by name
+# (the host bind is 127.0.0.1-only — unreachable from a container). Override via
+# env if the compose project/network is renamed.
+_RUNTIME_NETWORK = os.getenv("OMNIA_RUNTIME_NETWORK", "omnia-runtime_default")
+
+
+@dataclass(frozen=True, slots=True)
+class ContainerSpec:
+    """Declarative spec for a dev container. Hides Docker SDK kwargs."""
+
+    name: str
+    image: str
+    port: int  # host port bound to the container's internal listen port
+    project_id: str
+    env: dict[str, str]
+    cpu_quota: float = 0.5  # default for free tier — 50% of 1 core
+    memory_mb: int = 512
+    network_name: str | None = None  # `proj-<id>` for per-project isolation
+    kind: str = "dev"  # `omnia.kind` label — "dev" or "prod"
+    restart_policy_name: str = "no"  # "unless-stopped" for deployed prod
+    tier: str = "free"  # `omnia.tier` label — drives hibernate pause/stop policy
+    container_port: int = 3000  # internal port the app listens on (StackSpec-driven)
+    # ── Sandbox hardening (Phase 1) — all default to current behaviour ───────
+    runtime: str = ""        # docker --runtime, e.g. "runsc" (gVisor); "" = daemon default (runc)
+    harden: bool = False     # add no-new-privileges + a PID ceiling (safe for non-root images)
+    pids_limit: int = 0      # PID ceiling applied only when `harden` is on (0 = unset)
+
+
+_client: docker.DockerClient | None = None
+
+
+def _get_client() -> docker.DockerClient:
+    global _client
+    if _client is None:
+        try:
+            _client = docker.DockerClient(base_url=get_settings().docker_host)
+            _client.ping()
+        except Exception as exc:  # docker.errors.* or socket failures
+            raise OrchestratorError(
+                code="docker_unavailable",
+                message=f"cannot reach docker daemon: {exc}",
+                status_code=503,
+            ) from exc
+    return _client
+
+
+# ── Template image freshness ─────────────────────────────────────────────────
+# Dev containers run from the BAKED image `omnia-template-<dir>:dev`; the project
+# src is NOT bind-mounted, so a template EDIT never reaches a client's build until
+# the image is rebuilt (2026-07-09: a designed realtime template shipped as the
+# OLD bare baseline because the image was stale). This makes every provision
+# self-heal that: if the template source is newer than the baked image, rebuild
+# it first (Docker layer cache → a no-dep-change rebuild is ~COPY-only, fast).
+
+_TEMPLATE_BUILD_LOCKS: dict[str, asyncio.Lock] = {}
+_IMG_IGNORE_DIRS = {"node_modules", ".next", ".git", "__pycache__"}
+_IMG_IGNORE_FILE_SUFFIX = (".tsbuildinfo",)
+_IMG_IGNORE_FILE_NAMES = {"next-env.d.ts"}
+
+
+def _newest_source_mtime(template_dir: Path) -> float:
+    """Newest mtime under the template dir, skipping build artifacts / vendored
+    dirs (whose volatile mtimes would force a rebuild every provision)."""
+    newest = 0.0
+    for p in template_dir.rglob("*"):
+        if _IMG_IGNORE_DIRS & set(p.parts):
+            continue
+        name = p.name
+        if name in _IMG_IGNORE_FILE_NAMES or name.endswith(_IMG_IGNORE_FILE_SUFFIX):
+            continue
+        try:
+            if p.is_file():
+                newest = max(newest, p.stat().st_mtime)
+        except OSError:
+            continue
+    return newest
+
+
+def _image_created_epoch(tag: str) -> float | None:
+    """Epoch seconds the image `tag` was built, or None if it doesn't exist."""
+    try:
+        img = _get_client().images.get(tag)
+    except docker.errors.ImageNotFound:
+        return None
+    except Exception:
+        return None
+    created = (img.attrs or {}).get("Created")
+    if not isinstance(created, str) or not created:
+        return None
+    try:
+        return datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+async def ensure_template_image_fresh(template_dir: Path | str, image_tag: str) -> bool:
+    """Rebuild the template dev image iff its source is newer than the baked image
+    (or the image is missing) — so a template edit ALWAYS reaches the next build.
+
+    Staleness-gated (skips when unchanged → zero overhead on the hot path),
+    fail-soft (a build failure falls back to the existing image, never blocks
+    provisioning), per-tag locked (concurrent provisions don't double-build).
+    Returns True if it rebuilt. The orchestrator runs on the host with the docker
+    CLI + socket, so a subprocess `docker build` (BuildKit, layer cache) is used.
+    """
+    template_dir = Path(template_dir)
+    dockerfile = template_dir / "Dockerfile.dev"
+    if not dockerfile.exists():
+        return False
+    created = _image_created_epoch(image_tag)
+    # +2s slack: a just-built image has created≈now ≥ src mtimes; avoid a loop.
+    if created is not None and _newest_source_mtime(template_dir) <= created + 2:
+        return False
+
+    lock = _TEMPLATE_BUILD_LOCKS.setdefault(image_tag, asyncio.Lock())
+    async with lock:
+        created = _image_created_epoch(image_tag)  # re-check under the lock
+        if created is not None and _newest_source_mtime(template_dir) <= created + 2:
+            return False
+        log.info("template.image_stale_rebuild", tag=image_tag, dir=str(template_dir))
+
+        def _build() -> tuple[int, str]:
+            # Fixed argv (no shell), host docker CLI — the orchestrator runs on
+            # the host with the docker socket + BuildKit layer cache.
+            proc = subprocess.run(
+                ["docker", "build", "-f", str(dockerfile), "-t", image_tag, str(template_dir)],
+                capture_output=True,
+                text=True,
+                timeout=900,
+            )
+            return proc.returncode, (proc.stderr or proc.stdout or "")[-500:]
+
+        try:
+            rc, tail = await asyncio.to_thread(_build)
+        except Exception as exc:  # timeout / docker missing — never block provision
+            log.warning("template.image_rebuild_error", tag=image_tag, err=str(exc))
+            return False
+        if rc == 0:
+            log.info("template.image_rebuilt", tag=image_tag)
+            return True
+        log.warning("template.image_rebuild_failed", tag=image_tag, rc=rc, tail=tail)
+        return False
+
+
+async def start_container(spec: ContainerSpec) -> str:
+    """Create + start a container. Returns container id.
+
+    Idempotent: if a container with the same name exists, restart it if
+    stopped and return the existing id without recreating. This matters
+    because `provision` and `wake` may race on a fresh project.
+
+    Exception — image change: if the existing container runs a DIFFERENT image
+    than `spec.image`, it is stale and must be replaced. This happens on a stack
+    switch (e.g. auto-stack-routing flips a project drizzle→nextjs-entities and
+    re-provisions): reusing the old container would serve generated code against
+    the wrong template's component kit (`@/components/ui/*` 404 → 500). We
+    compare by the image *tag* string, so a same-tag rebuild does NOT force a
+    recreate — running containers keep serving until their stack actually
+    changes.
+
+    Sprint A1 will add per-project networks (--network=proj-<id>), read-only
+    rootfs with tmpfs for /tmp, healthcheck wiring, and HMR volume mounts.
+    For PoC this is sufficient: defaults still cap-drop ALL and run non-root.
+    """
+    log.info("docker.start_container", name=spec.name, image=spec.image, port=spec.port)
+
+    def _do() -> str:
+        client = _get_client()
+        # Per-project network isolation (Phase 1): when the spec names a network
+        # other than the shared runtime net, ensure it exists before the run.
+        # Idempotent + suppressed so a concurrent provision can't race-fail here.
+        # No-op on the default path (network_name None → shared net).
+        if spec.network_name and spec.network_name != _RUNTIME_NETWORK:
+            try:
+                client.networks.get(spec.network_name)
+            except docker.errors.NotFound:
+                with suppress(docker.errors.APIError):
+                    client.networks.create(spec.network_name, driver="bridge")
+        try:
+            existing = client.containers.get(spec.name)
+        except docker.errors.NotFound:
+            existing = None
+
+        if existing is not None:
+            existing.reload()
+            current_image = (existing.attrs.get("Config") or {}).get("Image")
+            if current_image and current_image != spec.image:
+                # Stack switched — drop the stale container and recreate below.
+                log.info(
+                    "docker.recreate_on_image_change",
+                    name=spec.name,
+                    old_image=current_image,
+                    new_image=spec.image,
+                )
+                with suppress(docker.errors.APIError, docker.errors.NotFound):
+                    existing.remove(force=True)
+            else:
+                if existing.status == "paused":
+                    existing.unpause()  # can't .start() a frozen container
+                elif existing.status != "running":
+                    existing.start()
+                return str(existing.id)
+
+        # Sandbox hardening (Phase 1) — every entry is OFF by default, so when
+        # the spec carries no overrides the run kwargs are byte-identical to
+        # before. `runtime` selects gVisor (runsc) when registered on the
+        # daemon; `harden` adds no-new-privileges + a PID ceiling. Building a
+        # dict and splatting it keeps the default call path untouched (R-10).
+        security_kwargs: dict[str, object] = {}
+        if spec.runtime:
+            security_kwargs["runtime"] = spec.runtime
+        if spec.harden:
+            security_kwargs["security_opt"] = ["no-new-privileges:true"]
+            if spec.pids_limit and spec.pids_limit > 0:
+                security_kwargs["pids_limit"] = spec.pids_limit
+
+        try:
+            container = client.containers.run(
+                image=spec.image,
+                name=spec.name,
+                detach=True,
+                ports={f"{spec.container_port}/tcp": ("127.0.0.1", spec.port)},
+                environment=spec.env,
+                mem_limit=f"{spec.memory_mb}m",
+                cpu_quota=int(spec.cpu_quota * 100_000),
+                cpu_period=100_000,
+                cap_drop=["ALL"],
+                cap_add=["NET_BIND_SERVICE"],
+                user="1000:1000",
+                # User containers reach `omnia-postgres-users` on the host via
+                # `host.docker.internal`. On Linux this resolves only when the
+                # container is started with this extra_hosts entry; on Docker
+                # Desktop it already does. Matches the DSN built by
+                # `postgres_admin._user_facing_host`.
+                extra_hosts={"host.docker.internal": "host-gateway"},
+                # Join the runtime network so the container resolves and reaches
+                # `omnia-postgres-users` (and the DSN built by postgres_admin) by
+                # name. Without this the dev/prod app cannot reach its database.
+                network=spec.network_name or _RUNTIME_NETWORK,
+                restart_policy={"Name": spec.restart_policy_name},
+                labels={
+                    "omnia.project_id": spec.project_id,
+                    "omnia.kind": spec.kind,
+                    "omnia.tier": spec.tier,
+                },
+                **security_kwargs,
+            )
+        except docker.errors.ImageNotFound as exc:
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"image not found: {spec.image} — build it first",
+                status_code=409,
+            ) from exc
+        except docker.errors.APIError as exc:
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"docker refused start: {exc}",
+                status_code=500,
+            ) from exc
+        return str(container.id)
+
+
+    return await asyncio.to_thread(_do)
+
+
+async def stop_container(name: str, *, pause: bool = False) -> None:
+    """Stop or pause a container — fully idempotent.
+
+    `pause=True` keeps memory (1-3 sec wake) — Pro tier hibernate.
+    `pause=False` frees memory (30-60 sec cold start) — Free tier hibernate.
+
+    No-ops cleanly when the container is missing OR already in the target
+    state: pausing an already-paused container (or stopping a stopped one)
+    must NOT error — the UI fires repeat clicks, and Docker raises 500 on
+    `pause` of a paused container. We check status first and also swallow the
+    idempotency races.
+    """
+    log.info("docker.stop_container", name=name, pause=pause)
+
+    def _do() -> None:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound:
+            return
+        c.reload()
+        status = c.status
+        try:
+            if pause:
+                if status == "running":
+                    c.pause()
+                # paused / exited / created → already not running, no-op
+            else:
+                if status == "paused":
+                    c.unpause()  # can't stop a frozen container — thaw first
+                    c.stop(timeout=10)
+                elif status == "running":
+                    c.stop(timeout=10)
+                # exited / created → already stopped, no-op
+        except docker.errors.APIError as exc:
+            msg = str(exc).lower()
+            if any(
+                token in msg
+                for token in (
+                    "already paused",
+                    "not running",
+                    "is not paused",
+                    "already stopped",
+                    "304",
+                )
+            ):
+                return  # idempotency race — treat as success
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"stop failed for {name}: {exc}",
+                status_code=500,
+            ) from exc
+
+    await asyncio.to_thread(_do)
+
+
+async def find_project_container(project_id: str, *, kind: str = "dev") -> str | None:
+    """Return the container name for a project by label, or None if absent.
+
+    Containers are labeled `omnia.project_id` + `omnia.kind` at creation (see
+    `start_container`). Resolving by label lets stop/status/deploy work from
+    `project_id` alone — no slug→name guessing and no slug query-param coupling
+    (the source of the pause-never-stops and status-422 bugs).
+    """
+    log.info("docker.find_project_container", project_id=project_id, kind=kind)
+
+    def _do() -> str | None:
+        client = _get_client()
+        containers = client.containers.list(
+            all=True,
+            filters={"label": [f"omnia.project_id={project_id}", f"omnia.kind={kind}"]},
+        )
+        return str(containers[0].name) if containers else None
+
+    return await asyncio.to_thread(_do)
+
+
+async def container_status(name: str) -> dict[str, str]:
+    """Return {state, id, port, project_id} where state ∈ {running, paused,
+    stopped, not_found}. `project_id` is the `omnia.project_id` label ("" when
+    absent) — the wake-on-request ingress needs it to reset the idle timer
+    without a second docker round-trip."""
+    log.info("docker.container_status", name=name)
+
+    def _do() -> dict[str, str]:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound:
+            return {"state": "not_found", "id": "", "port": "", "project_id": ""}
+        ports = c.attrs.get("NetworkSettings", {}).get("Ports", {}) or {}
+        host_port = ""
+        for bindings in ports.values():
+            if bindings:
+                host_port = str(bindings[0].get("HostPort", ""))
+                break
+        project_id = (c.labels or {}).get("omnia.project_id", "")
+        return {
+            "state": c.status,
+            "id": c.id,
+            "port": host_port,
+            "project_id": project_id,
+        }
+
+    return await asyncio.to_thread(_do)
+
+
+async def container_image_template(name: str) -> str | None:
+    """Best-effort: recover the orchestrator template name from a container's
+    image. Dev containers run `omnia-template-<template>:dev`, so deploy can seed
+    the prod build context from the RIGHT template without the api threading it
+    through. Returns None when it can't be parsed (caller falls back to default).
+    """
+    log.info("docker.container_image_template", name=name)
+
+    def _do() -> str | None:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound:
+            return None
+        refs: list[str] = []
+        img_ref = (c.attrs.get("Config", {}) or {}).get("Image", "") or ""
+        if img_ref:
+            refs.append(img_ref)
+        try:
+            refs.extend(c.image.tags or [])
+        except Exception:
+            pass
+        for ref in refs:
+            base = ref.rsplit("/", 1)[-1]  # drop any registry/host prefix
+            if base.startswith("omnia-template-"):
+                template = base[len("omnia-template-") :].split(":", 1)[0]
+                if template:
+                    return template
+        return None
+
+    return await asyncio.to_thread(_do)
+
+
+async def write_files(name: str, files: dict[str, str], *, dest_root: str = "/app") -> dict[str, str]:
+    """Stream a set of AI-generated files into a running container via
+    `docker cp` semantics (put_archive). Paths in `files` are container-relative
+    to `dest_root` (default `/app`, matching Next.js workdir in the template).
+
+    Returns a small summary {written: int, total_bytes: int, dropped: list-of-paths}.
+
+    Safety: refuses any path with `..`, leading `/`, or escaping `dest_root`.
+    Empty content (`""`) means "delete this file" (mirrors the api repo layer,
+    which unlinks empty-content files). We DELETE it (`rm -f`) rather than write
+    a zero-length file: a 0-byte source module is not a no-op to the framework —
+    e.g. an empty `src/app/page.tsx` still resolves for "/" and clashes with
+    `(app)/page.tsx`, crashing the dev server with "default export is not a React
+    Component". The app writer relies on this to drop the starter page.
+
+    Missing container = explicit OrchestratorError (caller should handle).
+    """
+    import io
+    import tarfile
+    import time
+    import posixpath
+
+    log.info("docker.write_files", name=name, files=len(files), dest_root=dest_root)
+
+    def _do() -> dict[str, object]:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound as exc:
+            raise OrchestratorError(
+                code="not_found",
+                message=f"container not found: {name}",
+                status_code=404,
+            ) from exc
+        # Wake a hibernated container instead of failing the write (same
+        # mid-build rescue as exec_cmd; see _wake_if_stopped).
+        _wake_if_stopped(c, name)
+        if c.status not in ("running", "paused"):
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"container {name} state={c.status}; can't write files into a stopped container",
+                status_code=409,
+            )
+
+        dropped: list[str] = []
+        to_delete: list[str] = []
+        written = 0
+        total_bytes = 0
+
+        # Build one tar in memory containing every file with its directory entries.
+        # Docker SDK's put_archive needs a tar stream and a target directory.
+        buf = io.BytesIO()
+        ts = int(time.time())
+        with tarfile.open(fileobj=buf, mode="w") as tar:
+            seen_dirs: set[str] = set()
+            for raw_path, content in files.items():
+                # Sanitize: no .., no absolute, must stay under dest_root.
+                norm = posixpath.normpath(raw_path)
+                if norm.startswith("/") or norm.startswith(".."):
+                    dropped.append(raw_path)
+                    continue
+                # Prevent escape via well-crafted normpath edge cases.
+                joined = posixpath.normpath(posixpath.join(dest_root, norm))
+                if not (joined == dest_root or joined.startswith(dest_root + "/")):
+                    dropped.append(raw_path)
+                    continue
+
+                # Empty content = delete-intent: remove the file after the tar is
+                # applied (put_archive can only add/overwrite, not delete). A
+                # 0-byte source file would be a broken module, not a no-op.
+                if content == "":
+                    to_delete.append(joined)
+                    continue
+
+                # Add missing parent dirs as tar entries so put_archive
+                # can write into nested paths the very first time.
+                parts = norm.split("/")
+                for i in range(1, len(parts)):
+                    d = "/".join(parts[:i])
+                    if d and d not in seen_dirs:
+                        di = tarfile.TarInfo(name=d)
+                        di.type = tarfile.DIRTYPE
+                        di.mode = 0o755
+                        di.uid = 1000
+                        di.gid = 1000
+                        di.mtime = ts
+                        tar.addfile(di)
+                        seen_dirs.add(d)
+
+                data = content.encode("utf-8")
+                info = tarfile.TarInfo(name=norm)
+                info.size = len(data)
+                info.mode = 0o644
+                info.uid = 1000
+                info.gid = 1000
+                info.mtime = ts
+                tar.addfile(info, io.BytesIO(data))
+                written += 1
+                total_bytes += len(data)
+
+        # Only push an archive when there's something to write — an all-deletes
+        # batch produces an empty tar that put_archive would reject.
+        if written > 0:
+            buf.seek(0)
+            try:
+                ok = c.put_archive(path=dest_root, data=buf.getvalue())
+            except docker.errors.APIError as exc:
+                raise OrchestratorError(
+                    code="container_failure",
+                    message=f"put_archive failed for {name}: {exc}",
+                    status_code=500,
+                ) from exc
+            if not ok:
+                raise OrchestratorError(
+                    code="container_failure",
+                    message=f"put_archive returned False for {name}",
+                    status_code=500,
+                )
+
+        # Apply deletes (empty-content paths). Best-effort: a delete failure must
+        # not fail the whole hot-reload — the files that were written still land.
+        deleted = 0
+        if to_delete:
+            try:
+                res = c.exec_run(["rm", "-f", *to_delete], user="1000:1000")
+                if getattr(res, "exit_code", 0) in (0, None):
+                    deleted = len(to_delete)
+                else:
+                    log.warning(
+                        "docker.write_files.delete_nonzero",
+                        name=name, paths=to_delete, exit=res.exit_code,
+                    )
+            except docker.errors.APIError as exc:
+                log.warning("docker.write_files.delete_failed", name=name, err=str(exc))
+
+        return {
+            "written": written,
+            "total_bytes": total_bytes,
+            "dropped": dropped,
+            "deleted": deleted,
+        }
+
+    raw = await asyncio.to_thread(_do)
+    # Coerce types for the response (mypy: dict[str,object] → dict[str,str|int|list]).
+    return {
+        "written": str(raw["written"]),
+        "total_bytes": str(raw["total_bytes"]),
+        "deleted": str(raw["deleted"]),
+        "dropped": ",".join(raw["dropped"]) if raw["dropped"] else "",  # type: ignore[arg-type]
+    }
+
+
+def _wake_if_stopped(c: object, name: str) -> None:
+    """Wake a hibernated container in-line before an exec/write (sync, thread ctx).
+
+    The hibernate sweeper counts only PREVIEW traffic as activity, so it can
+    docker-stop a dev container while the build agent is mid-loop (2026-07-08
+    incident: a realtime build died this way — every subsequent agent op became
+    a generic 500 for 40 minutes while the agent ground on). An agent op IS
+    proof the project is active — wake the container exactly like the ingress
+    wake-on-request path instead of failing: paused → unpause, exited/created →
+    start, bounded wait until running. Raises a STRUCTURED 409
+    ``container_not_running`` if the wake doesn't take (callers translate it
+    into an in-band observation instead of the old unhandled-APIError 500).
+    """
+    c.reload()  # type: ignore[attr-defined]
+    status = c.status  # type: ignore[attr-defined]
+    if status == "running":
+        return
+    log.info("docker.wake_on_agent_op", name=name, was=status)
+    try:
+        if status == "paused":
+            c.unpause()  # type: ignore[attr-defined]
+        elif status in ("exited", "created"):
+            c.start()  # type: ignore[attr-defined]
+    except docker.errors.APIError as exc:
+        msg = str(exc).lower()
+        if not any(t in msg for t in ("not paused", "already", "304")):
+            raise OrchestratorError(
+                code="container_not_running",
+                message=f"container {name} is {status} and wake failed: {exc}",
+                status_code=409,
+            ) from exc
+    for _ in range(20):  # up to ~10s; exec needs only PID 1, not the dev server
+        c.reload()  # type: ignore[attr-defined]
+        if c.status == "running":  # type: ignore[attr-defined]
+            return
+        time.sleep(0.5)
+    raise OrchestratorError(
+        code="container_not_running",
+        message=f"container {name} did not reach running state (now {c.status})",  # type: ignore[attr-defined]
+        status_code=409,
+    )
+
+
+async def exec_cmd(
+    name: str,
+    cmd: list[str],
+    *,
+    workdir: str | None = None,
+    user: str = "1000:1000",
+    timeout_sec: int = 120,
+    max_output: int = 8_000,
+) -> dict[str, str]:
+    """Run a command inside a container, return {exit_code, stdout, stderr}.
+
+    Used for follow-up actions after `write_files`: notably `drizzle-kit push`
+    when the AI changed `src/lib/db/schema.ts`. Idempotent for the caller —
+    a non-zero exit is returned in the dict, not raised, so the api layer
+    can decide whether to surface it.
+
+    ``max_output`` bounds each stream (chars) to keep command-log dumps small.
+    Callers that read a whole file (e.g. ``read-file`` cat-ing ``globals.css``,
+    which exceeds the default cap) MUST raise it, else the content is silently
+    truncated mid-line — a truncated ``globals.css`` then breaks the CSS build.
+    """
+    log.info("docker.exec_cmd", name=name, cmd=cmd, workdir=workdir)
+
+    def _do() -> dict[str, str]:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound as exc:
+            raise OrchestratorError(
+                code="not_found",
+                message=f"container not found: {name}",
+                status_code=404,
+            ) from exc
+        # A hibernated container is WOKEN, not failed (2026-07-08 incident:
+        # the sweeper stopped a container mid-build → every agent op 500'd).
+        _wake_if_stopped(c, name)
+        # demux=True splits stdout/stderr — the SDK signature is awkward but
+        # gives us back two bytes-streams in a tuple.
+        try:
+            result = c.exec_run(
+                cmd=cmd,
+                workdir=workdir or "/app",
+                user=user,
+                demux=True,
+            )
+        except docker.errors.APIError as exc:
+            # Stop race (hibernate fired between the wake and the exec) or any
+            # daemon-level refusal: structured, not the generic unhandled 500.
+            msg = str(exc).lower()
+            not_running = "is not running" in msg or "is paused" in msg
+            raise OrchestratorError(
+                code="container_not_running" if not_running else "container_failure",
+                message=f"exec on {name} failed: {exc}",
+                status_code=409 if not_running else 500,
+            ) from exc
+        out_bytes, err_bytes = result.output if isinstance(result.output, tuple) else (result.output, b"")
+        return {
+            "exit_code": str(result.exit_code),
+            "stdout": (out_bytes or b"").decode("utf-8", errors="replace")[:max_output],
+            "stderr": (err_bytes or b"").decode("utf-8", errors="replace")[:max_output],
+        }
+
+    # exec_run does not honor an explicit timeout; wrap in asyncio.wait_for.
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_do), timeout=timeout_sec)
+    except asyncio.TimeoutError as exc:
+        raise OrchestratorError(
+            code="container_failure",
+            message=f"exec {cmd[0]} on {name} timed out after {timeout_sec}s",
+            status_code=504,
+        ) from exc
+
+
+async def destroy_container(name: str) -> None:
+    """Full removal: stop + rm. Missing container is a no-op."""
+    log.info("docker.destroy_container", name=name)
+
+    def _do() -> None:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound:
+            return
+        try:
+            c.stop(timeout=5)
+        except (docker.errors.APIError, requests.exceptions.Timeout):
+            pass  # already stopped, or daemon busy — the force-remove handles it
+        try:
+            c.remove(v=True, force=True)
+        except docker.errors.NotFound:
+            return  # already gone — idempotent
+        except requests.exceptions.Timeout:
+            # The force-remove (SIGKILL + rm) was dispatched, but under heavy
+            # daemon load the SDK's 60s read can elapse before the daemon
+            # answers — the removal still completes in the background. Treat the
+            # timeout as best-effort success so a slow daemon never blocks the
+            # user's «удалить»: the teardown is idempotent, so any leftover is a
+            # no-op on the next pass / reaped by hibernate. Owner bug — projects
+            # with a live container 503'd forever because this ReadTimeout (NOT a
+            # docker.errors.APIError) escaped and failed the whole deletion.
+            log.warning("docker.destroy_container.remove_timeout", name=name)
+            return
+        except docker.errors.APIError as exc:
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"remove failed for {name}: {exc}",
+                status_code=500,
+            ) from exc
+
+    await asyncio.to_thread(_do)
+
+
+async def wake_container(name: str) -> None:
+    """Resume a hibernated dev container.
+
+    Handles every reachable state: paused → unpause (instant), exited /
+    created → start (cold boot, 30-60 s on Next.js), running → no-op.
+    The original `containers.run(...)` config (env, mounts, ports, network)
+    is preserved by Docker across stop, so a plain `.start()` brings the
+    project back identically.
+
+    Raises 404 only when the container truly doesn't exist — the caller
+    should re-provision rather than wake.
+    """
+    log.info("docker.wake_container", name=name)
+
+    def _do() -> None:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound as exc:
+            raise OrchestratorError(
+                code="not_found",
+                message=f"container not found: {name}",
+                status_code=404,
+            ) from exc
+        c.reload()
+        status = c.status
+        try:
+            if status == "paused":
+                c.unpause()
+            elif status in ("exited", "created"):
+                c.start()
+            # running → no-op
+        except docker.errors.APIError as exc:
+            msg = str(exc).lower()
+            if any(t in msg for t in ("not paused", "already", "304")):
+                return  # idempotency race
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"wake failed for {name}: {exc}",
+                status_code=500,
+            ) from exc
+
+    await asyncio.to_thread(_do)
+
+
+async def unpause_container(name: str) -> None:
+    """Unpause a paused container so its filesystem can be read. No-op otherwise."""
+    log.info("docker.unpause_container", name=name)
+
+    def _do() -> None:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound:
+            return
+        if c.status == "paused":
+            try:
+                c.unpause()
+            except docker.errors.APIError:
+                pass
+
+    await asyncio.to_thread(_do)
+
+
+async def copy_path_from_container(
+    name: str, container_path: str, dest_dir: str
+) -> bool:
+    """Extract `container_path` from a container into `dest_dir` on the host.
+
+    Used to assemble a prod build context from the live dev container. Returns
+    False if the path is absent (best-effort overlay) so the caller can layer
+    optional paths without each one being fatal.
+    """
+    import io
+    import tarfile
+
+    log.info("docker.copy_from_container", name=name, path=container_path)
+
+    def _do() -> bool:
+        client = _get_client()
+        c = client.containers.get(name)
+        try:
+            bits, _stat = c.get_archive(container_path)
+        except docker.errors.NotFound:
+            return False
+        raw = b"".join(bits)
+        with tarfile.open(fileobj=io.BytesIO(raw)) as tar:
+            tar.extractall(dest_dir, filter="data")  # filter blocks path traversal
+        return True
+
+    return await asyncio.to_thread(_do)
+
+
+async def build_image(
+    context_dir: str, dockerfile: str, tag: str, *, timeout_sec: int = 900
+) -> None:
+    """`docker build` a prod image. Raises OrchestratorError (with a log tail)
+    on failure. Blocking — call from a background task, not a request handler.
+    """
+    log.info("docker.build_image", tag=tag, context=context_dir, dockerfile=dockerfile)
+
+    def _do() -> None:
+        client = _get_client()
+        try:
+            client.images.build(
+                path=context_dir,
+                dockerfile=dockerfile,
+                tag=tag,
+                rm=True,
+                forcerm=True,
+                pull=False,
+            )
+        except docker.errors.BuildError as exc:
+            tail: list[str] = []
+            for chunk in getattr(exc, "build_log", None) or []:
+                if isinstance(chunk, dict) and chunk.get("stream"):
+                    tail.append(str(chunk["stream"]))
+            detail = ("".join(tail))[-1500:] or str(exc)
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"prod build failed: {detail}",
+                status_code=500,
+            ) from exc
+        except docker.errors.APIError as exc:
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"docker build error: {exc}",
+                status_code=500,
+            ) from exc
+
+    try:
+        await asyncio.wait_for(asyncio.to_thread(_do), timeout=timeout_sec)
+    except asyncio.TimeoutError as exc:
+        raise OrchestratorError(
+            code="container_failure",
+            message=f"prod build timed out after {timeout_sec}s",
+            status_code=504,
+        ) from exc
+
+
+async def container_logs(
+    name: str, *, tail: int = 200, kind: str = "dev"
+) -> dict[str, str]:
+    """Tail recent stdout+stderr from a container. UTF-8 decoded, no follow.
+
+    Returns ``{"logs": "<text>", "tail": "<n>"}``. The frontend renders this
+    in a scrollable panel; truncating at 200 lines by default keeps the
+    payload under ~50 KB for typical Next.js / FastAPI startup logs.
+
+    Missing container is NOT a hard error — we return empty logs so the UI
+    can show "No logs yet" without surfacing a 404 on freshly-provisioned
+    projects (race between container start and first user log click).
+    """
+    log.info("docker.container_logs", name=name, tail=tail, kind=kind)
+
+    def _do() -> dict[str, str]:
+        client = _get_client()
+        try:
+            c = client.containers.get(name)
+        except docker.errors.NotFound:
+            return {"logs": "", "tail": str(tail)}
+        try:
+            raw = c.logs(tail=tail, timestamps=False, stdout=True, stderr=True)
+        except docker.errors.APIError as exc:
+            raise OrchestratorError(
+                code="container_failure",
+                message=f"docker logs failed for {name}: {exc}",
+                status_code=500,
+            ) from exc
+        if isinstance(raw, (bytes, bytearray)):
+            text = raw.decode("utf-8", errors="replace")
+        else:
+            text = str(raw)
+        return {"logs": text, "tail": str(tail)}
+
+    return await asyncio.to_thread(_do)
+
+
+async def prune_old_app_images(slug: str, *, keep: int = 3) -> None:
+    """Remove old `omnia-app-<slug>:*` tags, keeping the `keep` most recent.
+
+    Called after a successful deploy so the VPS doesn't accumulate image
+    layers (prod was sitting on 9 dangling revisions of one project before
+    this was wired). Idempotent and best-effort: API errors are logged, not
+    raised — a deploy is not invalidated by a failed prune.
+    """
+    log.info("docker.prune_old_app_images", slug=slug, keep=keep)
+
+    def _do() -> None:
+        client = _get_client()
+        prefix = f"omnia-app-{slug}"
+        try:
+            images = client.images.list(name=prefix)
+        except docker.errors.APIError as exc:
+            log.warning("docker.prune_list_failed", slug=slug, err=str(exc))
+            return
+
+        tagged: list[tuple[int, str]] = []
+        for img in images:
+            for tag in img.tags or []:
+                if not tag.startswith(prefix + ":"):
+                    continue
+                ts_str = tag.split(":", 1)[1]
+                try:
+                    tagged.append((int(ts_str), tag))
+                except ValueError:
+                    continue  # non-timestamp tag — leave alone
+
+        tagged.sort(reverse=True)
+        for _ts, tag in tagged[keep:]:
+            try:
+                client.images.remove(image=tag, force=True)
+                log.info("docker.image_pruned", tag=tag)
+            except docker.errors.APIError as exc:
+                log.warning("docker.prune_failed", tag=tag, err=str(exc))
+
+    await asyncio.to_thread(_do)

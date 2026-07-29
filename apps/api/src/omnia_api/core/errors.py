@@ -1,0 +1,107 @@
+from typing import Any, Literal
+
+from fastapi import Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+ErrorCode = Literal[
+    "feature_disabled",
+    "validation_failed",
+    "unauthorized",
+    "forbidden",
+    "not_found",
+    "rate_limited",
+    "wallet_empty",
+    "model_unavailable",
+    "internal_error",
+    "conflict",
+    # V2: orchestrator-proxy errors surfaced through apps/api/services/orchestrator_client.
+    # `unavailable` = transport / 5xx / token missing (503). `rejected` = orchestrator
+    # returned 4xx that we passed through (400/404/etc).
+    "orchestrator_unavailable",
+    "orchestrator_rejected",
+    # GitHub export — apps/api/src/omnia_api/routers/github.py + services/github_client.py.
+    "github_not_configured",
+    "github_not_connected",
+    "github_state_invalid",
+    "github_state_expired",
+    "github_unavailable",
+    "github_oauth_failed",
+    "github_token_invalid",
+    "github_repo_exists",
+    "github_repo_failed",
+    "github_push_failed",
+    "project_empty",
+    # Direct style-patch (1.5) — in-preview color/font edit.
+    "empty_patch",
+    "banned_color",
+    "invalid_font",
+    "no_snapshot",
+    "no_index",
+    # BYO-VPS (deploy_targets) + свой домен (custom_domains) —
+    # routers/deploy_targets.py and routers/domains.py.
+    "deploy_target_not_found",
+    "deploy_target_verify_failed",
+    "deploy_target_in_use",
+    "deploy_target_not_verified",
+    "deploy_target_switch_pending",
+    "deploy_not_proven",
+    "domain_not_found",
+    "domain_taken",
+    "domain_invalid",
+    "domain_dns_mismatch",
+    "domain_cert_failed",
+    "hero_media_asset_not_found",
+    "hero_media_plan_not_found",
+    "hero_media_render_not_found",
+    "hero_media_invalid_state",
+]
+
+
+class ErrorBody(BaseModel):
+    code: ErrorCode
+    message: str
+    details: dict[str, Any] | None = None
+
+
+class ApiError(Exception):
+    def __init__(
+        self,
+        code: ErrorCode,
+        message: str,
+        status_code: int = status.HTTP_400_BAD_REQUEST,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.details = details
+        super().__init__(message)
+
+
+async def api_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, ApiError)
+    body = ErrorBody(code=exc.code, message=exc.message, details=exc.details)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": body.model_dump(exclude_none=True)},
+    )
+
+
+async def validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, RequestValidationError)
+    body = ErrorBody(
+        code="validation_failed",
+        message="request validation failed",
+        details={"errors": exc.errors()},
+    )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"error": body.model_dump(exclude_none=True)},
+    )
+
+
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    body = ErrorBody(code="internal_error", message="internal server error")
+    return JSONResponse(status_code=500, content={"error": body.model_dump(exclude_none=True)})

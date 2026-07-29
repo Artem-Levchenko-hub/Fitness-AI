@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Omnia.AI
 
-## Getting Started
+> Пиши промпты, получай готовый сайт. С backend, доменом, деплоем и кнопкой «вернуться назад» для каждого промпта. Всё в рублях, всё на одной платформе.
 
-First, run the development server:
+## Структура монорепо
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+omnia-mvp/
+├── apps/
+│   ├── web/              Next.js 15 — лендинг + workspace UI
+│   ├── api/              FastAPI — проекты, snapshots, preview, WebSocket
+│   └── llm-gateway/      FastAPI + LiteLLM — прокси к LLM-провайдерам
+├── docs/                 Single source of truth для всех 3 агентов
+├── agents/               Брифы для параллельной разработки
+└── infra/                docker-compose для локалки
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Быстрый старт (для разработчика)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# 1. Поднять инфраструктуру (Postgres, Redis, MinIO)
+cd infra && docker compose up -d
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# 2. Backend
+cd apps/api && uv sync && uv run alembic upgrade head && uv run uvicorn main:app --reload --port 8000
 
-## Learn More
+# 3. LLM Gateway
+cd apps/llm-gateway && uv sync && uv run uvicorn main:app --reload --port 8001
 
-To learn more about Next.js, take a look at the following resources:
+# 4. Frontend
+cd apps/web && pnpm install && pnpm dev   # → http://localhost:3000
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Документы
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Архитектура](docs/00-architecture.md)
+- [API контракт](docs/01-api-contract.md)
+- [Data model](docs/02-data-model.md)
+- [Дизайн-система](docs/03-design-system.md)
 
-## Deploy on Vercel
+## Команда
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Артём Левченко** — продукт, бизнес, маркетинг
+- **Рома Исакин** — техлид, AI, ops
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Лицензия
+
+Proprietary © 2026 Omnia.AI

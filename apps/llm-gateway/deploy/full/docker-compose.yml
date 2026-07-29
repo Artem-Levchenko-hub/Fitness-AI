@@ -1,0 +1,540 @@
+# Production-style demo stack: web + api + worker + llm-gateway + postgres + redis + minio.
+#
+# Internal infra (postgres / redis / minio) stays on the docker network — only
+# the three application containers expose host ports for nginx to reverse-proxy.
+#
+# Run on server:
+#     cd /opt/omnia/apps/llm-gateway/deploy/full
+#     cp .env.example .env  # then fill secrets
+#     docker compose up -d --build
+#
+# Update after `git pull`:
+#     docker compose up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: omnia-prod-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-omnia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omnia}
+      POSTGRES_DB: ${POSTGRES_DB:-omnia}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Alembic migrations in the api container own the schema in this stack —
+      # init.sql is only used in the gateway-only demo (docker-compose.demo.yml)
+      # where the api isn't running.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-omnia} -d ${POSTGRES_DB:-omnia}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - omnia-prod
+
+  redis:
+    image: redis:7-alpine
+    container_name: omnia-prod-redis
+    volumes:
+      - redis-data:/data
+    # The orchestrator is a host systemd service, not a Compose container.
+    # Give it a stable loopback address instead of pinning Redis's ephemeral
+    # bridge IP in /opt/omnia/apps/orchestrator/.env.
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - omnia-prod
+
+  minio:
+    image: minio/minio:latest
+    container_name: omnia-prod-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-omnia}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-omnia-minio-secret-please-change}
+    volumes:
+      - minio-data:/data
+    # S3 API on 127.0.0.1:${MINIO_HOST_PORT:-9000} so nginx can reverse-proxy
+    # /minio/* into the previews bucket (anonymous read is set by minio-init).
+    # Bound to loopback only — nginx is the public face.
+    ports:
+      - "127.0.0.1:${MINIO_HOST_PORT:-9000}:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - omnia-prod
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: omnia-prod-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-omnia}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-omnia-minio-secret-please-change}
+      MINIO_BUCKET_PROJECTS: ${MINIO_BUCKET_PROJECTS:-projects}
+      MINIO_BUCKET_PREVIEWS: ${MINIO_BUCKET_PREVIEWS:-previews}
+      MINIO_BUCKET_PHOTOS: ${MINIO_BUCKET_PHOTOS:-omnia-photos}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mc alias set m http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "m/$$MINIO_BUCKET_PROJECTS"
+        mc mb --ignore-existing "m/$$MINIO_BUCKET_PREVIEWS"
+        mc mb --ignore-existing "m/$$MINIO_BUCKET_PHOTOS"
+        mc mb --ignore-existing "m/omnia-images"
+        mc mb --ignore-existing "m/omnia-videos"
+        mc anonymous set download "m/$$MINIO_BUCKET_PREVIEWS"
+        mc anonymous set download "m/$$MINIO_BUCKET_PHOTOS"
+        mc anonymous set download "m/omnia-images"
+        mc anonymous set download "m/omnia-videos"
+        echo "MinIO buckets ready"
+    restart: "no"
+    networks:
+      - omnia-prod
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: omnia-gateway:prod
+    container_name: omnia-prod-gw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # --- aitunnel.ru — one upstream for chat, native tools, images, and video ---
+      AITUNNEL_API_KEY: ${AITUNNEL_API_KEY:-}
+      AITUNNEL_BASE_URL: ${AITUNNEL_BASE_URL:-https://api.aitunnel.ru/v1}
+      # --- proxyapi.ru — ONLY for whisper speech-to-text. ---
+      PROXYAPI_API_KEY: ${PROXYAPI_API_KEY:-}
+      PROXYAPI_OPENAI_BASE_URL: ${PROXYAPI_OPENAI_BASE_URL:-https://api.proxyapi.ru/openai/v1}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # --- Gemini-only outbound HTTP proxy (geo-bypass) ---
+      # When GEMINI_HTTPS_PROXY is empty these vars are also empty, so they
+      # have no effect — httpx ignores empty proxy env. Whitelist domains
+      # in GEMINI_NO_PROXY ensure proxyapi.ru / Sber / Postgres stay direct.
+      HTTPS_PROXY: ${GEMINI_HTTPS_PROXY:-}
+      HTTP_PROXY: ${GEMINI_HTTPS_PROXY:-}
+      https_proxy: ${GEMINI_HTTPS_PROXY:-}
+      http_proxy: ${GEMINI_HTTPS_PROXY:-}
+      NO_PROXY: ${GEMINI_NO_PROXY:-}
+      no_proxy: ${GEMINI_NO_PROXY:-}
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-false}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-omnia}:${POSTGRES_PASSWORD:-omnia}@postgres:5432/${POSTGRES_DB:-omnia}
+      REDIS_URL: redis://redis:6379/1
+      SAFETY_FILTER_ENABLED: ${SAFETY_FILTER_ENABLED:-true}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-3600}
+      MIN_BALANCE_RUB: ${MIN_BALANCE_RUB:-5.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      # Internal-only gateway.  The API talks to it over the Compose network;
+      # host access is kept on loopback for health checks and nginx only.
+      - "127.0.0.1:${GATEWAY_HOST_PORT:-8101}:8001"
+    restart: unless-stopped
+    networks:
+      - omnia-prod
+
+  api:
+    build:
+      context: ../../../api
+      dockerfile: Dockerfile
+    image: omnia-api:prod
+    container_name: omnia-prod-api
+    # The agentic builder loads per-stack guides (SYSTEM_PROMPT.md) + skills from
+    # the orchestrator templates dir at /orchestrator/templates (agent_builder.
+    # _TEMPLATES_DIR resolves there in-container). The api image only ships
+    # apps/api, so without this mount load_stack_system_prompt() returns None and
+    # EVERY agentic build falls back to the entities prompt — the "опять эти
+    # entities" bug. Read-only.
+    volumes:
+      - ../../../orchestrator/templates:/orchestrator/templates:ro
+    # Apply schema changes before accepting traffic.  This is deliberately part
+    # of the API readiness barrier: the worker must never start against an older
+    # schema (generation_runs is required by the single-flight generation path).
+    # Bypass `uv run` — avoids on-start network calls to pypi.org.
+    # Everything is already installed in /app/.venv inside the image.
+    command:
+      - /bin/sh
+      - -c
+      - /app/.venv/bin/alembic upgrade head && exec /app/.venv/bin/uvicorn omnia_api.main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      ENV: prod
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-omnia}:${POSTGRES_PASSWORD:-omnia}@postgres:5432/${POSTGRES_DB:-omnia}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-omnia}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-omnia-minio-secret-please-change}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-https://constructor.lead-generator.ru/minio}
+      MINIO_BUCKET_PROJECTS: ${MINIO_BUCKET_PROJECTS:-projects}
+      MINIO_BUCKET_PREVIEWS: ${MINIO_BUCKET_PREVIEWS:-previews}
+      MINIO_BUCKET_PHOTOS: ${MINIO_BUCKET_PHOTOS:-omnia-photos}
+      # Pexels stock-photo backgrounds (data-omnia-photo / hero.v6). PHOTO_SOURCE
+      # =pexels + PEXELS_API_KEY in .env turn it on; off => tags stripped to mesh.
+      PHOTO_SOURCE: ${PHOTO_SOURCE:-off}
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      PEXELS_PROXY: ${PEXELS_PROXY:-}
+      UNLIMITED_GENERATIONS: ${UNLIMITED_GENERATIONS:-false}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      PROMPT_RATE_LIMIT: ${PROMPT_RATE_LIMIT:-20/minute}
+      PROMPT_IP_RATE_LIMIT: ${PROMPT_IP_RATE_LIMIT:-60/hour}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?set SECRETS_ENCRYPTION_KEY in .env}
+      JWT_COOKIE_SECURE: "true"
+      LLM_GATEWAY_URL: http://gateway:8001
+      MOCK_LLM: "false"
+      # Follow-up app-ification (P-H1, live-verified 2026-06-21): on a STATIC
+      # project a "make it a real app" follow-up escalates the stack
+      # static→container instead of surgical-editing the flat page. The escalation
+      # decision lives in the API handler (routers/messages.py), so the flag is
+      # needed here; the worker reads the already-flipped template. Kill switch:
+      # set to "false".
+      USE_FOLLOWUP_APPIFICATION: "true"
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:-https://constructor.lead-generator.ru}
+      INITIAL_WALLET_BALANCE_RUB: ${INITIAL_WALLET_BALANCE_RUB:-100.0}
+      ORCHESTRATOR_URL: ${ORCHESTRATOR_URL:-http://172.21.0.1:8003}
+      ORCHESTRATOR_INTERNAL_TOKEN: ${ORCHESTRATOR_INTERNAL_TOKEN:?set ORCHESTRATOR_INTERNAL_TOKEN in .env}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-}
+      GITHUB_OAUTH_SCOPE: ${GITHUB_OAUTH_SCOPE:-repo}
+      WEB_BASE_URL: ${WEB_BASE_URL:-https://constructor.lead-generator.ru}
+      USE_SECTION_CATALOG: ${USE_SECTION_CATALOG:-false}
+      USE_DIRECTOR_POLISH: ${USE_DIRECTOR_POLISH:-false}
+      # Per-role model orchestration overrides. Empty = code ROLE_MODEL_MAP
+      # (director=Opus, workers=DeepSeek). ROLE_MODELS = CSV of role=model_id
+      # (e.g. "audit=deepseek-v4-flash-thinking"); FORCE_MODEL pins one model on
+      # every role. Lets ops retune the mix without a code deploy.
+      ROLE_MODELS: ${ROLE_MODELS:-}
+      FORCE_MODEL: ${FORCE_MODEL:-}
+      # Phase 11 — freeform generation + acceptance gate (all OFF by default;
+      # flip in .env to roll out, catalog/IR stays the safe fallback).
+      USE_FREEFORM_RENDER: ${USE_FREEFORM_RENDER:-false}
+      USE_ACCEPTANCE_GATE: ${USE_ACCEPTANCE_GATE:-false}
+      USE_VISION_AUDIT: ${USE_VISION_AUDIT:-false}
+      USE_DESIGN_JUDGE: ${USE_DESIGN_JUDGE:-false}
+      # Native tool-use agent (server-side «Claude Code»): one Opus end-to-end via
+      # native Anthropic tools + preserved thinking, fact-gates only. Flip in .env.
+      USE_NATIVE_AGENT: ${USE_NATIVE_AGENT:-0}
+      # In-app Windows installer build (PyInstaller/Wine → NSIS Setup.exe). Default
+      # off; the api+worker both need it so the gated endpoint + RQ job activate.
+      USE_EXE_BUILD: ${USE_EXE_BUILD:-false}
+      # Image-gen kill switch — set false on prod while the gpt-image upstream is
+      # dead, so builds don't stall on per-image timeouts (image_resolver strips
+      # data-omnia-gen tags fast and the CSS/mesh fallback shows instead).
+      USE_IMAGE_GEN: ${USE_IMAGE_GEN:-true}
+      USE_HERO_MEDIA_MVP: ${USE_HERO_MEDIA_MVP:-false}
+      HERO_MEDIA_STUB_MODE: ${HERO_MEDIA_STUB_MODE:-false}
+      IMAGE_GEN_MODEL: ${IMAGE_GEN_MODEL:-img-flux/flux-2-pro}
+      ACCEPTANCE_MAX_RETRIES: ${ACCEPTANCE_MAX_RETRIES:-2}
+      ACCEPTANCE_MIN_SCORE: ${ACCEPTANCE_MIN_SCORE:-7}
+      # SCORE-ONLY (owner 2026-06-02): ship the rich freeform page + publish the
+      # vision verdict, but NEVER discard it for the worse catalog fallback. The
+      # catalog path emits no data-omnia-gen images, so the fallback shipped
+      # image-less template pages. WITHOUT this passthrough line the .env value is
+      # ignored (compose only injects keys listed here) and score-only never armed.
+      ACCEPTANCE_SCORE_ONLY: ${ACCEPTANCE_SCORE_ONLY:-false}
+      # Repair spend floor (2026-06-07, cost): a repair re-roll runs ONLY when
+      # the page is genuinely deficient (structural/responsive fail, "broken"
+      # vision verdict, or vision score < this). Borderline pages (score in
+      # [floor, min_score)) ship attempt-0 — kills the ~37%-of-build reflexive
+      # repair that fired on ~100% of builds. Set =7 to restore old behaviour.
+      ACCEPTANCE_REPAIR_FLOOR: ${ACCEPTANCE_REPAIR_FLOOR:-5}
+      # PIPELINE DEBUG (owner 2026-06-03, temporary forensics): when DUMP=true,
+      # write each pass's RAW output (system prompt, art-director brief, writer
+      # HTML, vision verdict) to PIPELINE_DEBUG_DIR/<project>/<message>/ so we can
+      # read what every model actually emitted. Default OFF — must be listed here
+      # or the .env value is ignored (compose injects only declared keys).
+      PIPELINE_DEBUG_DUMP: ${PIPELINE_DEBUG_DUMP:-false}
+      PIPELINE_DEBUG_DIR: ${PIPELINE_DEBUG_DIR:-/tmp/omnia-pp}
+      # Sprint 4/5 — anti-generic originality + gradual freeform rollout %.
+      USE_ORIGINALITY: ${USE_ORIGINALITY:-false}
+      ORIGINALITY_MAX_DISTANCE: ${ORIGINALITY_MAX_DISTANCE:-10}
+      FREEFORM_TRAFFIC_PCT: ${FREEFORM_TRAFFIC_PCT:-100}
+      # RT-1 result-type router (landing|web_app|tool|site|code) on the FIRST
+      # prompt — all DARK, default OFF = legacy keyword nets only. Flip the
+      # lead-sink slice FIRST (booking landings stop escalating to /signin).
+      USE_RESULT_TYPE_ROUTER: ${USE_RESULT_TYPE_ROUTER:-false}
+      RESULT_TYPE_LANDING_LEAD_SINK: ${RESULT_TYPE_LANDING_LEAD_SINK:-false}
+      RESULT_TYPE_FIRSTBUILD_APPIFY: ${RESULT_TYPE_FIRSTBUILD_APPIFY:-false}
+      RESULT_TYPE_CLARIFY_QUESTION: ${RESULT_TYPE_CLARIFY_QUESTION:-false}
+      # Taste barrier (область T) — vision verdict re-gates passed + generic→repair.
+      # DARK; flip VISION_BLOCK only together with TASTE_REPAIR_ON_GENERIC + PASSES>=1.
+      ACCEPTANCE_VISION_BLOCK_ENABLED: ${ACCEPTANCE_VISION_BLOCK_ENABLED:-false}
+      ACCEPTANCE_TASTE_REPAIR_ON_GENERIC: ${ACCEPTANCE_TASTE_REPAIR_ON_GENERIC:-false}
+      ACCEPTANCE_TASTE_REPAIR_PASSES: ${ACCEPTANCE_TASTE_REPAIR_PASSES:-0}
+      # Area D (anti-sameness) — composition-gate retune + diversity metric +
+      # softened catalog fallback. Demote the deviation-punishing checks to advisory
+      # (still surface, never block/repair) so diverse layouts stop being funnelled
+      # into one silhouette; ORIGINALITY_SHADOW logs the cross-project dHash distance
+      # without blocking; GATE_REPAIR_PASSES budgets a freeform repair-with-feedback
+      # re-roll before the catalog fallback. All default = today's hard floor.
+      GATE_HIERARCHY_ADVISORY_CHECKS: ${GATE_HIERARCHY_ADVISORY_CHECKS:-}
+      GATE_TASTE_ADVISORY_CHECKS: ${GATE_TASTE_ADVISORY_CHECKS:-}
+      GATE_TASTE_MIN_SCORE: ${GATE_TASTE_MIN_SCORE:-4}
+      GATE_HIERARCHY_MIN_SCORE: ${GATE_HIERARCHY_MIN_SCORE:-2}
+      ORIGINALITY_SHADOW: ${ORIGINALITY_SHADOW:-false}
+      ACCEPTANCE_GATE_REPAIR_PASSES: ${ACCEPTANCE_GATE_REPAIR_PASSES:-0}
+      # App self-repair loop (Claude-Code verify→fix). 0 = OFF (card-only, today);
+      # N>0 = probe live container for a real compile/runtime error → app_doctor
+      # (DeepSeek) fixes → hot-reload → re-probe, up to N, then follow-up snapshot.
+      APP_SELF_REPAIR_PASSES: ${APP_SELF_REPAIR_PASSES:-0}
+      # Feature scaffolding for container apps: "add a section/form/entity" gets the
+      # entity-JSON + CrudResource + nav-wiring contract so DeepSeek ships a complete,
+      # connected feature (not a half-built page). 0/false = OFF (today).
+      USE_FEATURE_SCAFFOLD: ${USE_FEATURE_SCAFFOLD:-false}
+      # Agentic builder (Phase 0): container first-builds run a real
+      # plan→act→observe→verify agent loop (file tools + typecheck) instead of
+      # one-shot generation. false = today's pipeline (byte-identical).
+      USE_AGENTIC_BUILDER: ${USE_AGENTIC_BUILDER:-false}
+      AGENT_BUILDER_MAX_STEPS: ${AGENT_BUILDER_MAX_STEPS:-14}
+      # Per-user canary: run the agent loop for these user ids even when the
+      # global flag is off (safe prod dogfood, no change for anyone else).
+      AGENTIC_BUILDER_CANARY_USERS: ${AGENTIC_BUILDER_CANARY_USERS:-}
+      # Green-gate: agent can't call done until build clean + runtime re-checked.
+      AGENT_REQUIRE_GREEN_BEFORE_DONE: ${AGENT_REQUIRE_GREEN_BEFORE_DONE:-false}
+      # Runtime functional gate (realtime only): drive the live preview, verify
+      # create/live-delivery/no-leak, feed red verdicts back so the agent self-heals.
+      USE_RUNTIME_GATES: ${USE_RUNTIME_GATES:-false}
+      # Wallet self-top-up stub (POST /api/wallet/topup credits own wallet, no pay).
+      # CLOSED by default on every public deployment. Enable only in an isolated,
+      # access-controlled test environment.
+      ALLOW_STUB_TOPUP: ${ALLOW_STUB_TOPUP:-false}
+      # Deploy-attestation gate (Step 3). Advisory-logs the build's verdict at deploy;
+      # flip to true to REFUSE an unproven deploy (watch "[DEPLOY-GATE] proven=" first).
+      DEPLOY_ATTESTATION_BLOCKING: ${DEPLOY_ATTESTATION_BLOCKING:-false}
+      # Host-resolver map so the gate browser (runs in api) reaches the app's
+      # canonical public preview host from inside docker (e.g.
+      # "MAP *.preview.lead-generator.ru 172.21.0.1" → host nginx bridge gateway).
+      GATE_PREVIEW_RESOLVER_RULES: ${GATE_PREVIEW_RESOLVER_RULES:-}
+      # Reference ceiling ratchet (область R) — continuous richness-score floor vs
+      # the curated enterprise corpus. DARK; needs ACCEPTANCE_GAUNTLET_REFERENCE_GATE on too.
+      ACCEPTANCE_GAUNTLET_REFERENCE_GATE: ${ACCEPTANCE_GAUNTLET_REFERENCE_GATE:-false}
+      REFERENCE_CEILING_ENFORCED: ${REFERENCE_CEILING_ENFORCED:-false}
+      REFERENCE_CEILING_TOLERANCE: ${REFERENCE_CEILING_TOLERANCE:-1}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8200}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - omnia-prod
+
+  worker:
+    # Reuses the omnia-api:prod image built by the `api` service — no separate
+    # build step (both Compose race on the same tag otherwise).
+    image: omnia-api:prod
+    container_name: omnia-prod-worker
+    # Same as api: the agent loads per-stack guides/skills from the mounted
+    # orchestrator templates dir, else it defaults to the entities prompt.
+    volumes:
+      - ../../../orchestrator/templates:/orchestrator/templates:ro
+    # Same uv-run bypass as api — direct python from the venv.
+    command: ["/app/.venv/bin/python", "-m", "omnia_api.workers.run"]
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      ENV: prod
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-omnia}:${POSTGRES_PASSWORD:-omnia}@postgres:5432/${POSTGRES_DB:-omnia}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-omnia}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-omnia-minio-secret-please-change}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-https://constructor.lead-generator.ru/minio}
+      MINIO_BUCKET_PROJECTS: ${MINIO_BUCKET_PROJECTS:-projects}
+      MINIO_BUCKET_PREVIEWS: ${MINIO_BUCKET_PREVIEWS:-previews}
+      MINIO_BUCKET_PHOTOS: ${MINIO_BUCKET_PHOTOS:-omnia-photos}
+      PHOTO_SOURCE: ${PHOTO_SOURCE:-off}
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      PEXELS_PROXY: ${PEXELS_PROXY:-}
+      UNLIMITED_GENERATIONS: ${UNLIMITED_GENERATIONS:-false}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?set SECRETS_ENCRYPTION_KEY in .env}
+      # Hero-media render jobs run in this process, so image/video calls need
+      # the same internal gateway route as synchronous API planner calls.
+      LLM_GATEWAY_URL: http://gateway:8001
+      # The preview-render job screenshots live container apps — it asks the
+      # orchestrator for the running container's name (then reaches it on the
+      # shared omnia-runtime network). Without these the worker can't reach the
+      # orchestrator and container apps silently get no timeline thumbnail.
+      ORCHESTRATOR_URL: ${ORCHESTRATOR_URL:-http://172.21.0.1:8003}
+      ORCHESTRATOR_INTERNAL_TOKEN: ${ORCHESTRATOR_INTERNAL_TOKEN:?set ORCHESTRATOR_INTERNAL_TOKEN in .env}
+      USE_SECTION_CATALOG: ${USE_SECTION_CATALOG:-false}
+      USE_DIRECTOR_POLISH: ${USE_DIRECTOR_POLISH:-false}
+      # Per-role model orchestration overrides (empty = code ROLE_MODEL_MAP).
+      ROLE_MODELS: ${ROLE_MODELS:-}
+      FORCE_MODEL: ${FORCE_MODEL:-}
+      # Phase 11 — freeform generation + acceptance gate (all OFF by default).
+      USE_FREEFORM_RENDER: ${USE_FREEFORM_RENDER:-false}
+      USE_ACCEPTANCE_GATE: ${USE_ACCEPTANCE_GATE:-false}
+      USE_VISION_AUDIT: ${USE_VISION_AUDIT:-false}
+      USE_DESIGN_JUDGE: ${USE_DESIGN_JUDGE:-false}
+      # Native tool-use agent (server-side «Claude Code»): one Opus end-to-end via
+      # native Anthropic tools + preserved thinking, fact-gates only. Flip in .env.
+      USE_NATIVE_AGENT: ${USE_NATIVE_AGENT:-0}
+      # In-app Windows installer build (PyInstaller/Wine → NSIS Setup.exe). Default
+      # off; the api+worker both need it so the gated endpoint + RQ job activate.
+      USE_EXE_BUILD: ${USE_EXE_BUILD:-false}
+      # Image-gen kill switch — set false on prod while the gpt-image upstream is
+      # dead, so builds don't stall on per-image timeouts (image_resolver strips
+      # data-omnia-gen tags fast and the CSS/mesh fallback shows instead).
+      USE_IMAGE_GEN: ${USE_IMAGE_GEN:-true}
+      USE_HERO_MEDIA_MVP: ${USE_HERO_MEDIA_MVP:-false}
+      HERO_MEDIA_STUB_MODE: ${HERO_MEDIA_STUB_MODE:-false}
+      IMAGE_GEN_MODEL: ${IMAGE_GEN_MODEL:-img-flux/flux-2-pro}
+      ACCEPTANCE_MAX_RETRIES: ${ACCEPTANCE_MAX_RETRIES:-2}
+      ACCEPTANCE_MIN_SCORE: ${ACCEPTANCE_MIN_SCORE:-7}
+      # SCORE-ONLY (owner 2026-06-02): ship the rich freeform page + publish the
+      # vision verdict, but NEVER discard it for the worse catalog fallback. The
+      # catalog path emits no data-omnia-gen images, so the fallback shipped
+      # image-less template pages. WITHOUT this passthrough line the .env value is
+      # ignored (compose only injects keys listed here) and score-only never armed.
+      ACCEPTANCE_SCORE_ONLY: ${ACCEPTANCE_SCORE_ONLY:-false}
+      # Repair spend floor (2026-06-07, cost): a repair re-roll runs ONLY when
+      # the page is genuinely deficient (structural/responsive fail, "broken"
+      # vision verdict, or vision score < this). Borderline pages (score in
+      # [floor, min_score)) ship attempt-0 — kills the ~37%-of-build reflexive
+      # repair that fired on ~100% of builds. Set =7 to restore old behaviour.
+      ACCEPTANCE_REPAIR_FLOOR: ${ACCEPTANCE_REPAIR_FLOOR:-5}
+      # PIPELINE DEBUG (owner 2026-06-03, temporary forensics): when DUMP=true,
+      # write each pass's RAW output (system prompt, art-director brief, writer
+      # HTML, vision verdict) to PIPELINE_DEBUG_DIR/<project>/<message>/ so we can
+      # read what every model actually emitted. Default OFF — must be listed here
+      # or the .env value is ignored (compose injects only declared keys).
+      PIPELINE_DEBUG_DUMP: ${PIPELINE_DEBUG_DUMP:-false}
+      PIPELINE_DEBUG_DIR: ${PIPELINE_DEBUG_DIR:-/tmp/omnia-pp}
+      # Sprint 4/5 — anti-generic originality + gradual freeform rollout %.
+      USE_ORIGINALITY: ${USE_ORIGINALITY:-false}
+      ORIGINALITY_MAX_DISTANCE: ${ORIGINALITY_MAX_DISTANCE:-10}
+      FREEFORM_TRAFFIC_PCT: ${FREEFORM_TRAFFIC_PCT:-100}
+      # V1.6 16/5 — composition gate (taste+hierarchy) on the LIVE entity
+      # container. Runs in the worker (on omnia-runtime). Default OFF until the
+      # legs are calibrated for real entity apps (16/5b) — see config.py.
+      ACCEPTANCE_ENTITY_COMPOSITION_GATE: ${ACCEPTANCE_ENTITY_COMPOSITION_GATE:-false}
+      # Area C — authenticated CABINET gate. When ON the worker logs into the
+      # generated app with a seeded operator and scores the real /dashboard + CRUD
+      # (full rendered set + @390) instead of the public storefront `/`. DARK;
+      # needs the orchestrator's OMNIA_GATE_SEED=1 so a login-able account exists.
+      GATE_AUTHENTICATED_CABINET: ${GATE_AUTHENTICATED_CABINET:-false}
+      GATE_SEED_EMAIL: ${GATE_SEED_EMAIL:-gate@omnia.local}
+      GATE_CABINET_STATES_ADVISORY: ${GATE_CABINET_STATES_ADVISORY:-true}
+      # b2: host-resolver rule so the gate browser reaches a generated app's public
+      # preview host (canonical Auth.js origin) via the host nginx. Empty = authed
+      # path off. E.g. "MAP *.preview.lead-generator.ru 172.21.0.1".
+      GATE_PREVIEW_RESOLVER_RULES: ${GATE_PREVIEW_RESOLVER_RULES:-}
+      # Reference ceiling ratchet (R) — also read on the worker gauntlet path.
+      ACCEPTANCE_GAUNTLET_REFERENCE_GATE: ${ACCEPTANCE_GAUNTLET_REFERENCE_GATE:-false}
+      REFERENCE_CEILING_ENFORCED: ${REFERENCE_CEILING_ENFORCED:-false}
+      REFERENCE_CEILING_TOLERANCE: ${REFERENCE_CEILING_TOLERANCE:-1}
+      # Area D (anti-sameness) — composition-gate retune + diversity metric +
+      # softened catalog fallback. Also read on the worker gauntlet path (entity
+      # composition legs + the diversity metric). All default = today's hard floor.
+      GATE_HIERARCHY_ADVISORY_CHECKS: ${GATE_HIERARCHY_ADVISORY_CHECKS:-}
+      GATE_TASTE_ADVISORY_CHECKS: ${GATE_TASTE_ADVISORY_CHECKS:-}
+      GATE_TASTE_MIN_SCORE: ${GATE_TASTE_MIN_SCORE:-4}
+      GATE_HIERARCHY_MIN_SCORE: ${GATE_HIERARCHY_MIN_SCORE:-2}
+      ORIGINALITY_SHADOW: ${ORIGINALITY_SHADOW:-false}
+      ACCEPTANCE_GATE_REPAIR_PASSES: ${ACCEPTANCE_GATE_REPAIR_PASSES:-0}
+      # App self-repair loop (Claude-Code verify→fix). 0 = OFF (card-only, today);
+      # N>0 = probe live container for a real compile/runtime error → app_doctor
+      # (DeepSeek) fixes → hot-reload → re-probe, up to N, then follow-up snapshot.
+      APP_SELF_REPAIR_PASSES: ${APP_SELF_REPAIR_PASSES:-0}
+      # Feature scaffolding for container apps: "add a section/form/entity" gets the
+      # entity-JSON + CrudResource + nav-wiring contract so DeepSeek ships a complete,
+      # connected feature (not a half-built page). 0/false = OFF (today).
+      USE_FEATURE_SCAFFOLD: ${USE_FEATURE_SCAFFOLD:-false}
+      # Agentic builder (Phase 0): container first-builds run a real
+      # plan→act→observe→verify agent loop (file tools + typecheck) instead of
+      # one-shot generation. false = today's pipeline (byte-identical).
+      USE_AGENTIC_BUILDER: ${USE_AGENTIC_BUILDER:-false}
+      AGENT_BUILDER_MAX_STEPS: ${AGENT_BUILDER_MAX_STEPS:-14}
+      # Per-user canary: run the agent loop for these user ids even when the
+      # global flag is off (safe prod dogfood, no change for anyone else).
+      AGENTIC_BUILDER_CANARY_USERS: ${AGENTIC_BUILDER_CANARY_USERS:-}
+      # Green-gate: agent can't call done until build clean + runtime re-checked.
+      AGENT_REQUIRE_GREEN_BEFORE_DONE: ${AGENT_REQUIRE_GREEN_BEFORE_DONE:-false}
+      USE_RUNTIME_GATES: ${USE_RUNTIME_GATES:-false}
+    restart: unless-stopped
+    networks:
+      - omnia-prod
+      # Join the user-container runtime network so the preview job can reach a
+      # running dev container by name (omnia-dev-<slug>:3000) to screenshot it.
+      - omnia-runtime
+
+  web:
+    build:
+      context: ../../../web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN:-https://constructor.lead-generator.ru}
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_ORIGIN:-wss://constructor.lead-generator.ru}
+        NEXT_PUBLIC_USE_MOCKS: "false"
+    image: omnia-web:prod
+    container_name: omnia-prod-web
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      # Server-side fetches from Next.js → api stay inside the docker network,
+      # avoiding the public nginx hop and DNS resolution.
+      INTERNAL_API_URL: http://api:8000
+      NEXTAUTH_URL: ${PUBLIC_ORIGIN:-https://constructor.lead-generator.ru}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET in .env}
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3100}:3000"
+    restart: unless-stopped
+    networks:
+      - omnia-prod
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+
+networks:
+  omnia-prod:
+    driver: bridge
+  # External: created by the orchestrator runtime stack. User dev/prod
+  # containers live here; the worker joins it to screenshot live previews.
+  omnia-runtime:
+    external: true
+    name: omnia-runtime_default

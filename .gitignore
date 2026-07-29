@@ -1,78 +1,69 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# Build outputs
+.next/
+dist/
+build/
+*.egg-info/
+# Landing snapshot lives in apps/landing/dist/ — it's NOT a build output of
+# this monorepo, it's a tracked snapshot pulled from the production VPS so
+# we can review/diff/rollback the landing bundle here. Override the global
+# dist/ rule for that specific path.
+!apps/landing/dist/
+!apps/landing/dist/**
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
+# Env / secrets
+.env
+.env.local
+.env.*.local
 !.env.example
 
-# editor / IDE
+# IDE
 .vscode/
 .idea/
 *.swp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# OS
 .DS_Store
+Thumbs.db
 
-# test artifacts
-/playwright-report
-/playwright/.cache
-/test-results
-/coverage
-# Playwright restored-session storageState (prod token) — local only, never commit
-e2e/.auth/
+# Worktrees (управляются claude-session-driver)
+.claude/worktrees/
 
-# vercel
-.vercel
+# Local data (для docker-compose volumes)
+infra/data/
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# Test artifacts
+playwright-report/
+test-results/
+coverage/
 
-# Claude Code local tooling (worktrees w/ node_modules, rescue snapshots, session state) — never commit
-.claude/
+# Generated backups (env + docker-compose) — never commit, may contain secrets
+.env.bak
+.env.bak.*
+**/.env.bak.*
+docker-compose.yml.bak.*
+**/docker-compose.yml.bak.*
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
+.claude/*.lock
+
+# Dogfood-eval routine raw output (screenshots, logs, lock) — see
+# docs/plans/2026-06-16-dogfood-eval-routine.md. Distilled findings live in that
+# committed doc; raw run artifacts stay local.
+_routine/
 .omc/
-
-# RAG knowledge base — PDF исходники держим локально и на VPS, не в git
-/books
-
-# pnpm 11 build-approval file — local only, breaks pnpm 9 on prod
-pnpm-workspace.yaml
-
-# DEV-ONLY login helper (backdoor) — local only, never commit
-scripts/dev-login.ts
-
-# verification session minter (uses prod secret) — local only
-scripts/issue-session.mjs
-
-# Playwright MCP run artifacts
-.playwright-mcp/
-
-# exercise-demo fetch cache (re-fetchable from the OSS API) — local only
-scripts/.cache/

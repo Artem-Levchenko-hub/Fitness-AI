@@ -1,0 +1,84 @@
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from fastapi import APIRouter, Response, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from omnia_api.core.config import get_settings
+from omnia_api.core.deps import CurrentUserDep, SessionDep, set_session_cookie
+from omnia_api.core.errors import ApiError
+from omnia_api.core.security import (
+    consume_dummy_verify,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
+from omnia_api.models.user import User
+from omnia_api.models.wallet import Wallet
+from omnia_api.schemas.user import UserCreate, UserLogin, UserPublic
+
+router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.post(
+    "/register",
+    response_model=UserPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register(payload: UserCreate, response: Response, session: SessionDep) -> User:
+    settings = get_settings()
+    pwd_hash = await hash_password(payload.password)
+    user = User(
+        email=payload.email,
+        password_hash=pwd_hash,
+        # Viral-funnel provenance (V4.2b): record where this signup came from so
+        # the share-link return-edge is measurable. Both NULL for organic signups.
+        signup_source=payload.source,
+        referrer_project_id=payload.referrer_project_id,
+    )
+    user.wallet = Wallet(balance_rub=Decimal(str(settings.initial_wallet_balance_rub)))
+    session.add(user)
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        raise ApiError(
+            "conflict",
+            "email already registered",
+            status.HTTP_409_CONFLICT,
+        ) from e
+    await session.refresh(user)
+    set_session_cookie(response, create_access_token(user.id))
+    return user
+
+
+@router.post("/login", response_model=UserPublic)
+async def login(payload: UserLogin, response: Response, session: SessionDep) -> User:
+    result = await session.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user is None or user.password_hash is None:
+        await consume_dummy_verify()
+        raise ApiError("unauthorized", "invalid credentials", status.HTTP_401_UNAUTHORIZED)
+    if not await verify_password(payload.password, user.password_hash):
+        raise ApiError("unauthorized", "invalid credentials", status.HTTP_401_UNAUTHORIZED)
+    user.last_login_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(user)
+    set_session_cookie(response, create_access_token(user.id))
+    return user
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(response: Response) -> None:
+    settings = get_settings()
+    response.delete_cookie(
+        key=settings.jwt_cookie_name,
+        path="/",
+        domain=settings.jwt_cookie_domain,
+    )
+
+
+@router.get("/me", response_model=UserPublic)
+async def me(current_user: CurrentUserDep) -> User:
+    return current_user

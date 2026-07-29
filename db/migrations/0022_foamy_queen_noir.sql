@@ -1,1 +1,0 @@
-ALTER TABLE "training_programs" ADD COLUMN "activated_at" timestamp with time zone;

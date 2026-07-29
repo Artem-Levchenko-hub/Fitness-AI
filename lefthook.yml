@@ -1,9 +1,0 @@
-pre-commit:
-  parallel: true
-  commands:
-    typecheck:
-      run: pnpm typecheck
-    lint:
-      glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
-      run: pnpm lint --fix {staged_files}
-      stage_fixed: true
