@@ -32,10 +32,11 @@ export type WeekAgg = {
   /** Тоннаж доп. активности (вес×повт; без веса → 0). */
   quickTonnage: number;
   /** Разбивка доп. активности по упражнениям×режиму (mode='sets': entries =
-   *  подходы; mode='total': entries = записи, reps = суммарные повторы). */
+   *  подходы; mode='myo_reps': структурированные Myo-кластеры; mode='total':
+   *  записи, reps = суммарные повторы). */
   quickByExercise: {
     name: string;
-    mode: "sets" | "total";
+    mode: "sets" | "total" | "myo_reps";
     entries: number;
     reps: number;
   }[];
@@ -227,11 +228,15 @@ function formatActivityBlock(current: WeekAgg, previous: WeekAgg): string[] {
       `- Доп. активность (вне тренировок): ${current.quickReps} повт (прошлая ${previous.quickReps})${tonnage}`,
     );
     for (const q of current.quickByExercise) {
-      lines.push(
-        q.mode === "total"
-          ? `  - ${q.name}: ${q.reps} повт (тотал)`
-          : `  - ${q.name}: ${q.entries} подх · ${q.reps} повт`,
-      );
+      if (q.mode === "total") {
+        lines.push(`  - ${q.name}: ${q.reps} повт (тотал)`);
+      } else if (q.mode === "myo_reps") {
+        lines.push(
+          `  - ${q.name}: ${q.entries} Myo-кластер · ${q.reps} повт`,
+        );
+      } else {
+        lines.push(`  - ${q.name}: ${q.entries} подх · ${q.reps} повт`);
+      }
     }
   }
   lines.push("");
