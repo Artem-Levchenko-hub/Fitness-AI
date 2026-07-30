@@ -69,13 +69,47 @@ export const env = createEnv({
      *  https://yookassa.ru/my/merchant/integration/api-keys */
     YOOKASSA_SHOP_ID: z.string().optional(),
     YOOKASSA_SECRET_KEY: z.string().optional(),
+    /** Защитный переключатель: test по умолчанию не позволит случайно
+     *  обработать live-платёж до явного решения владельца. */
+    YOOKASSA_MODE: z.enum(["test", "live"]).default("test"),
+    /** Код НДС в чеке ЮKassa. 1 = без НДС; перед live сверить с бухгалтером. */
+    YOOKASSA_VAT_CODE: z.coerce.number().int().min(1).max(12).default(1),
+    /** Дополнительная IP-проверка webhook. Источник истины всё равно
+     *  перепроверяется через GET /payments/{id}. */
+    YOOKASSA_WEBHOOK_IP_CHECK: z
+      .union([z.literal("true"), z.literal("false")])
+      .optional()
+      .transform((v) => (v === undefined ? undefined : v === "true")),
 
-    /** Цена коуч-сессии в копейках. Default 1000 (10 ₽). */
+    /** Реквизиты продавца. Без них платёжный UI остаётся fail-closed. */
+    LEGAL_OPERATOR_NAME: z.string().min(2).optional(),
+    LEGAL_OPERATOR_INN: z.string().regex(/^\d{10}$|^\d{12}$/).optional(),
+    LEGAL_OPERATOR_REGISTRATION_ID: z
+      .string()
+      .regex(/^\d{13}$|^\d{15}$/)
+      .optional(),
+    LEGAL_OPERATOR_ADDRESS: z.string().min(5).optional(),
+    LEGAL_SUPPORT_EMAIL: z.string().email().optional(),
+    LEGAL_OFFER_VERSION: z.string().min(1).default("2026-07-30"),
+    /** Включается только после проверки опубликованных текстов владельцем/
+     *  юристом. Без него checkout остаётся закрыт. */
+    LEGAL_DOCUMENTS_APPROVED: z
+      .union([z.literal("true"), z.literal("false")])
+      .optional()
+      .transform((v) => v === "true"),
+
+    /** Цена одного ответа AI-тренера в копейках. Default 2200 (22 ₽). */
     AI_COACH_PRICE_KOPECKS: z.coerce.number().int().positive().optional(),
 
     /** Гейтить ли coach по балансу. По умолчанию выкл — пока используем
      *  free-tier Gemini, биллинг включим когда подключим платный провайдер. */
     BILLING_ENABLED: z
+      .union([z.literal("true"), z.literal("false")])
+      .optional()
+      .transform((v) => v === "true"),
+
+    /** Отдельный fail-closed флаг продажи рекуррентной подписки. */
+    SUBSCRIPTION_ENABLED: z
       .union([z.literal("true"), z.literal("false")])
       .optional()
       .transform((v) => v === "true"),

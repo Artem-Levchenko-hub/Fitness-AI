@@ -17,34 +17,44 @@ function loadEnv(p) {
 loadEnv(path.join(__dirname, '.env.production'));
 loadEnv(path.join(__dirname, '.env.local'));
 
+const appName = process.env.PM2_APP_NAME || 'fitness-saas';
+const cronName = process.env.PM2_CRON_NAME || 'fitness-saas-cron';
+const appPort = process.env.PORT || '3001';
+const pm2LogDir =
+  process.env.PM2_LOG_DIR || '/home/i48ptgvnis/.pm2/logs';
+
 module.exports = {
   apps: [
     {
-      name: 'fitness-saas',
+      name: appName,
       script: 'node_modules/next/dist/bin/next',
-      args: 'start --port 3001',
-      cwd: '/opt/fitness-saas',
+      args: `start --port ${appPort}`,
+      cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
       max_memory_restart: '512M',
-      env: { ...process.env, NODE_ENV: 'production', PORT: '3001' },
-      error_file: '/home/i48ptgvnis/.pm2/logs/fitness-saas-error.log',
-      out_file: '/home/i48ptgvnis/.pm2/logs/fitness-saas-out.log',
+      env: { ...process.env, NODE_ENV: 'production', PORT: appPort },
+      error_file: path.join(pm2LogDir, `${appName}-error.log`),
+      out_file: path.join(pm2LogDir, `${appName}-out.log`),
       merge_logs: true,
       time: true,
     },
     {
-      name: 'fitness-saas-cron',
+      name: cronName,
       script: 'scripts/cron-runner.js',
-      cwd: '/opt/fitness-saas',
+      cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
       max_memory_restart: '128M',
-      env: { ...process.env, NODE_ENV: 'production' },
-      error_file: '/home/i48ptgvnis/.pm2/logs/fitness-saas-cron-error.log',
-      out_file: '/home/i48ptgvnis/.pm2/logs/fitness-saas-cron-out.log',
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        CRON_TARGET_PORT: process.env.CRON_TARGET_PORT || appPort,
+      },
+      error_file: path.join(pm2LogDir, `${cronName}-error.log`),
+      out_file: path.join(pm2LogDir, `${cronName}-out.log`),
       merge_logs: true,
       time: true,
     },

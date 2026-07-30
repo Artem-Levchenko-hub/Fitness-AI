@@ -232,6 +232,34 @@
       "when": 1785428560283,
       "tag": "0032_nostalgic_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1785437625332,
+      "tag": "0033_spicy_the_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785438004085,
+      "tag": "0034_chilly_vertigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1785438414578,
+      "tag": "0035_whole_maelstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1785440688054,
+      "tag": "0036_unknown_mantis",
+      "breakpoints": true
     }
   ]
 }

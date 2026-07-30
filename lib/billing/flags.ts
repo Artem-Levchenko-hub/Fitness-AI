@@ -1,4 +1,6 @@
-import { env } from "@/lib/env";
+import "server-only";
+
+import { getBillingReadiness } from "@/lib/billing/readiness";
 
 /**
  * Включён ли биллинг (платное списание за coach-сессии).
@@ -6,5 +8,9 @@ import { env } from "@/lib/env";
  * Когда подключим платный провайдер — выставим BILLING_ENABLED=true.
  */
 export function isBillingEnabled(): boolean {
-  return env.BILLING_ENABLED === true;
+  return getBillingReadiness().paymentsEnabled;
+}
+
+export function isSubscriptionEnabled(): boolean {
+  return getBillingReadiness().subscriptionsEnabled;
 }

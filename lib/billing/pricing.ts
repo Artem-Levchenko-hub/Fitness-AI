@@ -11,8 +11,8 @@ export {
   formatRub,
 } from "./money";
 
-/** Цена одного коуч-разговора в копейках. Default 1000 (10 ₽).
+/** Цена одного ответа AI-тренера в копейках. Default 2200 (22 ₽).
  *  Меняется через AI_COACH_PRICE_KOPECKS в .env.production. */
 export function aiCoachPriceKopecks(): number {
-  return env.AI_COACH_PRICE_KOPECKS ?? 1000;
+  return env.AI_COACH_PRICE_KOPECKS ?? 2200;
 }

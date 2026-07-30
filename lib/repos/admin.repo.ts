@@ -93,3 +93,39 @@ export async function listUsersOverview(
       return b.createdAt.getTime() - a.createdAt.getTime();
     });
 }
+
+export type AdminPaymentOverview = {
+  id: string;
+  userEmail: string;
+  kind: string;
+  amountKopecks: number;
+  status: string;
+  providerPaymentId: string | null;
+  createdAt: Date;
+  refundedAt: Date | null;
+};
+
+export async function listRecentPayments(
+  adminUserId: string,
+  limit = 30,
+): Promise<AdminPaymentOverview[]> {
+  if (!(await isUserAdmin(adminUserId))) {
+    throw new Error("Платежи доступны только админу");
+  }
+
+  return db
+    .select({
+      id: schema.payments.id,
+      userEmail: schema.users.email,
+      kind: schema.payments.kind,
+      amountKopecks: schema.payments.amountKopecks,
+      status: schema.payments.status,
+      providerPaymentId: schema.payments.providerPaymentId,
+      createdAt: schema.payments.createdAt,
+      refundedAt: schema.payments.refundedAt,
+    })
+    .from(schema.payments)
+    .innerJoin(schema.users, eq(schema.users.id, schema.payments.userId))
+    .orderBy(sql`${schema.payments.createdAt} desc`)
+    .limit(limit);
+}

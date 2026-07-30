@@ -138,4 +138,7 @@ export const paymentStatus = pgEnum("payment_status", [
   "waiting_for_capture",
   "succeeded",
   "canceled",
+  "failed",
+  "refund_pending",
+  "refunded",
 ]);

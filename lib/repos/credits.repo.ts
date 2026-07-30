@@ -1,3 +1,5 @@
+import "server-only";
+
 import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
@@ -45,8 +47,22 @@ export async function getOrCreateBalance(userId: string): Promise<Balance> {
 }
 
 export type DebitResult =
-  | { ok: true; balanceAfter: number; txId: string }
+  | {
+      ok: true;
+      balanceAfter: number;
+      txId: string;
+      alreadyApplied: boolean;
+    }
   | { ok: false; reason: "insufficient_funds"; balance: number };
+
+function isReferenceUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "23505"
+  );
+}
 
 /** Атомарное списание. Если средств недостаточно — возвращает
  *  insufficient_funds без побочных эффектов. */
@@ -58,58 +74,118 @@ export async function debit(
 ): Promise<DebitResult> {
   if (amountKopecks <= 0) throw new Error("amountKopecks must be > 0");
 
-  return db.transaction(async (tx) => {
-    // Гарантируем существование строки баланса
-    await tx
-      .insert(schema.userCredits)
-      .values({ userId })
-      .onConflictDoNothing();
+  try {
+    return await db.transaction(async (tx) => {
+      if (ref) {
+        const [existing] = await tx
+          .select({
+            id: schema.creditTransactions.id,
+            balanceAfter: schema.creditTransactions.balanceAfterKopecks,
+          })
+          .from(schema.creditTransactions)
+          .where(
+            and(
+              eq(schema.creditTransactions.userId, userId),
+              eq(schema.creditTransactions.referenceId, ref.id),
+              eq(schema.creditTransactions.referenceType, ref.type),
+              eq(schema.creditTransactions.type, "spend"),
+            ),
+          )
+          .limit(1);
+        if (existing) {
+          return {
+            ok: true as const,
+            balanceAfter: existing.balanceAfter,
+            txId: existing.id,
+            alreadyApplied: true,
+          };
+        }
+      }
 
-    // Атомарно: UPDATE с проверкой остатка через WHERE
-    const updated = await tx
-      .update(schema.userCredits)
-      .set({
-        balanceKopecks: sql`${schema.userCredits.balanceKopecks} - ${amountKopecks}`,
-        totalSpentKopecks: sql`${schema.userCredits.totalSpentKopecks} + ${amountKopecks}`,
-      })
-      .where(
-        and(
-          eq(schema.userCredits.userId, userId),
-          sql`${schema.userCredits.balanceKopecks} >= ${amountKopecks}`,
-        ),
-      )
-      .returning({ balanceAfter: schema.userCredits.balanceKopecks });
+      // Гарантируем существование строки баланса
+      await tx
+        .insert(schema.userCredits)
+        .values({ userId })
+        .onConflictDoNothing();
 
-    if (updated.length === 0) {
-      const [bal] = await tx
-        .select({ b: schema.userCredits.balanceKopecks })
-        .from(schema.userCredits)
-        .where(eq(schema.userCredits.userId, userId))
-        .limit(1);
+      // Атомарно: UPDATE с проверкой остатка через WHERE
+      const updated = await tx
+        .update(schema.userCredits)
+        .set({
+          balanceKopecks: sql`${schema.userCredits.balanceKopecks} - ${amountKopecks}`,
+          totalSpentKopecks: sql`${schema.userCredits.totalSpentKopecks} + ${amountKopecks}`,
+        })
+        .where(
+          and(
+            eq(schema.userCredits.userId, userId),
+            sql`${schema.userCredits.balanceKopecks} >= ${amountKopecks}`,
+          ),
+        )
+        .returning({ balanceAfter: schema.userCredits.balanceKopecks });
+
+      if (updated.length === 0) {
+        const [bal] = await tx
+          .select({ b: schema.userCredits.balanceKopecks })
+          .from(schema.userCredits)
+          .where(eq(schema.userCredits.userId, userId))
+          .limit(1);
+        return {
+          ok: false as const,
+          reason: "insufficient_funds" as const,
+          balance: bal?.b ?? 0,
+        };
+      }
+
+      const balanceAfter = updated[0]!.balanceAfter;
+
+      const [txRow] = await tx
+        .insert(schema.creditTransactions)
+        .values({
+          userId,
+          type: "spend" satisfies CreditTxType,
+          amountKopecks: -amountKopecks,
+          balanceAfterKopecks: balanceAfter,
+          description,
+          referenceId: ref?.id ?? null,
+          referenceType: ref?.type ?? null,
+        })
+        .returning({ id: schema.creditTransactions.id });
+
       return {
-        ok: false as const,
-        reason: "insufficient_funds" as const,
-        balance: bal?.b ?? 0,
+        ok: true as const,
+        balanceAfter,
+        txId: txRow!.id,
+        alreadyApplied: false,
       };
+    });
+  } catch (err) {
+    if (ref && isReferenceUniqueViolation(err)) {
+      const [existing] = await db
+        .select({
+          id: schema.creditTransactions.id,
+          balanceAfter: schema.creditTransactions.balanceAfterKopecks,
+        })
+        .from(schema.creditTransactions)
+        .where(
+          and(
+            eq(schema.creditTransactions.userId, userId),
+            eq(schema.creditTransactions.referenceId, ref.id),
+            eq(schema.creditTransactions.referenceType, ref.type),
+            eq(schema.creditTransactions.type, "spend"),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        return {
+          ok: true,
+          balanceAfter: existing.balanceAfter,
+          txId: existing.id,
+          alreadyApplied: true,
+        };
+      }
     }
-
-    const balanceAfter = updated[0]!.balanceAfter;
-
-    const [txRow] = await tx
-      .insert(schema.creditTransactions)
-      .values({
-        userId,
-        type: "spend" satisfies CreditTxType,
-        amountKopecks: -amountKopecks,
-        balanceAfterKopecks: balanceAfter,
-        description,
-        referenceId: ref?.id ?? null,
-        referenceType: ref?.type ?? null,
-      })
-      .returning({ id: schema.creditTransactions.id });
-
-    return { ok: true as const, balanceAfter, txId: txRow!.id };
-  });
+    throw err;
+  }
 }
 
 /** Зачисление credits — для покупки через ЮKassa или admin adjustment.
@@ -124,13 +200,15 @@ export async function credit(
 ): Promise<{ balanceAfter: number; alreadyApplied: boolean }> {
   if (amountKopecks <= 0) throw new Error("amountKopecks must be > 0");
 
-  return db.transaction(async (tx) => {
+  try {
+    return await db.transaction(async (tx) => {
     // Идемпотентность: ищем существующую транзакцию с тем же ref
     const existing = await tx
       .select({ id: schema.creditTransactions.id })
       .from(schema.creditTransactions)
       .where(
         and(
+          eq(schema.creditTransactions.userId, userId),
           eq(schema.creditTransactions.referenceId, ref.id),
           eq(schema.creditTransactions.referenceType, ref.type),
           eq(schema.creditTransactions.type, txType),
@@ -175,8 +253,19 @@ export async function credit(
       referenceType: ref.type,
     });
 
-    return { balanceAfter, alreadyApplied: false };
-  });
+      return { balanceAfter, alreadyApplied: false };
+    });
+  } catch (err) {
+    if (isReferenceUniqueViolation(err)) {
+      const [bal] = await db
+        .select({ b: schema.userCredits.balanceKopecks })
+        .from(schema.userCredits)
+        .where(eq(schema.userCredits.userId, userId))
+        .limit(1);
+      return { balanceAfter: bal?.b ?? 0, alreadyApplied: true };
+    }
+    throw err;
+  }
 }
 
 export async function listTransactions(userId: string, limit = 30) {

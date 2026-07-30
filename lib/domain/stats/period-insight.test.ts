@@ -10,7 +10,8 @@ describe("summarizeVolumeChange", () => {
     const r = summarizeVolumeChange(5000, null, "all");
     expect(r.status).toBe("new");
     expect(r.pct).toBeNull();
-    expect(r.detail).toMatch(/не с чем сравнить/i);
+    expect(r.detail).toMatch(/нет предыдущего сопоставимого периода/i);
+    expect(r.detail).toMatch(/не как оценка прогресса/i);
   });
 
   it("previous=0 → new (нет базы, без ложного прогресса)", () => {
@@ -19,13 +20,14 @@ describe("summarizeVolumeChange", () => {
     expect(r.pct).toBeNull();
   });
 
-  it("рост выше порога → improved + положительный процент", () => {
+  it("рост тоннажа называется изменением нагрузки, а не прогрессом", () => {
     const r = summarizeVolumeChange(1000, 500, "30d");
     expect(r.status).toBe("improved");
     expect(r.pct).toBe(100);
-    expect(r.headline).toMatch(/растёшь/i);
+    expect(r.headline).toMatch(/нагрузка выросла/i);
     expect(r.detail).toContain("месяц");
     expect(r.detail).toContain("100%");
+    expect(`${r.headline} ${r.detail}`).not.toMatch(/ты растёшь|так держать/i);
   });
 
   it("падение объёма → regressed + отрицательный процент", () => {
@@ -39,7 +41,7 @@ describe("summarizeVolumeChange", () => {
   it("изменение в пределах порога (5%) → stagnant", () => {
     const r = summarizeVolumeChange(1020, 1000, "30d");
     expect(r.status).toBe("stagnant");
-    expect(r.headline).toMatch(/держишь уровень/i);
+    expect(r.headline).toMatch(/нагрузка стабильна/i);
   });
 
   it("ровно на пороге (+5%) → stagnant (epsilon включительно)", () => {
@@ -80,7 +82,7 @@ describe("summarizeExerciseTrend", () => {
     );
     expect(r.status).toBe("improved");
     expect(r.pct).toBe(10);
-    expect(r.headline).toMatch(/Присед растёт/);
+    expect(r.headline).toMatch(/Присед: сила растёт/);
     expect(r.detail).toContain("10%");
     expect(r.detail).toContain("100 → 110 кг");
     expect(r.detail).not.toMatch(/опечатк/i);

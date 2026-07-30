@@ -36,26 +36,39 @@ export function OneRmTrendChart({ data }: { data: Point[] }) {
   const status = trendStatus(prev, last, { epsilon: E1RM_EPSILON_KG });
   const tone = TREND_TONE[status];
   const deltaKg = prev != null ? last - prev : null;
+  const values = data.map((point) => point.estimated1Rm);
+  const yDomain: [number, number] = [
+    Math.max(0, Math.floor(Math.min(...values) - 2)),
+    Math.ceil(Math.max(...values) + 2),
+  ];
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
-            tone.bg,
-            tone.text,
-          )}
-        >
-          <span aria-hidden>{tone.icon}</span>
-          {TREND_LABEL[status]}
-        </span>
-        {deltaKg != null && status !== "stagnant" ? (
-          <span className={cn("tabular text-xs font-medium", tone.text)}>
-            {deltaKg > 0 ? "+" : ""}
-            {deltaKg.toFixed(1)} кг
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+              tone.bg,
+              tone.text,
+            )}
+          >
+            <span aria-hidden>{tone.icon}</span>
+            {TREND_LABEL[status]} за период
           </span>
-        ) : null}
+          {deltaKg != null && status !== "stagnant" ? (
+            <span className={cn("tabular text-xs font-medium", tone.text)}>
+              {deltaKg > 0 ? "+" : ""}
+              {deltaKg.toFixed(1)} кг
+            </span>
+          ) : null}
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Последняя оценка:{" "}
+          <span className="text-foreground tabular font-semibold">
+            {last.toFixed(1)} кг
+          </span>
+        </p>
       </div>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart
@@ -80,6 +93,7 @@ export function OneRmTrendChart({ data }: { data: Point[] }) {
             tickLine={false}
           />
           <YAxis
+            domain={yDomain}
             tickFormatter={(v) => `${Math.round(Number(v))}`}
             tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
             axisLine={false}
@@ -115,6 +129,9 @@ export function OneRmTrendChart({ data }: { data: Point[] }) {
           />
         </LineChart>
       </ResponsiveContainer>
+      <p className="text-muted-foreground mt-2 text-[11px] leading-relaxed">
+        Масштаб приближен к твоим значениям, чтобы изменение было видно.
+      </p>
     </div>
   );
 }

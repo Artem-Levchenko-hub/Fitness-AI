@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import {
   MAX_TOPUP_RUB,
   MIN_TOPUP_RUB,
   TOPUP_PACKAGES,
-} from "@/lib/billing/pricing";
+} from "@/lib/billing/money";
 import { cn } from "@/lib/utils";
 
 export function TopupForm() {
@@ -18,6 +18,7 @@ export function TopupForm() {
   const [custom, setCustom] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const customRub = Number(custom) || 0;
   const useCustom = custom.length > 0;
@@ -32,10 +33,14 @@ export function TopupForm() {
     setError(null);
     setPending(true);
     try {
+      idempotencyKeyRef.current ??= crypto.randomUUID();
       const res = await fetch("/api/yookassa/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountRub }),
+        body: JSON.stringify({
+          amountRub,
+          idempotencyKey: idempotencyKeyRef.current,
+        }),
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as {
@@ -45,9 +50,15 @@ export function TopupForm() {
         setPending(false);
         return;
       }
-      const j = (await res.json()) as { confirmationUrl: string };
-      // Редирект на ЮKassa
-      window.location.href = j.confirmationUrl;
+      const j = (await res.json()) as {
+        confirmationUrl?: string;
+        returnUrl?: string;
+      };
+      const destination = j.confirmationUrl ?? j.returnUrl;
+      if (!destination) {
+        throw new Error("Платёж создан без ссылки подтверждения");
+      }
+      window.location.href = destination;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка соединения");
       setPending(false);
@@ -66,6 +77,7 @@ export function TopupForm() {
               onClick={() => {
                 setSelected(p.rub);
                 setCustom("");
+                idempotencyKeyRef.current = null;
               }}
               className={cn(
                 "rounded-xl border p-3 text-left transition-colors min-h-[5rem]",
@@ -90,7 +102,10 @@ export function TopupForm() {
           id="custom-amount"
           placeholder={`от ${MIN_TOPUP_RUB} ₽`}
           value={custom}
-          onChange={setCustom}
+          onChange={(value) => {
+            setCustom(value);
+            idempotencyKeyRef.current = null;
+          }}
           className="tabular h-11"
         />
         {useCustom && custom.length > 0 && !validAmount ? (

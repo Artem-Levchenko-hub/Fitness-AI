@@ -1,0 +1,33 @@
+name: Задать вопрос
+description: Вопрос по запуску, настройке или использованию
+title: "[Question]: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Сначала проверьте README, docs/README.md и существующие Issues.
+  - type: textarea
+    id: question
+    attributes:
+      label: Вопрос
+      description: Что вы хотите сделать и на каком шаге нужна помощь?
+    validations:
+      required: true
+  - type: textarea
+    id: attempted
+    attributes:
+      label: Что уже пробовали?
+  - type: input
+    id: environment
+    attributes:
+      label: Окружение
+      placeholder: Windows 11, Node 20, pnpm 9
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Приватность
+      options:
+        - label: В сообщении нет ключей, токенов, платёжных и персональных данных.
+          required: true

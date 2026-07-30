@@ -1,21 +1,36 @@
+import "server-only";
+
 import { env } from "@/lib/env";
 
-/** Минимальный клиент ЮKassa REST API без зависимости.
- *  https://yookassa.ru/developers/api */
+/** Минимальный серверный клиент ЮKassa REST API без SDK-зависимости.
+ * https://yookassa.ru/developers/api */
 
-type YooMoney = {
-  value: string; // "100.00"
+const YOOKASSA_API_URL = "https://api.yookassa.ru/v3";
+const READ_TIMEOUT_MS = 15_000;
+const WRITE_TIMEOUT_MS = 20_000;
+
+export type YookassaMode = "test" | "live";
+
+export type YooMoney = {
+  value: string;
   currency: "RUB";
 };
 
-export type YooPaymentRequest = {
-  amountKopecks: number;
-  description: string;
-  returnUrl: string;
-  metadata?: Record<string, string>;
-  /** Уникальный ключ запроса — если повторим с тем же ключом, ЮKassa
-   *  вернёт тот же платёж, не создавая новый. */
-  idempotenceKey: string;
+export type YooPaymentMethod = {
+  id?: string;
+  type: string;
+  saved: boolean;
+  status?: "active" | "inactive";
+  title?: string;
+  card?: {
+    first6?: string;
+    last4: string;
+    expiry_month?: string;
+    expiry_year?: string;
+    card_type?: string;
+    issuer_country?: string;
+    source?: string;
+  };
 };
 
 export type YooPayment = {
@@ -23,15 +38,95 @@ export type YooPayment = {
   status: "pending" | "waiting_for_capture" | "succeeded" | "canceled";
   paid: boolean;
   amount: YooMoney;
+  income_amount?: YooMoney;
   description?: string;
+  recipient?: {
+    account_id: string;
+    gateway_id: string;
+  };
+  payment_method?: YooPaymentMethod;
   metadata?: Record<string, string>;
   confirmation?: {
     type: string;
     confirmation_url?: string;
+    return_url?: string;
   };
+  refundable?: boolean;
   test: boolean;
   created_at: string;
+  captured_at?: string;
+  expires_at?: string;
 };
+
+export type YooRefund = {
+  id: string;
+  payment_id: string;
+  status: "pending" | "succeeded" | "canceled";
+  amount: YooMoney;
+  description?: string;
+  created_at: string;
+  cancellation_details?: {
+    party: string;
+    reason: string;
+  };
+};
+
+type YooPaymentRequestBase = {
+  amountKopecks: number;
+  description: string;
+  customerEmail: string;
+  metadata?: Record<string, string>;
+  /** Сохранить выбранный при redirect способ оплаты для следующих списаний. */
+  savePaymentMethod?: boolean;
+  /** Уникальный ключ запроса, максимум 64 символа. */
+  idempotenceKey: string;
+};
+
+export type YooRedirectPaymentRequest = YooPaymentRequestBase & {
+  returnUrl: string;
+  paymentMethodId?: never;
+};
+
+export type YooSavedPaymentRequest = YooPaymentRequestBase & {
+  paymentMethodId: string;
+  returnUrl?: never;
+};
+
+export type YooPaymentRequest =
+  | YooRedirectPaymentRequest
+  | YooSavedPaymentRequest;
+
+export type YooRefundRequest = {
+  paymentId: string;
+  /** Для полного возврата передайте всю сумму платежа, для частичного — её часть. */
+  amountKopecks: number;
+  description?: string;
+  /** Уникальный ключ запроса, максимум 64 символа. */
+  idempotenceKey: string;
+};
+
+type YookassaOperation =
+  | "createPayment"
+  | "getPayment"
+  | "createRefund"
+  | "getRefund";
+
+/**
+ * Безопасная для возврата клиенту ошибка: тело ответа и тексты провайдера
+ * намеренно не попадают ни в message, ни в публичные поля.
+ */
+export class YookassaApiError extends Error {
+  readonly operation: YookassaOperation;
+  readonly status?: number;
+
+  constructor(operation: YookassaOperation, status?: number) {
+    const suffix = status === undefined ? "request failed" : `failed (HTTP ${status})`;
+    super(`YooKassa ${operation} ${suffix}`);
+    this.name = "YookassaApiError";
+    this.operation = operation;
+    this.status = status;
+  }
+}
 
 function authHeader(): string {
   const shopId = env.YOOKASSA_SHOP_ID;
@@ -39,71 +134,212 @@ function authHeader(): string {
   if (!shopId || !secretKey) {
     throw new Error("YOOKASSA credentials not configured");
   }
-  const credentials = Buffer.from(`${shopId}:${secretKey}`).toString("base64");
-  return `Basic ${credentials}`;
+
+  return `Basic ${Buffer.from(`${shopId}:${secretKey}`).toString("base64")}`;
 }
 
 export function isYookassaConfigured(): boolean {
-  return !!env.YOOKASSA_SHOP_ID && !!env.YOOKASSA_SECRET_KEY;
+  return (
+    !!env.YOOKASSA_SHOP_ID &&
+    !!env.YOOKASSA_SECRET_KEY &&
+    Number.isInteger(env.YOOKASSA_VAT_CODE) &&
+    env.YOOKASSA_VAT_CODE >= 1 &&
+    env.YOOKASSA_VAT_CODE <= 12 &&
+    (env.YOOKASSA_MODE === "test" || env.YOOKASSA_MODE === "live")
+  );
+}
+
+export function isYookassaTestMode(): boolean {
+  return env.YOOKASSA_MODE === "test";
+}
+
+/** Проверяет, что test-флаг объекта ЮKassa совпадает с режимом приложения. */
+export function isYookassaPaymentInConfiguredMode(
+  payment: Pick<YooPayment, "test">,
+): boolean {
+  return payment.test === isYookassaTestMode();
 }
 
 function kopecksToRubString(kopecks: number): string {
+  if (!Number.isSafeInteger(kopecks) || kopecks <= 0) {
+    throw new TypeError("amountKopecks must be a positive safe integer");
+  }
+
   return (kopecks / 100).toFixed(2);
+}
+
+function requireNonEmpty(value: string, field: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new TypeError(`${field} must not be empty`);
+  }
+  return normalized;
+}
+
+function requireIdempotenceKey(value: string): string {
+  const key = requireNonEmpty(value, "idempotenceKey");
+  if (key.length > 64) {
+    throw new TypeError("idempotenceKey must not exceed 64 characters");
+  }
+  return key;
+}
+
+async function requestYookassa<T>(
+  path: string,
+  operation: YookassaOperation,
+  init: Omit<RequestInit, "signal">,
+  timeoutMs: number,
+): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${YOOKASSA_API_URL}${path}`, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        Authorization: authHeader(),
+        ...init.headers,
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch {
+    throw new YookassaApiError(operation);
+  }
+
+  if (!response.ok) {
+    // Не читаем и не пробрасываем provider body: route handlers иногда
+    // возвращают Error.message клиенту.
+    throw new YookassaApiError(operation, response.status);
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new YookassaApiError(operation, response.status);
+  }
 }
 
 export async function createYooPayment(
   req: YooPaymentRequest,
 ): Promise<YooPayment> {
+  const amount = {
+    value: kopecksToRubString(req.amountKopecks),
+    currency: "RUB" as const,
+  };
+  const description = requireNonEmpty(req.description, "description");
+  const paymentMethod =
+    typeof req.paymentMethodId === "string"
+      ? {
+          payment_method_id: requireNonEmpty(
+            req.paymentMethodId,
+            "paymentMethodId",
+          ),
+        }
+      : {
+          confirmation: {
+            type: "redirect",
+            return_url: requireNonEmpty(
+              typeof req.returnUrl === "string" ? req.returnUrl : "",
+              "returnUrl",
+            ),
+          },
+        };
+
   const body = {
+    amount,
+    ...paymentMethod,
+    capture: true,
+    description,
+    metadata: req.metadata,
+    save_payment_method: req.savePaymentMethod,
+    receipt: {
+      customer: {
+        email: requireNonEmpty(req.customerEmail, "customerEmail"),
+      },
+      items: [
+        {
+          description,
+          quantity: "1.00",
+          amount,
+          vat_code: env.YOOKASSA_VAT_CODE,
+          payment_mode: "full_payment",
+          payment_subject: "service",
+        },
+      ],
+    },
+  };
+
+  return requestYookassa<YooPayment>(
+    "/payments",
+    "createPayment",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotence-Key": requireIdempotenceKey(req.idempotenceKey),
+      },
+      body: JSON.stringify(body),
+    },
+    WRITE_TIMEOUT_MS,
+  );
+}
+
+export async function getYooPayment(paymentId: string): Promise<YooPayment> {
+  const id = requireNonEmpty(paymentId, "paymentId");
+
+  return requestYookassa<YooPayment>(
+    `/payments/${encodeURIComponent(id)}`,
+    "getPayment",
+    { method: "GET" },
+    READ_TIMEOUT_MS,
+  );
+}
+
+/**
+ * Создаёт как полный, так и частичный возврат: тип определяется переданной
+ * суммой относительно суммы исходного платежа.
+ */
+export async function createYooRefund(
+  req: YooRefundRequest,
+): Promise<YooRefund> {
+  const body = {
+    payment_id: requireNonEmpty(req.paymentId, "paymentId"),
     amount: {
       value: kopecksToRubString(req.amountKopecks),
       currency: "RUB" as const,
     },
-    confirmation: {
-      type: "redirect",
-      return_url: req.returnUrl,
-    },
-    capture: true,
-    description: req.description,
-    metadata: req.metadata,
+    description: req.description
+      ? requireNonEmpty(req.description, "description")
+      : undefined,
   };
 
-  const res = await fetch("https://api.yookassa.ru/v3/payments", {
-    method: "POST",
-    headers: {
-      Authorization: authHeader(),
-      "Content-Type": "application/json",
-      "Idempotence-Key": req.idempotenceKey,
+  return requestYookassa<YooRefund>(
+    "/refunds",
+    "createRefund",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotence-Key": requireIdempotenceKey(req.idempotenceKey),
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`YooKassa createPayment failed (${res.status}): ${text}`);
-  }
-  return (await res.json()) as YooPayment;
+    WRITE_TIMEOUT_MS,
+  );
 }
 
-export async function getYooPayment(paymentId: string): Promise<YooPayment> {
-  const res = await fetch(
-    `https://api.yookassa.ru/v3/payments/${encodeURIComponent(paymentId)}`,
-    {
-      method: "GET",
-      headers: { Authorization: authHeader() },
-      signal: AbortSignal.timeout(15_000),
-    },
+export async function getYooRefund(refundId: string): Promise<YooRefund> {
+  const id = requireNonEmpty(refundId, "refundId");
+  return requestYookassa<YooRefund>(
+    `/refunds/${encodeURIComponent(id)}`,
+    "getRefund",
+    { method: "GET" },
+    READ_TIMEOUT_MS,
   );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`YooKassa getPayment failed (${res.status}): ${text}`);
-  }
-  return (await res.json()) as YooPayment;
 }
 
 /** Список IP, с которых ЮKassa отправляет уведомления.
- *  https://yookassa.ru/developers/using-api/webhooks#ip */
+ * https://yookassa.ru/developers/using-api/webhooks#ip */
 export const YOOKASSA_IP_WHITELIST = [
   "185.71.76.0/27",
   "185.71.77.0/27",

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Руководство пользователя
+    url: https://github.com/Artem-Levchenko-hub/Fitness-AI/blob/master/docs/user-guide.md
+    about: Первый вход, тренировки, AI-разбор, статистика и PWA
+  - name: Сообщить об уязвимости
+    url: https://github.com/Artem-Levchenko-hub/Fitness-AI/security/advisories/new
+    about: Только приватный канал, без публичного Issue

@@ -3,13 +3,13 @@
  *  Env-зависимая цена коуч-разговора живёт в `./pricing`. */
 
 export const TOPUP_PACKAGES = [
-  { rub: 250, label: "250 ₽", subtitle: "≈ 25 анализов" },
-  { rub: 500, label: "500 ₽", subtitle: "≈ 50 анализов" },
-  { rub: 1000, label: "1 000 ₽", subtitle: "≈ 100 анализов" },
-  { rub: 2000, label: "2 000 ₽", subtitle: "≈ 200 анализов" },
+  { rub: 330, label: "330 ₽", subtitle: "≈ 5 AI-диалогов" },
+  { rub: 660, label: "660 ₽", subtitle: "≈ 10 AI-диалогов" },
+  { rub: 1290, label: "1 290 ₽", subtitle: "≈ 19 AI-диалогов" },
+  { rub: 2580, label: "2 580 ₽", subtitle: "≈ 39 AI-диалогов" },
 ] as const;
 
-export const MIN_TOPUP_RUB = 250;
+export const MIN_TOPUP_RUB = 330;
 export const MAX_TOPUP_RUB = 50_000;
 
 export function rubToKopecks(rub: number): number {
