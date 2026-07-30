@@ -204,19 +204,21 @@ describe("formatWeeklyReviewBlock", () => {
     const d = base();
     d.current = agg({
       sessions: 1,
-      quickEntries: 4,
-      quickReps: 132,
+      quickEntries: 5,
+      quickReps: 156,
       quickTonnage: 0,
       quickByExercise: [
         { name: "Эспандер кистевой", mode: "total", entries: 1, reps: 100 },
         { name: "Подтягивания", mode: "sets", entries: 3, reps: 32 },
+        { name: "Разгибание рук", mode: "myo_reps", entries: 1, reps: 24 },
       ],
     });
     d.previous = agg();
     const out = formatWeeklyReviewBlock(d);
-    expect(out).toContain("Доп. активность (вне тренировок): 132 повт (прошлая 0)");
+    expect(out).toContain("Доп. активность (вне тренировок): 156 повт (прошлая 0)");
     expect(out).toContain("Эспандер кистевой: 100 повт (тотал)");
     expect(out).toContain("Подтягивания: 3 подх · 32 повт");
+    expect(out).toContain("Разгибание рук: 1 Myo-кластер · 24 повт");
   });
 
   it("разбор не пуст для круговой недели без силовых (есть что показать)", () => {
