@@ -121,10 +121,14 @@ non-200. Источник:
 
 ## 5. Миграция и тестовый deploy
 
+На общем сервере рекомендуется отдельный release/worktree и отдельный pm2
+процесс, чтобы test shop не заменял текущую публичную сборку:
+
 ```bash
 pnpm db:migrate
 pnpm build
-pm2 reload ecosystem.config.cjs --update-env
+PM2_APP_NAME=fitness-saas-dev PORT=3002 \
+  pm2 start ecosystem.config.cjs --only fitness-saas-dev --update-env
 ```
 
 Cron должен вызывать:
