@@ -16,7 +16,9 @@
 - **Auth:** Auth.js v5 (NextAuth) + Drizzle adapter + Resend (magic-link email)
 - **DB:** PostgreSQL 15 (локальный, не Supabase) + Drizzle ORM (postgres-js)
 - **AI:** Vercel AI SDK + DeepSeek (OpenAI-compatible endpoint), streaming
-- **Billing:** Stripe (Checkout + Customer Portal + raw-body webhook)
+- **Billing:** ЮKassa REST API (пополнения, чеки, сохранённый способ оплаты,
+  автопродление, возвраты). Legacy Stripe-поля остаются только для совместимости
+  старой схемы.
 - **Charts:** Recharts
 - **PWA:** Serwist
 - **Deploy:** pm2 + nginx reverse proxy + certbot — на `app.lead-generator.ru` (170.168.72.200)
@@ -64,7 +66,9 @@
 2. **Innertalk Messenger живёт на том же сервере на 80/443.** Не трогать его nginx config — наш subdomain `app.lead-generator.ru` добавляется отдельным server block. Наша БД — отдельная, не share с Innertalk.
 3. **No RLS** (нет Supabase). Access control реализуем через Data Access Layer: все repo-функции принимают `userId` и фильтруют запросы. Никогда не достаём данные без явного userId. См. R-7.
 4. **DeepSeek timeout & circuit breaker** (R-32, R-33). 30s timeout через AbortSignal, после 3 fails подряд — fallback "анализ временно недоступен". Не блокирует тренировки.
-5. **Stripe webhook требует raw body** — обязательно через Route Handler с `request.text()`, не через `request.json()` или Server Action.
+5. **ЮKassa webhook не является источником истины.** Принимать из тела только
+   тип события и ID, затем делать server-to-server GET, сверять сумму/RUB/
+   metadata/test-mode и применять settlement транзакционно.
 6. **Markdown-заметки = single source of truth для AI-контекста.** Не кешировать агрегаты в JSON. AI получает заметки целиком.
 7. **Animation perf.** Активная тренировка — 60 fps на средних телефонах (тестировать DevTools 4× CPU throttle). Framer Motion respects prefers-reduced-motion.
 8. **Mobile-first.** Тапы ≥56px для критичных действий (R-41). Bottom tab bar в (app) layout. iPhone SE как baseline (375×667).
@@ -74,7 +78,8 @@
 - **app/(marketing)** — публичный лендинг + pricing. SSG-friendly.
 - **app/(auth)** — login, verify (magic link callback).
 - **app/(app)** — приватное под `proxy.ts` auth check.
-- **app/api/** — Route Handlers только для AI streaming + Stripe webhook + cron triggers. Всё остальное — Server Actions.
+- **app/api/** — Route Handlers для AI streaming, ЮKassa, health и cron
+  triggers. Остальные мутации по возможности остаются Server Actions.
 - **lib/domain/** — pure TS, нет imports из db/auth/stripe/deepseek (R-7).
 - **lib/repos/** — adapters: принимают `userId` и Drizzle `db`. Все queries фильтруют по userId.
 - **server/actions/** — Server Actions, импортируют repos + auth() helper.
@@ -104,11 +109,11 @@
 
 ## Never
 
-- Импортить `next-auth`, `db`, `stripe`, `deepseek` в `lib/domain/`.
+- Импортить `next-auth`, `db`, `yookassa`, `stripe`, `deepseek` в `lib/domain/`.
 - Запрашивать данные из БД без явного `userId` (нет RLS — мы сами защищаем).
 - Использовать `cookies()`, `headers()`, `params` без `await` (Next.js 16 — все async).
 - Использовать `middleware.ts` (Next.js 16 → `proxy.ts`).
-- Парсить Stripe webhook body как JSON до verify подписи.
+- Доверять телу webhook ЮKassa без повторного GET объекта у провайдера.
 - Хранить DeepSeek/Stripe/Resend ключи в client-side env (`NEXT_PUBLIC_*`).
 - Класть hex-код в `className` (`text-[#abc]`) — использовать tokens из `@theme`.
 - Push to main без локального `pnpm build`.

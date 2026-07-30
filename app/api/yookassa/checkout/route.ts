@@ -1,16 +1,21 @@
 import { z } from "zod";
 
-import { env } from "@/lib/env";
 import { requireUser } from "@/lib/auth/require-user";
-import { MAX_TOPUP_RUB, MIN_TOPUP_RUB, rubToKopecks } from "@/lib/billing/pricing";
+import { getBillingReadiness } from "@/lib/billing/readiness";
+import { MAX_TOPUP_RUB, MIN_TOPUP_RUB, rubToKopecks } from "@/lib/billing/money";
 import {
   createYooPayment,
-  isYookassaConfigured,
+  isYookassaPaymentInConfiguredMode,
+  YookassaApiError,
 } from "@/lib/billing/yookassa";
 import {
-  attachProviderPaymentId,
-  createPaymentRecord,
+  attachProviderPayment,
+  countRecentPaymentIntents,
+  getOrCreatePaymentRecord,
+  markPaymentFailed,
+  PaymentIdempotencyConflictError,
 } from "@/lib/repos/payments.repo";
+import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -20,72 +25,124 @@ const bodySchema = z.object({
     .int()
     .min(MIN_TOPUP_RUB)
     .max(MAX_TOPUP_RUB),
+  idempotencyKey: z.string().uuid(),
 });
+
+const MAX_INTENTS_PER_TEN_MINUTES = 5;
 
 export async function POST(request: Request) {
   const user = await requireUser();
+  const readiness = getBillingReadiness();
 
-  if (!isYookassaConfigured()) {
+  if (!readiness.paymentsEnabled) {
     return Response.json(
-      { error: "ЮKassa не настроена администратором" },
+      { error: "Платежи пока не включены владельцем приложения" },
       { status: 503 },
     );
   }
 
-  let parsed;
-  try {
-    parsed = bodySchema.parse(await request.json());
-  } catch {
-    return Response.json({ error: "Некорректная сумма" }, { status: 400 });
+  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return Response.json({ error: "Некорректные параметры платежа" }, { status: 400 });
   }
 
-  const amountKopecks = rubToKopecks(parsed.amountRub);
-  const description = `Пополнение баланса Fitness SaaS на ${parsed.amountRub} ₽`;
+  const recent = await countRecentPaymentIntents(
+    user.id,
+    new Date(Date.now() - 10 * 60_000),
+  );
+  if (recent >= MAX_INTENTS_PER_TEN_MINUTES) {
+    return Response.json(
+      { error: "Слишком много попыток оплаты. Повторите через 10 минут." },
+      { status: 429 },
+    );
+  }
 
-  // 1. Создаём pending запись в нашей БД (получаем internal id)
-  const { id: internalId } = await createPaymentRecord({
-    userId: user.id,
-    amountKopecks,
-    description,
-    metadata: { source: "topup" },
-  });
+  const amountKopecks = rubToKopecks(parsed.data.amountRub);
+  const description = `Пополнение баланса Fitness AI на ${parsed.data.amountRub} ₽`;
 
-  // 2. Зовём ЮKassa с idempotence-key=internalId — если повторно вызовут,
-  //    ЮKassa вернёт тот же платёж.
-  let yoo;
+  let local;
   try {
-    yoo = await createYooPayment({
+    local = await getOrCreatePaymentRecord({
+      userId: user.id,
+      idempotencyKey: parsed.data.idempotencyKey,
+      kind: "topup",
       amountKopecks,
       description,
-      returnUrl: `${env.NEXT_PUBLIC_APP_URL}/billing?payment=${internalId}`,
-      metadata: {
-        internalId,
-        userId: user.id,
-      },
-      idempotenceKey: internalId,
+      receiptEmail: user.email,
+      metadata: { source: "topup" },
     });
-  } catch (err) {
-    return Response.json(
-      {
-        error:
-          err instanceof Error ? err.message : "ЮKassa createPayment failed",
+  } catch (error) {
+    if (error instanceof PaymentIdempotencyConflictError) {
+      return Response.json(
+        { error: "Этот ключ оплаты уже использован" },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
+
+  if (local.payment.status === "succeeded") {
+    return Response.json({
+      internalId: local.payment.id,
+      status: "succeeded",
+      returnUrl: `/billing?payment=${local.payment.id}`,
+    });
+  }
+
+  let provider;
+  try {
+    provider = await createYooPayment({
+      amountKopecks,
+      description,
+      customerEmail: user.email,
+      returnUrl: `${env.NEXT_PUBLIC_APP_URL}/billing?payment=${local.payment.id}`,
+      metadata: {
+        internalId: local.payment.id,
+        userId: user.id,
+        kind: "topup",
       },
+      idempotenceKey: parsed.data.idempotencyKey,
+    });
+
+    if (!isYookassaPaymentInConfiguredMode(provider)) {
+      await markPaymentFailed(local.payment.id, "provider_mode_mismatch");
+      return Response.json(
+        { error: "Режим магазина ЮKassa не совпадает с настройкой приложения" },
+        { status: 502 },
+      );
+    }
+
+    await attachProviderPayment(
+      local.payment.id,
+      provider.id,
+      provider.status,
+      provider as unknown as Record<string, unknown>,
+    );
+  } catch (error) {
+    await markPaymentFailed(
+      local.payment.id,
+      error instanceof YookassaApiError
+        ? `provider_${error.operation}_${error.status ?? "network"}`
+        : "provider_unknown",
+    );
+    return Response.json(
+      { error: "ЮKassa временно недоступна. Повторите попытку позже." },
       { status: 502 },
     );
   }
 
-  await attachProviderPaymentId(internalId, yoo.id, yoo.status, yoo);
-
-  const confirmationUrl = yoo.confirmation?.confirmation_url;
+  const confirmationUrl = provider.confirmation?.confirmation_url;
   if (!confirmationUrl) {
+    await markPaymentFailed(local.payment.id, "confirmation_url_missing");
     return Response.json(
-      { error: "ЮKassa не вернула confirmation_url" },
+      { error: "ЮKassa не вернула ссылку подтверждения" },
       { status: 502 },
     );
   }
 
   return Response.json({
     confirmationUrl,
-    internalId,
+    internalId: local.payment.id,
+    status: provider.status,
   });
 }

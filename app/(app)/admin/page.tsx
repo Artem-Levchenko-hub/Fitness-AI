@@ -8,11 +8,18 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AdminRefundButton } from "@/components/billing/AdminRefundButton";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { formatRub } from "@/lib/billing/money";
 import {
+  getBillingReadiness,
+  type BillingReadiness,
+} from "@/lib/billing/readiness";
+import {
   listUsersOverview,
+  listRecentPayments,
+  type AdminPaymentOverview,
   type AdminUserOverview,
 } from "@/lib/repos/admin.repo";
 
@@ -26,7 +33,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *  так же, как страницу друга. */
 export default async function AdminPage() {
   const admin = await requireAdmin();
-  const users = await listUsersOverview(admin.id);
+  const billing = getBillingReadiness();
+  const [users, payments] = await Promise.all([
+    listUsersOverview(admin.id),
+    listRecentPayments(admin.id),
+  ]);
 
   const now = new Date();
   const active7d = users.filter(
@@ -78,6 +89,25 @@ export default async function AdminPage() {
         />
       </section>
 
+      <BillingReadinessPanel readiness={billing} />
+
+      <section className="mb-8">
+        <h2 className="mb-3 text-sm font-semibold tracking-tight">
+          Последние платежи
+        </h2>
+        {payments.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Платежей пока нет.</p>
+        ) : (
+          <ul className="bg-card border-border divide-border divide-y rounded-2xl border">
+            {payments.map((payment) => (
+              <li key={payment.id}>
+                <PaymentRow payment={payment} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section>
         <h2 className="mb-3 text-sm font-semibold tracking-tight">
           Все пользователи
@@ -95,6 +125,108 @@ export default async function AdminPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function BillingReadinessPanel({
+  readiness,
+}: {
+  readiness: BillingReadiness;
+}) {
+  const subscriptionOnlyMissing = readiness.subscriptionMissing.filter(
+    (key) => !readiness.paymentMissing.includes(key),
+  );
+
+  return (
+    <section className="bg-card border-border mb-8 rounded-2xl border p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+            Платёжный контур
+          </p>
+          <h2 className="mt-1 text-base font-semibold tracking-tight">
+            ЮKassa · {readiness.mode === "test" ? "тестовый режим" : "live"}
+          </h2>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <ReadinessBadge ready={readiness.paymentsEnabled}>
+            Пополнения
+          </ReadinessBadge>
+          <ReadinessBadge ready={readiness.subscriptionsEnabled}>
+            Подписки
+          </ReadinessBadge>
+        </div>
+      </div>
+
+      {readiness.paymentMissing.length > 0 ? (
+        <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
+          Для платежей заполнить:{" "}
+          <span className="text-foreground font-mono">
+            {readiness.paymentMissing.join(", ")}
+          </span>
+          .
+        </p>
+      ) : null}
+      {subscriptionOnlyMissing.length > 0 ? (
+        <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+          Для автопродления дополнительно:{" "}
+          <span className="text-foreground font-mono">
+            {subscriptionOnlyMissing.join(", ")}
+          </span>
+          .
+        </p>
+      ) : null}
+      <p className="text-muted-foreground/80 mt-3 text-xs leading-relaxed">
+        Значения секретов намеренно не показываются. Настройки читаются только
+        из server env; live включается отдельно после проверки оферты, чеков и
+        webhook.
+      </p>
+    </section>
+  );
+}
+
+function ReadinessBadge({
+  ready,
+  children,
+}: {
+  ready: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={
+        ready
+          ? "bg-success/10 text-success rounded-full px-2.5 py-1 font-medium"
+          : "bg-muted text-muted-foreground rounded-full px-2.5 py-1 font-medium"
+      }
+    >
+      {children}: {ready ? "готово" : "выключено"}
+    </span>
+  );
+}
+
+function PaymentRow({ payment }: { payment: AdminPaymentOverview }) {
+  const kind =
+    payment.kind === "topup"
+      ? "Баланс"
+      : payment.kind === "subscription_initial"
+        ? "Подписка"
+        : "Продление";
+  return (
+    <div className="flex items-center gap-3 p-4">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {kind} · {formatRub(payment.amountKopecks)}
+        </p>
+        <p className="text-muted-foreground truncate text-xs">
+          {payment.userEmail} · {formatDate(payment.createdAt)} ·{" "}
+          {payment.status}
+        </p>
+      </div>
+      {payment.kind === "topup" && payment.status === "succeeded" ? (
+        <AdminRefundButton paymentId={payment.id} />
+      ) : null}
+    </div>
   );
 }
 

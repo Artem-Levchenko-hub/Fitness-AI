@@ -4,9 +4,12 @@
  * расписанию. Заменяет systemd timers без необходимости sudo.
  *
  *  - process-ai-jobs: каждую минуту
+ *  - ai-billing:      каждую минуту (stale single-flight recovery)
  *  - daily-trainer:   каждый час (роут сам решит, у кого локально 22:00)
  *  - weekly-trainer:  каждый час (роут сам решит, у кого локально Вс 20:00)
  *  - push-reminders:  каждый час
+ *  - payments:        каждый час (reconcile пропущенных webhook)
+ *  - subscriptions:   каждый час (due/retry решает сам роут)
  *  - backup-db:       каждый час (роут сам делает дамп раз в сутки + ротация)
  *
  * Запускается через ecosystem.config.cjs как отдельный pm2-app.
@@ -65,11 +68,14 @@ console.log(`[cron-runner] started, base=${BASE}`);
 
 // process-ai-jobs дергаем чаще всего — обрабатывает свежие aiJobs.
 scheduleEveryMinute("/api/cron/process-ai-jobs");
+scheduleEveryMinute("/api/cron/ai-billing-reconcile");
 
 // Hourly:
 scheduleEveryHour("/api/cron/daily-trainer");
 scheduleEveryHour("/api/cron/weekly-trainer");
 scheduleEveryHour("/api/cron/push-reminders");
+scheduleEveryHour("/api/cron/payments-reconcile");
+scheduleEveryHour("/api/cron/subscriptions");
 // Дамп прод-БД: тикаем ежечасно, роут сам делает дамп раз в сутки + ротацию.
 scheduleEveryHour("/api/cron/backup-db");
 

@@ -14,7 +14,7 @@ import {
 
 describe("rubToKopecks", () => {
   it("целые рубли в копейки", () => {
-    expect(rubToKopecks(250)).toBe(25000);
+    expect(rubToKopecks(330)).toBe(33000);
     expect(rubToKopecks(1)).toBe(100);
     expect(rubToKopecks(2000)).toBe(200000);
   });
@@ -31,13 +31,13 @@ describe("rubToKopecks", () => {
 
 describe("kopecksToRub", () => {
   it("копейки в рубли", () => {
-    expect(kopecksToRub(25000)).toBe(250);
+    expect(kopecksToRub(33000)).toBe(330);
     expect(kopecksToRub(50)).toBe(0.5);
     expect(kopecksToRub(0)).toBe(0);
   });
 
   it("round-trip rub→kop→rub для целых значений", () => {
-    for (const rub of [250, 500, 1000, 2000]) {
+    for (const rub of [330, 660, 1290, 2580]) {
       expect(kopecksToRub(rubToKopecks(rub))).toBe(rub);
     }
   });
@@ -45,7 +45,7 @@ describe("kopecksToRub", () => {
 
 describe("formatRub", () => {
   it("целые рубли без дробной части и без разряда", () => {
-    expect(formatRub(25000)).toBe("250 ₽");
+    expect(formatRub(33000)).toBe("330 ₽");
     expect(formatRub(0)).toBe("0 ₽");
   });
 
@@ -66,7 +66,9 @@ describe("formatRub", () => {
 describe("константы пополнения", () => {
   it("ровно 4 пакета с возрастающими суммами", () => {
     expect(TOPUP_PACKAGES).toHaveLength(4);
-    expect(TOPUP_PACKAGES.map((p) => p.rub)).toEqual([250, 500, 1000, 2000]);
+    expect(TOPUP_PACKAGES.map((p) => p.rub)).toEqual([
+      330, 660, 1290, 2580,
+    ]);
   });
 
   it("каждый пакет имеет rub/label/subtitle", () => {
@@ -78,7 +80,7 @@ describe("константы пополнения", () => {
   });
 
   it("границы пополнения", () => {
-    expect(MIN_TOPUP_RUB).toBe(250);
+    expect(MIN_TOPUP_RUB).toBe(330);
     expect(MAX_TOPUP_RUB).toBe(50_000);
     expect(MIN_TOPUP_RUB).toBeLessThan(MAX_TOPUP_RUB);
   });

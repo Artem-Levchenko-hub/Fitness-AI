@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { ipv4ToNum, ipv4InCidr, ipInAnyCidr } from "./cidr";
+import {
+  ipInAnyCidr,
+  ipv4InCidr,
+  ipv4ToNum,
+  ipv6InCidr,
+  ipv6ToBytes,
+} from "./cidr";
 
 /** Характеризационные тесты IPv4/CIDR-сопоставления (allowlist ЮKassa-вебхука).
  *  Граничные кейсы (.31/.32 для /27, .127/.128 для /25) ловят off-by-one в
@@ -144,13 +150,29 @@ describe("ipInAnyCidr — против представительного allowl
     expect(ipInAnyCidr("185.71.78.10", ALLOW)).toBe(false);
   });
 
-  it("IPv6-адрес ЮKassa → false (v4-only impl: реальные v6-уведомления НЕ матчатся)", () => {
-    // Документирует ограничение: nginx отдаёт v4 X-Forwarded-For, поэтому ок,
-    // но если бы пришёл голый v6 — он бы НЕ прошёл фильтр.
-    expect(ipInAnyCidr("2a02:5180::5", ALLOW)).toBe(false);
+  it("IPv6-адрес ЮKassa → true", () => {
+    expect(ipInAnyCidr("2a02:5180::5", ALLOW)).toBe(true);
   });
 
   it("пустой список → false", () => {
     expect(ipInAnyCidr("185.71.76.10", [])).toBe(false);
+  });
+});
+
+describe("IPv6 / CIDR", () => {
+  it("парсит полный и сжатый адрес одинаково", () => {
+    expect(ipv6ToBytes("2a02:5180::5")).toEqual(
+      ipv6ToBytes("2a02:5180:0:0:0:0:0:5"),
+    );
+  });
+
+  it("/32 принимает диапазон ЮKassa и отклоняет соседний", () => {
+    expect(ipv6InCidr("2a02:5180:ffff::1", "2a02:5180::/32")).toBe(true);
+    expect(ipv6InCidr("2a02:5181::1", "2a02:5180::/32")).toBe(false);
+  });
+
+  it("невалидный IPv6 и prefix отклоняются", () => {
+    expect(ipv6ToBytes("2a02:::1")).toBeNull();
+    expect(ipv6InCidr("2a02:5180::1", "2a02:5180::/129")).toBe(false);
   });
 });

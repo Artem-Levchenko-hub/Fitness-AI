@@ -1,36 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
+  <img src="public/icons/icon-192.png" width="96" height="96" alt="Fitness AI">
+  <h1>Fitness AI</h1>
+  <p><strong>Тренировочный дневник, который помнит прогресс и превращает его в понятные решения.</strong></p>
+  <p>
+    Силовые, круговые и кардио-тренировки, Myo-reps, адаптивные шаблоны,
+    10-сессионный AI-анализ, статистика, PWA и готовящийся Android-клиент.
+  </p>
+  <p>
+    <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16.2-111111?logo=nextdotjs">
+    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white">
+    <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white">
+    <img alt="PWA" src="https://img.shields.io/badge/PWA-installable-3A6B4A">
+    <img alt="Tests" src="https://img.shields.io/badge/Vitest-1000%2B_tests-6E9F18?logo=vitest&logoColor=white">
+  </p>
+</div>
 
-## Getting Started
+## Что умеет
 
-First, run the development server:
+| Тренировки | Аналитика | AI-тренер | Продукт |
+|---|---|---|---|
+| Силовые, круговые и кардио | Объём, 1RM, PR и группы мышц | Контекст последних 10 сессий | Windows installable PWA |
+| Шаблоны и версии программ | Недельная активность и Myo-reps | Разбор завершённой тренировки | Offline shell и push |
+| Myo-reps и таймер отдыха | Сон, питание и параметры тела | Диалог и follow-up по разбору | Android TWA release track |
+| Дедупликация упражнений | Заметки как долговременная память | RAG по базе знаний | Друзья и публичный share |
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Платежи
+
+Проект содержит тестово-готовый денежный контур на ЮKassa:
+
+- пополнение рублёвого кошелька и списание за AI-ответы;
+- месячная и годовая подписка Fitness AI Pro;
+- сохранение способа оплаты у ЮKassa и управляемое автопродление;
+- чеки, уведомления перед списанием, отмена и возобновление;
+- server-to-server сверка каждого платежа и защита от двойного зачисления;
+- recovery пропущенных webhook, полный возврат неиспользованного пополнения;
+- тестовый/live guard и юридический fail-closed.
+
+Live-платежи намеренно не включаются кодом. До них нужны договор с ЮKassa,
+реквизиты оператора, проверенные юридические документы, тестовый чек и отдельное
+подтверждение владельца.
+
+Подробности:
+
+- [Чек-лист подключения ЮKassa](docs/yookassa-launch-checklist.md)
+- [Цена подписки и unit-экономика](docs/subscription-unit-economics-2026-07-30.md)
+- [Обоснование Myo-reps](docs/myo-reps-evidence.md)
+
+## Архитектура
+
+```text
+Next.js 16 App Router
+├── Server Components + Route Handlers
+├── Auth.js v5 + email magic links
+├── PostgreSQL 15 + Drizzle ORM
+├── Vercel AI SDK + OpenAI-compatible/Gemini providers
+├── YooKassa REST API + webhook reconciliation
+├── pm2 cron worker + nginx
+└── PWA + Android Trusted Web Activity
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Денежные значения хранятся только целыми копейками. Платёжное событие не меняет
+баланс напрямую: приложение повторно получает объект у ЮKassa, сверяет ID,
+сумму, RUB, владельца, metadata и test/live mode, затем применяет операцию в
+транзакции PostgreSQL с row lock и уникальными ключами идемпотентности.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Локальный запуск
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Требования: Node.js 20+, pnpm и PostgreSQL 15+.
 
-## Learn More
+```bash
+pnpm install
+cp .env.example .env.local
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Откройте `http://localhost:3000`. Ключи и реквизиты ЮKassa для обычной
+разработки не нужны: платежный UI останется безопасно выключенным.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Проверка
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm e2e
+```
 
-## Deploy on Vercel
+Схема БД изменяется только миграциями:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+pnpm db:generate
+pnpm db:migrate
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Статус релиза
+
+| Контур | Статус |
+|---|---|
+| Web/PWA | Рабочий self-hosted контур |
+| YooKassa | Реализация готова к test shop, live закрыт флагами |
+| Windows | Установка как PWA поддерживается |
+| Android | TWA подготовлена, публикация Google Play требует отдельной проверки |
+| Production billing | Только после юридической и финансовой приёмки владельцем |
+
+## Безопасность
+
+Не коммитьте `.env.local`, `.env.production`, ключи ЮKassa, Resend, AI,
+`AUTH_SECRET` или Android keystore. О найденной уязвимости сообщайте владельцу
+репозитория приватно, без публикации рабочего эксплойта.

@@ -2,17 +2,22 @@ import { ArrowRight, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { PaymentReturnStatus } from "@/components/billing/PaymentReturnStatus";
+import { SubscriptionCard } from "@/components/billing/SubscriptionCard";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   aiCoachPriceKopecks,
   formatRub,
 } from "@/lib/billing/pricing";
-import { isYookassaConfigured } from "@/lib/billing/yookassa";
+import { BILLING_PLANS } from "@/lib/billing/plans";
+import { getBillingReadiness } from "@/lib/billing/readiness";
 import {
   getOrCreateBalance,
   listTransactions,
 } from "@/lib/repos/credits.repo";
+import { getPaymentForUser } from "@/lib/repos/payments.repo";
+import { getSubscriptionForUser } from "@/lib/repos/subscriptions.repo";
 
 import { TopupForm } from "./topup-form";
 
@@ -23,15 +28,26 @@ type Props = { searchParams: Promise<{ payment?: string }> };
 export default async function BillingPage({ searchParams }: Props) {
   const user = await requireUser();
   const sp = await searchParams;
+  const readiness = getBillingReadiness();
 
-  const [balance, transactions] = await Promise.all([
+  const [balance, transactions, subscription, returnPayment] = await Promise.all([
     getOrCreateBalance(user.id),
     listTransactions(user.id, 12),
+    getSubscriptionForUser(user.id),
+    sp.payment ? getPaymentForUser(user.id, sp.payment) : Promise.resolve(null),
   ]);
 
-  const yookassaOn = isYookassaConfigured();
   const coachPrice = aiCoachPriceKopecks();
-  const justCame = !!sp.payment;
+  const plans = Object.values(BILLING_PLANS).map((plan) => ({
+    code: plan.code,
+    title: plan.title,
+    priceKopecks: plan.priceKopecks,
+    intervalLabel:
+      plan.code === "pro_yearly"
+        ? "за год · экономия 1 580 ₽"
+        : "списание раз в месяц",
+    benefits: plan.benefits.map((benefit) => benefit.label),
+  }));
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -57,25 +73,45 @@ export default async function BillingPage({ searchParams }: Props) {
               {formatRub(balance.balanceKopecks)}
             </p>
             <p className="text-muted-foreground tabular mt-2 text-xs">
-              ≈ {Math.floor(balance.balanceKopecks / coachPrice)} разговоров с
-              коучем · 1 разговор = {formatRub(coachPrice)}
+              ≈ {Math.floor(balance.balanceKopecks / coachPrice)} ответов
+              AI-тренера · 1 ответ = {formatRub(coachPrice)}
             </p>
           </div>
         </div>
       </section>
 
-      {justCame ? (
-        <section className="bg-success/5 border-success/20 mb-6 rounded-xl border p-4 text-sm">
-          Платёж зарегистрирован. Если деньги пришли в ЮKassa, баланс
-          обновится в течение минуты — обновите страницу.
-        </section>
+      {returnPayment ? (
+        <PaymentReturnStatus
+          paymentId={returnPayment.id}
+          initialStatus={returnPayment.status}
+        />
       ) : null}
+
+      <div className="mb-8">
+        <SubscriptionCard
+          plans={plans}
+          subscription={
+            subscription
+              ? {
+                  planCode: subscription.planCode,
+                  status: subscription.status,
+                  currentPeriodEnd:
+                    subscription.currentPeriodEnd?.toISOString() ?? null,
+                  cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+                  renewalAvailable: !!subscription.providerPaymentMethodId,
+                }
+              : null
+          }
+          enabled={readiness.subscriptionsEnabled}
+          mode={readiness.mode}
+        />
+      </div>
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold tracking-tight">
           Пополнить
         </h2>
-        {yookassaOn ? (
+        {readiness.paymentsEnabled ? (
           <TopupForm />
         ) : (
           <YookassaOffNotice />
@@ -125,10 +161,9 @@ function YookassaOffNotice() {
   return (
     <div className="bg-card border-border space-y-3 rounded-2xl border p-6">
       <p className="text-muted-foreground text-sm leading-relaxed">
-        ЮKassa пока не подключена. Владельцу проекта нужно добавить{" "}
-        <code className="bg-muted rounded px-1 py-0.5">YOOKASSA_SHOP_ID</code> и{" "}
-        <code className="bg-muted rounded px-1 py-0.5">YOOKASSA_SECRET_KEY</code>{" "}
-        в <code className="bg-muted rounded px-1 py-0.5">.env.production</code>.
+        ЮKassa пока не подключена полностью. Пополнение станет доступно после
+        регистрации магазина, заполнения реквизитов продавца и проверки
+        оферты.
       </p>
       <Button asChild variant="outline" size="sm">
         <Link href="/dashboard">
