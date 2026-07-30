@@ -225,6 +225,13 @@
       "when": 1785186518422,
       "tag": "0031_outstanding_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785428560283,
+      "tag": "0032_nostalgic_rictor",
+      "breakpoints": true
     }
   ]
 }

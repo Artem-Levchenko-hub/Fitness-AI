@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -30,27 +30,40 @@ async function seedMuscleGroups() {
 async function seedExercises() {
   console.log(`→ exercises: upserting ${EXERCISES.length} system exercises`);
   for (const ex of EXERCISES) {
-    const [row] = await db
-      .insert(schema.exercises)
-      .values({
-        slug: ex.slug,
-        nameRu: ex.nameRu,
-        nameEn: ex.nameEn,
-        description: ex.description,
-        isCustom: false,
-        isBodyweight: ex.isBodyweight ?? false,
-        ownerUserId: null,
-      })
-      .onConflictDoUpdate({
-        target: [schema.exercises.slug, schema.exercises.ownerUserId],
-        set: {
-          nameRu: ex.nameRu,
-          nameEn: ex.nameEn,
-          description: ex.description,
-          isBodyweight: ex.isBodyweight ?? false,
-        },
-      })
-      .returning({ id: schema.exercises.id });
+    const values = {
+      slug: ex.slug,
+      nameRu: ex.nameRu,
+      nameEn: ex.nameEn,
+      description: ex.description,
+      isCustom: false,
+      isBodyweight: ex.isBodyweight ?? false,
+      ownerUserId: null,
+    };
+    const [existing] = await db
+      .select({ id: schema.exercises.id })
+      .from(schema.exercises)
+      .where(
+        and(
+          eq(schema.exercises.slug, ex.slug),
+          isNull(schema.exercises.ownerUserId),
+        ),
+      )
+      .limit(1);
+    const [row] = existing
+      ? await db
+          .update(schema.exercises)
+          .set({
+            nameRu: ex.nameRu,
+            nameEn: ex.nameEn,
+            description: ex.description,
+            isBodyweight: ex.isBodyweight ?? false,
+          })
+          .where(eq(schema.exercises.id, existing.id))
+          .returning({ id: schema.exercises.id })
+      : await db
+          .insert(schema.exercises)
+          .values(values)
+          .returning({ id: schema.exercises.id });
 
     if (!row) continue;
 
