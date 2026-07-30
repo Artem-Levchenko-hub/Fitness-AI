@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ChevronDown } from "lucide-react";
 
 import { BodyTrendChart, type BodyPoint } from "@/components/charts/BodyTrendChart";
 import { FrequencyHeatmap } from "@/components/charts/FrequencyHeatmap";
@@ -6,7 +7,7 @@ import { MuscleVolumeBars } from "@/components/charts/MuscleVolumeChart";
 import { MuscleVolumeSilhouette } from "@/components/charts/MuscleVolumeSilhouette";
 import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
-import { PeriodInsightCard } from "@/components/stats/PeriodInsightCard";
+import { StatsOverview } from "@/components/stats/StatsOverview";
 import { WeeklyReviewButton } from "@/components/stats/WeeklyReviewButton";
 import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { parseWeeklyReviewResult } from "@/lib/ai/weekly-review-display";
@@ -16,6 +17,7 @@ import {
   summarizeExerciseTrend,
   summarizeVolumeChange,
 } from "@/lib/domain/stats/period-insight";
+import { buildStatsOverview } from "@/lib/domain/stats/overview";
 import { getUserProfile, listMeasurements } from "@/lib/repos/body.repo";
 import {
   dailyVolume,
@@ -120,7 +122,7 @@ export default async function StatsPage({ searchParams }: Props) {
 
   // Инсайт по ключевому движению (наибольший рост e1RM) — словами над графиком
   // 1RM. null при range='all' или когда нет упражнения с данными в обоих окнах.
-  const moverInsight = topMover
+  const strengthInsight = topMover
     ? summarizeExerciseTrend(
         {
           name: topMover.name,
@@ -130,6 +132,12 @@ export default async function StatsPage({ searchParams }: Props) {
         range,
       )
     : null;
+  const overview = buildStatsOverview({
+    workouts: kpi.workouts,
+    totalSets: kpi.totalSets,
+    totalReps: kpi.totalReps,
+    strengthInsight,
+  });
 
   const currentExId = sp.ex && exercises.some((e) => e.id === sp.ex)
     ? sp.ex
@@ -174,53 +182,30 @@ export default async function StatsPage({ searchParams }: Props) {
 
       <PeriodPills />
 
-      <WeeklyReviewButton
-        initial={weeklyAuto}
-        initialAt={weeklyAutoAt}
-        initialExerciseLinks={weeklyExerciseLinks}
+      <StatsOverview
+        range={range}
+        copy={overview}
+        workouts={kpi.workouts}
+        totalSets={kpi.totalSets}
+        totalReps={kpi.totalReps}
+        totalTonnageKg={kpi.totalTonnageKg}
+        loadInsight={periodInsight}
       />
 
-      <PeriodInsightCard insight={periodInsight} />
-
-      {moverInsight ? (
-        <PeriodInsightCard insight={moverInsight} eyebrow="Ключевое движение" />
-      ) : null}
-
-      <section className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Kpi
-          label="Тренировок"
-          value={kpi.workouts.toLocaleString("ru")}
-        />
-        <Kpi
-          label="Подходов"
-          value={kpi.totalSets.toLocaleString("ru")}
-        />
-        <Kpi
-          label="Повторений"
-          value={kpi.totalReps.toLocaleString("ru")}
-        />
-        <Kpi
-          label="Тоннаж"
-          value={`${Math.round(kpi.totalTonnageKg).toLocaleString("ru")} кг·повт`}
-          big={false}
-        />
-      </section>
-
       <section className="bg-card border-border mt-6 rounded-2xl border p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-tight">
-            Объём по {granularity === "week" ? "неделям" : "дням"}
-          </h2>
-          <GranularityPills />
-        </div>
-        <VolumeBarChart data={volumeForChart} granularity={granularity} />
-      </section>
-
-      <section className="bg-card border-border mt-6 rounded-2xl border p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-tight">
-            1RM (оценочный)
-          </h2>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-primary text-[10px] font-semibold tracking-[0.18em] uppercase">
+              Сила
+            </p>
+            <h2 className="mt-1 text-base font-semibold tracking-tight">
+              Прогресс по упражнению
+            </h2>
+            <p className="text-muted-foreground mt-1 max-w-lg text-xs leading-relaxed">
+              e1RM — оценка максимума по весу и повторам. Смотри на направление
+              нескольких сопоставимых тренировок, а не на одну точку.
+            </p>
+          </div>
           {currentExId ? (
             <ExerciseSelector
               exercises={exercises}
@@ -232,73 +217,116 @@ export default async function StatsPage({ searchParams }: Props) {
       </section>
 
       <section className="bg-card border-border mt-6 rounded-2xl border p-5">
-        <h2 className="mb-4 text-sm font-semibold tracking-tight">
-          Объём по группам мышц
+        <p className="text-primary text-[10px] font-semibold tracking-[0.18em] uppercase">
+          Регулярность
+        </p>
+        <h2 className="mt-1 text-base font-semibold tracking-tight">
+          Последние 18 недель
         </h2>
+        <p className="text-muted-foreground mt-1 mb-4 text-xs leading-relaxed">
+          Каждая клетка — день. Чем темнее клетка, тем больше завершённых
+          тренировок в этот день.
+        </p>
+        <FrequencyHeatmap data={frequency} weeks={18} />
+      </section>
+
+      <section className="bg-card border-border mt-6 rounded-2xl border p-5">
+        <p className="text-primary text-[10px] font-semibold tracking-[0.18em] uppercase">
+          Баланс
+        </p>
+        <h2 className="mt-1 text-base font-semibold tracking-tight">
+          Куда пришлась внешняя нагрузка
+        </h2>
+        <p className="text-muted-foreground mt-1 mb-4 text-xs leading-relaxed">
+          Сравнивает вес × повторы по мышечным группам. Упражнения без
+          указанного веса здесь недооценены, поэтому это карта внешнего
+          отягощения, а не «эффективности» мышц.
+        </p>
         <MuscleVolumeSilhouette data={muscle} />
         <MuscleVolumeBars data={muscle} />
       </section>
 
-      <section className="bg-card border-border mt-6 rounded-2xl border p-5">
-        <h2 className="mb-4 text-sm font-semibold tracking-tight">
-          Распределение по диапазону повторений
-        </h2>
-        <ul className="grid grid-cols-4 gap-3 text-center">
-          {repBuckets.map((b) => {
-            const pct = (b.sets / totalSetsByBucket) * 100;
-            return (
-              <li key={b.bucket}>
-                <p className="font-serif tabular text-2xl font-normal">
-                  {pct.toFixed(0)}%
-                </p>
-                <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-                  {b.bucket} повт
-                </p>
-                <p className="text-muted-foreground/70 tabular text-xs">
-                  {b.sets} подх.
-                </p>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {bodyTrend.length > 0 ? (
+        <section className="bg-card border-border mt-6 rounded-2xl border p-5">
+          <p className="text-primary text-[10px] font-semibold tracking-[0.18em] uppercase">
+            Измерения
+          </p>
+          <h2 className="mt-1 mb-4 text-base font-semibold tracking-tight">
+            Вес и процент жира
+          </h2>
+          <BodyTrendChart data={bodyTrend} />
+        </section>
+      ) : null}
 
-      <section className="bg-card border-border mt-6 rounded-2xl border p-5">
-        <h2 className="mb-4 text-sm font-semibold tracking-tight">
-          Активность за {frequency.length > 0 ? "год" : "период"}
-        </h2>
-        <FrequencyHeatmap data={frequency} weeks={18} />
-      </section>
+      <details className="group bg-card border-border mt-6 rounded-2xl border">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 focus-visible:outline-none">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">
+              Подробные показатели
+            </h2>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              Тоннаж по времени и распределение рабочих диапазонов.
+            </p>
+          </div>
+          <ChevronDown
+            className="text-muted-foreground size-5 shrink-0 transition-transform group-open:rotate-180"
+            aria-hidden
+          />
+        </summary>
 
-      <section className="bg-card border-border mt-6 mb-2 rounded-2xl border p-5">
-        <h2 className="mb-4 text-sm font-semibold tracking-tight">
-          Вес и % жира
-        </h2>
-        <BodyTrendChart data={bodyTrend} />
-      </section>
+        <div className="border-border space-y-8 border-t p-5">
+          <section>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold tracking-tight">
+                  Внешняя нагрузка по{" "}
+                  {granularity === "week" ? "неделям" : "дням"}
+                </h3>
+                <p className="text-muted-foreground mt-1 max-w-lg text-xs leading-relaxed">
+                  Вес × повторы. Больше не всегда лучше: резкий рост может быть
+                  сменой программы или скачком нагрузки.
+                </p>
+              </div>
+              <GranularityPills />
+            </div>
+            <VolumeBarChart data={volumeForChart} granularity={granularity} />
+          </section>
+
+          <section>
+            <h3 className="text-sm font-semibold tracking-tight">
+              Рабочие диапазоны повторений
+            </h3>
+            <p className="text-muted-foreground mt-1 mb-4 text-xs leading-relaxed">
+              Какая доля выполненных подходов пришлась на каждый диапазон.
+              Мини-подходы Myo-reps учитываются по фактическим повторам.
+            </p>
+            <ul className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+              {repBuckets.map((b) => {
+                const pct = (b.sets / totalSetsByBucket) * 100;
+                return (
+                  <li key={b.bucket} className="bg-muted/45 rounded-xl p-3">
+                    <p className="font-serif tabular text-2xl font-normal">
+                      {pct.toFixed(0)}%
+                    </p>
+                    <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+                      {b.bucket} повт
+                    </p>
+                    <p className="text-muted-foreground/70 tabular text-xs">
+                      {b.sets} подх.
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </div>
+      </details>
+
+      <WeeklyReviewButton
+        initial={weeklyAuto}
+        initialAt={weeklyAutoAt}
+        initialExerciseLinks={weeklyExerciseLinks}
+      />
     </main>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  big = true,
-}: {
-  label: string;
-  value: string;
-  big?: boolean;
-}) {
-  return (
-    <div className="bg-card border-border rounded-xl border p-4">
-      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-        {label}
-      </p>
-      <p
-        className={`tabular mt-1 font-semibold tracking-tight ${big ? "text-2xl" : "text-base"}`}
-      >
-        {value}
-      </p>
-    </div>
   );
 }

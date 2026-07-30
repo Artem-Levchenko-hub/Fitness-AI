@@ -35,7 +35,7 @@ export function MuscleVolumeBars({ data }: { data: Point[] }) {
                 {muscleLabel(d.muscleKey)}
               </span>
               <span className="text-muted-foreground tabular text-xs">
-                {Math.round(d.volume).toLocaleString("ru")} kg·reps
+                {Math.round(d.volume).toLocaleString("ru")} кг·повт
               </span>
             </div>
             <div className="bg-muted h-2 w-full overflow-hidden rounded-full">

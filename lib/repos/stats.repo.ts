@@ -911,7 +911,7 @@ async function activityTonnage(
   from: Date | null,
   to: Date | null,
 ): Promise<number> {
-  const [strength, circuit] = await Promise.all([
+  const [strength, circuit, quick] = await Promise.all([
     db
       .select({
         tonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
@@ -952,14 +952,30 @@ async function activityTonnage(
           to ? lt(schema.circuitWorkouts.startedAt, to) : undefined,
         ),
       ),
+    db
+      .select({
+        tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+      })
+      .from(schema.quickActivities)
+      .where(
+        and(
+          eq(schema.quickActivities.userId, userId),
+          from ? gte(schema.quickActivities.performedAt, from) : undefined,
+          to ? lt(schema.quickActivities.performedAt, to) : undefined,
+        ),
+      ),
   ]);
 
-  return Number(strength[0]?.tonnage ?? 0) + Number(circuit[0]?.tonnage ?? 0);
+  return (
+    Number(strength[0]?.tonnage ?? 0) +
+    Number(circuit[0]?.tonnage ?? 0) +
+    Number(quick[0]?.tonnage ?? 0)
+  );
 }
 
-/** Сравнение объёма текущего периода с предыдущим окном той же длины —
- *  для человекочитаемого вывода «растёшь/стоишь/падаешь» (G6). Тоннаж —
- *  всех форматов (силовые + круговые), как KPI и график. */
+/** Сравнение внешней нагрузки текущего периода с предыдущим окном той же
+ *  длины. Тоннаж включает силовые, круговые и доп. активность — как KPI и
+ *  график. Само изменение тоннажа не интерпретируется как прогресс. */
 export async function periodVolumeComparison(
   userId: string,
   range: StatsRange,
