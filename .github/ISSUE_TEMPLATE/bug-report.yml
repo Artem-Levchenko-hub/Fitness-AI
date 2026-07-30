@@ -1,0 +1,55 @@
+name: Сообщить об ошибке
+description: Помогите воспроизвести и исправить проблему
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за сообщение. Не прикладывайте секреты, чеки, email или другие персональные данные.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Что произошло?
+      description: Кратко опишите проблему.
+      placeholder: После завершения тренировки...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести?
+      placeholder: |
+        1. Открыть...
+        2. Нажать...
+        3. Увидеть...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемый результат
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Устройство и браузер
+      placeholder: Windows 11, Edge 126 / Android 15, Chrome 126
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Дополнительный контекст
+      description: Безопасный скриншот, частота ошибки или связанный Issue.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Проверка приватности
+      options:
+        - label: Я удалил(а) секреты, платёжные и персональные данные.
+          required: true
+        - label: Я проверил(а), что похожего открытого Issue нет.
+          required: true

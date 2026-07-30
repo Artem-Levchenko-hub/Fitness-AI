@@ -1,0 +1,47 @@
+name: Предложить улучшение
+description: Опишите пользовательскую проблему и желаемый результат
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему это решает?
+      description: Опишите сценарий пользователя, а не только готовое решение.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое решение
+      description: Как должен выглядеть результат?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Тренировки и шаблоны
+        - AI-тренер
+        - Статистика
+        - PWA / Android / Windows
+        - Подписка и баланс
+        - Доступность
+        - Документация
+        - Другое
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: Как вы решаете задачу сейчас?
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Перед отправкой
+      options:
+        - label: Я проверил(а), что похожего предложения ещё нет.
+          required: true

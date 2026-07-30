@@ -1,74 +1,157 @@
 <div align="center">
-  <img src="public/icons/icon-192.png" width="96" height="96" alt="Fitness AI">
-  <h1>Fitness AI</h1>
-  <p><strong>Тренировочный дневник, который помнит прогресс и превращает его в понятные решения.</strong></p>
+  <img src=".github/assets/fitness-ai-hero.svg" width="100%" alt="Fitness AI — дневник тренировок с AI-анализом">
+</div>
+
+<div align="center">
   <p>
-    Силовые, круговые и кардио-тренировки, Myo-reps, адаптивные шаблоны,
-    10-сессионный AI-анализ, статистика, PWA и готовящийся Android-клиент.
+    <strong>Силовые, круговые и кардио-тренировки, Myo-reps, понятная статистика<br>
+    и AI-тренер, который анализирует контекст последних 10 сессий.</strong>
   </p>
   <p>
-    <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16.2-111111?logo=nextdotjs">
-    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white">
-    <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white">
-    <img alt="PWA" src="https://img.shields.io/badge/PWA-installable-3A6B4A">
-    <img alt="Tests" src="https://img.shields.io/badge/Vitest-1000%2B_tests-6E9F18?logo=vitest&logoColor=white">
+    <a href="docs/user-guide.md"><strong>Руководство пользователя</strong></a>
+    ·
+    <a href="#быстрый-старт">Запустить локально</a>
+    ·
+    <a href="docs/README.md">Документация</a>
+    ·
+    <a href="SUPPORT.md">Получить помощь</a>
+  </p>
+  <p>
+    <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/actions/workflows/ci.yml"><img alt="Quality checks" src="https://github.com/Artem-Levchenko-hub/Fitness-AI/actions/workflows/ci.yml/badge.svg"></a>
+    <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16.2-172e22?logo=nextdotjs&logoColor=white">
+    <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-2f6b4f?logo=typescript&logoColor=white">
+    <img alt="PostgreSQL 15" src="https://img.shields.io/badge/PostgreSQL-15-416b57?logo=postgresql&logoColor=white">
+    <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-d09543">
+    <img alt="Tests" src="https://img.shields.io/badge/tests-1034_passed-3a6b4a?logo=vitest&logoColor=white">
   </p>
 </div>
 
-## Что умеет
+---
 
-| Тренировки | Аналитика | AI-тренер | Продукт |
-|---|---|---|---|
-| Силовые, круговые и кардио | Объём, 1RM, PR и группы мышц | Контекст последних 10 сессий | Windows installable PWA |
-| Шаблоны и версии программ | Недельная активность и Myo-reps | Разбор завершённой тренировки | Offline shell и push |
-| Myo-reps и таймер отдыха | Сон, питание и параметры тела | Диалог и follow-up по разбору | Android TWA release track |
-| Дедупликация упражнений | Заметки как долговременная память | RAG по базе знаний | Друзья и публичный share |
+## Зачем нужен Fitness AI
 
-## Платежи
+Обычный тренировочный дневник хранит цифры. Fitness AI помогает понять, **что
+эти цифры означают и что делать дальше**: где растёт сила, какие мышцы
+недополучают нагрузку, когда пора повысить вес, а когда лучше восстановиться.
 
-Проект содержит тестово-готовый денежный контур на ЮKassa:
+| Записывайте | Анализируйте | Улучшайте |
+|---|---|---|
+| Подходы, вес, повторения, RPE, отдых и Myo-reps | Объём, 1RM, PR, недельную активность и мышечный баланс | Шаблоны, технику, распределение нагрузки и восстановление |
+| Силовые, круговые и кардио-сессии | Сон, питание, вес и заметки | Решения на основе последних 10 тренировок |
 
-- пополнение рублёвого кошелька и списание за AI-ответы;
-- месячная и годовая подписка Fitness AI Pro;
-- сохранение способа оплаты у ЮKassa и управляемое автопродление;
-- чеки, уведомления перед списанием, отмена и возобновление;
-- server-to-server сверка каждого платежа и защита от двойного зачисления;
-- recovery пропущенных webhook, полный возврат неиспользованного пополнения;
-- тестовый/live guard и юридический fail-closed.
+## Как это работает
 
-Live-платежи намеренно не включаются кодом. До них нужны договор с ЮKassa,
-реквизиты оператора, проверенные юридические документы, тестовый чек и отдельное
-подтверждение владельца.
+<div align="center">
+  <img src=".github/assets/fitness-ai-showcase.webp" width="100%" alt="Fitness AI превращает записанную тренировку в статистику и практическую рекомендацию">
+  <sub>Один понятный цикл: записали подходы → увидели динамику → получили следующий шаг.</sub>
+</div>
 
-Подробности:
+<br>
 
-- [Чек-лист подключения ЮKassa](docs/yookassa-launch-checklist.md)
-- [Цена подписки и unit-экономика](docs/subscription-unit-economics-2026-07-30.md)
-- [Обоснование Myo-reps](docs/myo-reps-evidence.md)
-
-## Архитектура
-
-```text
-Next.js 16 App Router
-├── Server Components + Route Handlers
-├── Auth.js v5 + email magic links
-├── PostgreSQL 15 + Drizzle ORM
-├── Vercel AI SDK + OpenAI-compatible/Gemini providers
-├── YooKassa REST API + webhook reconciliation
-├── pm2 cron worker + nginx
-└── PWA + Android Trusted Web Activity
+```mermaid
+flowchart LR
+    A["1. Выберите цель"] --> B["2. Соберите программу"]
+    B --> C["3. Проведите тренировку"]
+    C --> D["4. Получите AI-разбор"]
+    D --> E["5. Скорректируйте следующий цикл"]
+    E --> C
 ```
 
-Денежные значения хранятся только целыми копейками. Платёжное событие не меняет
-баланс напрямую: приложение повторно получает объект у ЮKassa, сверяет ID,
-сумму, RUB, владельца, metadata и test/live mode, затем применяет операцию в
-транзакции PostgreSQL с row lock и уникальными ключами идемпотентности.
+1. Заполните профиль, цель и доступное оборудование.
+2. Создайте собственный шаблон или программу с помощью AI.
+3. Фиксируйте обычные подходы, разминку, дроп-сеты и Myo-reps.
+4. После тренировки получите разбор с учётом десяти последних сессий.
+5. Следите за трендами и сохраняйте новые версии шаблонов без потери истории.
 
-## Локальный запуск
+[Открыть подробное руководство →](docs/user-guide.md)
 
-Требования: Node.js 20+, pnpm и PostgreSQL 15+.
+## Возможности
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🏋️ Тренировки</h3>
+      <ul>
+        <li>силовые, круговые и кардио-сессии;</li>
+        <li>таймер отдыха и быстрый ввод подходов;</li>
+        <li>Myo-reps и специальные типы сетов;</li>
+        <li>версии и адаптация шаблонов;</li>
+        <li>дедупликация каталога упражнений.</li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>📈 Прогресс</h3>
+      <ul>
+        <li>объём нагрузки, расчётный 1RM и личные рекорды;</li>
+        <li>недельная активность и серии тренировок;</li>
+        <li>распределение по группам мышц;</li>
+        <li>сон, питание и параметры тела;</li>
+        <li>долговременные заметки.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🧠 AI-тренер</h3>
+      <ul>
+        <li>контекст последних 10 тренировок;</li>
+        <li>разбор завершённой сессии;</li>
+        <li>follow-up диалог по рекомендациям;</li>
+        <li>адаптация программы по фактическому прогрессу;</li>
+        <li>контролируемая стоимость каждого AI-вызова.</li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>📱 На любом устройстве</h3>
+      <ul>
+        <li>адаптивный web-интерфейс;</li>
+        <li>установка как PWA в Windows и Android;</li>
+        <li>offline shell и push-уведомления;</li>
+        <li>Android TWA release track;</li>
+        <li>публичные ссылки и друзья.</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+## Установка приложения
+
+Fitness AI работает в браузере и может устанавливаться без отдельного
+установщика.
+
+**Windows / Edge / Chrome:** откройте приложение, нажмите значок установки в
+адресной строке и выберите «Установить». Оно появится в меню «Пуск» и сможет
+работать в отдельном окне.
+
+**Android:** откройте меню браузера и выберите «Установить приложение» или
+«Добавить на главный экран». Публикация самостоятельной версии в Google Play
+готовится отдельно.
+
+## Подписка и баланс
+
+В проекте подготовлен безопасный платёжный контур ЮKassa:
+
+| Вариант | Тестовая цена | Для чего |
+|---|---:|---|
+| Fitness AI Pro, месяц | **1 290 ₽** | Полный доступ без долгого обязательства |
+| Fitness AI Pro, год | **13 900 ₽** | Выгоднее примерно на 10% |
+| Баланс | Пополнение на выбранную сумму | Оплата отдельных AI-операций |
+
+Поддерживаются сохранённый способ оплаты, автопродление, уведомления,
+отмена/возобновление, сверка webhook и возврат неиспользованного пополнения.
+Реальные списания закрыты флагами до регистрации магазина и отдельного
+подтверждения владельца.
+
+[Посмотреть расчёт цены](docs/subscription-unit-economics-2026-07-30.md) ·
+[Открыть чек-лист ЮKassa](docs/yookassa-launch-checklist.md)
+
+## Быстрый старт
+
+Понадобятся Node.js 20+, pnpm и PostgreSQL 15+.
 
 ```bash
+git clone https://github.com/Artem-Levchenko-hub/Fitness-AI.git
+cd Fitness-AI
 pnpm install
 cp .env.example .env.local
 pnpm db:migrate
@@ -76,38 +159,56 @@ pnpm db:seed
 pnpm dev
 ```
 
-Откройте `http://localhost:3000`. Ключи и реквизиты ЮKassa для обычной
-разработки не нужны: платежный UI останется безопасно выключенным.
+Откройте [http://localhost:3000](http://localhost:3000). Для обычной разработки
+ключи ЮKassa не требуются: платёжные функции останутся выключенными.
 
-## Проверка
+Подробная настройка окружения, БД и проверок описана в
+[руководстве разработчика](docs/development.md).
 
-```bash
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm build
-pnpm e2e
+## Технологии
+
+```text
+Next.js 16 + React 19 + TypeScript
+├── Auth.js v5 и вход по magic link
+├── PostgreSQL 15 + Drizzle ORM
+├── Vercel AI SDK + Gemini/OpenAI-compatible providers
+├── YooKassa REST API + server-to-server reconciliation
+├── pm2 cron worker + nginx
+└── PWA + Android Trusted Web Activity
 ```
 
-Схема БД изменяется только миграциями:
+Деньги хранятся только целыми копейками. Webhook не меняет баланс напрямую:
+сервер повторно получает платёж у ЮKassa, проверяет сумму, валюту, владельца и
+режим, а затем проводит транзакцию с блокировкой строки и ключом
+идемпотентности.
 
-```bash
-pnpm db:generate
-pnpm db:migrate
-```
+## Состояние проекта
 
-## Статус релиза
-
-| Контур | Статус |
+| Направление | Статус |
 |---|---|
-| Web/PWA | Рабочий self-hosted контур |
-| YooKassa | Реализация готова к test shop, live закрыт флагами |
-| Windows | Установка как PWA поддерживается |
-| Android | TWA подготовлена, публикация Google Play требует отдельной проверки |
-| Production billing | Только после юридической и финансовой приёмки владельцем |
+| Web / PWA | Рабочий self-hosted контур |
+| AI-тренер | 10-сессионный анализ, jobs и контроль стоимости |
+| Статистика | Объём, PR, Myo-reps, мышцы и недельный обзор |
+| ЮKassa | Код готов к тестовому магазину, live закрыт флагами |
+| Windows | Поддерживается установка как PWA |
+| Android | TWA подготовлена, публикация требует отдельной приёмки |
 
-## Безопасность
+## Документация и помощь
 
-Не коммитьте `.env.local`, `.env.production`, ключи ЮKassa, Resend, AI,
-`AUTH_SECRET` или Android keystore. О найденной уязвимости сообщайте владельцу
-репозитория приватно, без публикации рабочего эксплойта.
+- [Вся документация](docs/README.md)
+- [Руководство пользователя](docs/user-guide.md)
+- [Настройка для разработчика](docs/development.md)
+- [Как предложить изменение](CONTRIBUTING.md)
+- [Поддержка и вопросы](SUPPORT.md)
+- [Политика безопасности](SECURITY.md)
+
+Перед созданием обращения проверьте [открытые Issues](https://github.com/Artem-Levchenko-hub/Fitness-AI/issues).
+Для уязвимостей не используйте публичные Issues: следуйте инструкции в
+[SECURITY.md](SECURITY.md).
+
+---
+
+<div align="center">
+  <strong>Fitness AI</strong><br>
+  Меньше догадок. Больше измеримого прогресса.
+</div>
