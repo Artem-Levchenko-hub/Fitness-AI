@@ -1663,11 +1663,11 @@ export type WeeklyAgg = {
   quickReps: number;
   /** Тоннаж доп. активности (вес×повт; без веса → 0). */
   quickTonnage: number;
-  /** Разбивка доп. активности по упражнениям×режиму для промпта тренера
-   *  (mode='sets': entries = подходы; mode='total': entries = записи). */
+  /** Разбивка доп. активности по упражнениям×режиму для промпта тренера:
+   *  обычные подходы, тотал и отдельные Myo-reps кластеры. */
   quickByExercise: {
     name: string;
-    mode: "sets" | "total";
+    mode: "sets" | "total" | "myo_reps";
     entries: number;
     reps: number;
   }[];
