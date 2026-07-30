@@ -124,7 +124,7 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  /* --font-serif инжектится через next/font (Lora с cyrillic поддержкой) */
+  --font-serif: "Lora Variable";
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
