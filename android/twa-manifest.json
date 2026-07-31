@@ -20,8 +20,8 @@
     "path": "./android.keystore",
     "alias": "vibe-trainer"
   },
-  "appVersionName": "y",
-  "appVersionCode": 2,
+  "appVersionName": "1.0.0",
+  "appVersionCode": 3,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://app.lead-generator.ru/manifest.webmanifest",
@@ -39,5 +39,5 @@
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "displayOverride": [],
-  "appVersion": "y"
+  "appVersion": "1.0.0"
 }

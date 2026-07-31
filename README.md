@@ -10,6 +10,8 @@
   <p>
     <a href="docs/user-guide.md"><strong>Руководство пользователя</strong></a>
     ·
+    <a href="#скачать-приложение"><strong>Скачать приложение</strong></a>
+    ·
     <a href="#быстрый-старт">Запустить локально</a>
     ·
     <a href="docs/README.md">Документация</a>
@@ -23,6 +25,7 @@
     <img alt="PostgreSQL 15" src="https://img.shields.io/badge/PostgreSQL-15-416b57?logo=postgresql&logoColor=white">
     <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-d09543">
     <img alt="Tests" src="https://img.shields.io/badge/tests-1034_passed-3a6b4a?logo=vitest&logoColor=white">
+    <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest"><img alt="Скачать Vibe-trainer 1.0.0" src="https://img.shields.io/badge/скачать-v1.0.0-3a6b4a?logo=github&logoColor=white"></a>
   </p>
 </div>
 
@@ -114,18 +117,38 @@ flowchart LR
   </tr>
 </table>
 
-## Установка приложения
+## Скачать приложение
 
-Fitness AI работает в браузере и может устанавливаться без отдельного
-установщика.
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <h3>🖥️ Vibe-trainer Desktop</h3>
+      <p>Ноутбуки и компьютеры с Windows 10/11 · x64</p>
+      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.0.0/Vibe-trainer-Windows-x64-Setup-v1.0.0.exe">
+        <img alt="Скачать установщик для Windows" src="https://img.shields.io/badge/Скачать-.EXE-3a6b4a?style=for-the-badge&logo=windows11&logoColor=white">
+      </a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <h3>🤖 Vibe-trainer Mobile</h3>
+      <p>Телефоны и планшеты с Android 6.0+</p>
+      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.0.0/Vibe-trainer-Android-v1.0.0.apk">
+        <img alt="Скачать APK для Android" src="https://img.shields.io/badge/Скачать-.APK-3a6b4a?style=for-the-badge&logo=android&logoColor=white">
+      </a>
+    </td>
+  </tr>
+</table>
 
-**Windows / Edge / Chrome:** откройте приложение, нажмите значок установки в
-адресной строке и выберите «Установить». Оно появится в меню «Пуск» и сможет
-работать в отдельном окне.
+Обе версии используют фирменную зелёную иконку Vibe-trainer и открывают один
+аккаунт с синхронизированными тренировками. Все файлы и контрольные суммы
+доступны в [GitHub Releases](https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest).
 
-**Android:** откройте меню браузера и выберите «Установить приложение» или
-«Добавить на главный экран». Публикация самостоятельной версии в Google Play
-готовится отдельно.
+Windows-инсталлятор пока не подписан коммерческим сертификатом, поэтому
+Microsoft Defender SmartScreen может запросить дополнительное подтверждение.
+Для установки APK Android может потребоваться разово разрешить установку из
+браузера или файлового менеджера.
+
+Также Fitness AI можно установить как PWA: откройте приложение в Edge, Chrome
+или Android-браузере и выберите «Установить приложение».
 
 ## Подписка и баланс
 
