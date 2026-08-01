@@ -63,9 +63,9 @@ jobs:
       - name: Verify Android release metadata and signatures
         working-directory: android
         run: |
-          APK="$(find . -maxdepth 1 -name '*.apk' -print -quit)"
-          AAB="$(find . -maxdepth 1 -name '*.aab' -print -quit)"
-          test -n "$APK" -a -n "$AAB"
+          APK="./app-release-signed.apk"
+          AAB="./app-release-bundle.aab"
+          test -s "$APK" -a -s "$AAB"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
           BADGING="$("$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK")"
           echo "$BADGING" | grep "package: name='app.leadgenerator.fitness' versionCode='4' versionName='1.1.0'"
