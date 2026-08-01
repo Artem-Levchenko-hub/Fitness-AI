@@ -14,16 +14,15 @@ import path from "node:path";
 const authFile = path.join(__dirname, ".auth", "user.json");
 const token = process.env.E2E_REFRESH_TOKEN;
 
-setup("restore prod session", async ({ page }) => {
+setup("restore prod session", async ({ request }) => {
   setup.skip(
     !token,
     "E2E_REFRESH_TOKEN не задан — выпустить через scripts/issue-session.mjs на проде",
   );
 
-  // На /login, чтобы /api/auth/restore был same-origin и кука легла в контекст.
-  await page.goto("/login");
-
-  const res = await page.request.post("/api/auth/restore", {
+  // APIRequestContext хранит Set-Cookie так же, как browser context,
+  // но не тратит время на два полных RSC-рендера до самого смоука.
+  const res = await request.post("/api/auth/restore", {
     headers: { "Content-Type": "application/json" },
     data: { token },
   });
@@ -31,9 +30,9 @@ setup("restore prod session", async ({ page }) => {
 
   // Доказательство, что сессия реально аутентифицирует: /dashboard не отбрасывает
   // на /login.
-  await page.goto("/dashboard");
-  await expect(page).toHaveURL(/\/dashboard/);
+  const dashboard = await request.get("/dashboard", { maxRedirects: 0 });
+  expect(dashboard.status(), "/dashboard не должен редиректить на /login").toBe(200);
 
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
-  await page.context().storageState({ path: authFile });
+  await request.storageState({ path: authFile });
 });

@@ -19,7 +19,7 @@ export function BottomTabBar() {
 
   return (
     <nav
-      className="bg-card/85 border-border supports-[backdrop-filter]:bg-card/65 fixed inset-x-0 bottom-0 z-50 border-t backdrop-blur-md"
+      className="bg-card/85 border-border supports-[backdrop-filter]:bg-card/65 fixed inset-x-0 bottom-0 z-50 border-t pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] backdrop-blur-md"
       aria-label="Главная навигация"
     >
       <ul className="grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">

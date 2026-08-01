@@ -68,16 +68,20 @@ function SheetContent({
           side === "top" &&
             "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
           side === "bottom" &&
-            "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+            "inset-x-0 bottom-0 h-auto max-h-[calc(100dvh-env(safe-area-inset-top))] overflow-y-auto overscroll-contain border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
           className
         )}
         {...props}
       >
         {children}
         {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-secondary">
-            <XIcon className="size-4" />
-            <span className="sr-only">Close</span>
+          <SheetPrimitive.Close
+            data-slot="sheet-close"
+            aria-label="Закрыть"
+            className="absolute top-[max(0.5rem,env(safe-area-inset-top))] right-2 flex size-11 items-center justify-center rounded-full opacity-70 ring-offset-background transition-[background-color,opacity] hover:bg-secondary hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none"
+          >
+            <XIcon className="size-5" />
+            <span className="sr-only">Закрыть</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Content>

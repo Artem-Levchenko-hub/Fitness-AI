@@ -89,9 +89,12 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full min-w-0 justify-start whitespace-normal py-3"
           >
-            <Link href="/friends" className="flex items-center justify-between">
+            <Link
+              href="/friends"
+              className="flex min-w-0 items-center justify-between gap-3 text-left leading-snug"
+            >
               <span>Друзья (сообщество)</span>
               <ArrowRight className="size-4" />
             </Link>
@@ -99,9 +102,12 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full min-w-0 justify-start whitespace-normal py-3"
           >
-            <Link href="/schedule" className="flex items-center justify-between">
+            <Link
+              href="/schedule"
+              className="flex min-w-0 items-center justify-between gap-3 text-left leading-snug"
+            >
               <span>Расписание тренировок (напоминания)</span>
               <ArrowRight className="size-4" />
             </Link>
@@ -109,9 +115,12 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full min-w-0 justify-start whitespace-normal py-3"
           >
-            <Link href="/sleep" className="flex items-center justify-between">
+            <Link
+              href="/sleep"
+              className="flex min-w-0 items-center justify-between gap-3 text-left leading-snug"
+            >
               <span>Сон (восстановление)</span>
               <ArrowRight className="size-4" />
             </Link>
@@ -119,11 +128,11 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full min-w-0 justify-start whitespace-normal py-3"
           >
             <Link
               href="/nutrition"
-              className="flex items-center justify-between"
+              className="flex min-w-0 items-center justify-between gap-3 text-left leading-snug"
             >
               <span>Питание (КБЖУ)</span>
               <ArrowRight className="size-4" />
@@ -132,9 +141,12 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full min-w-0 justify-start whitespace-normal py-3"
           >
-            <Link href="/body" className="flex items-center justify-between">
+            <Link
+              href="/body"
+              className="flex min-w-0 items-center justify-between gap-3 text-left leading-snug"
+            >
               <span>Замеры тела (вес, % жира, обхваты)</span>
               <ArrowRight className="size-4" />
             </Link>
@@ -142,9 +154,12 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full min-w-0 justify-start whitespace-normal py-3"
           >
-            <Link href="/billing" className="flex items-center justify-between">
+            <Link
+              href="/billing"
+              className="flex min-w-0 items-center justify-between gap-3 text-left leading-snug"
+            >
               <span>Баланс и пополнение</span>
               <ArrowRight className="size-4" />
             </Link>
@@ -152,9 +167,12 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full min-w-0 justify-start whitespace-normal py-3"
           >
-            <Link href="/stats" className="flex items-center justify-between">
+            <Link
+              href="/stats"
+              className="flex min-w-0 items-center justify-between gap-3 text-left leading-snug"
+            >
               <span>Статистика и графики</span>
               <ArrowRight className="size-4" />
             </Link>

@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Fitness SaaS — трекинг силовых тренировок",
-    short_name: "Fitness",
+    name: "Vibe-trainer — трекинг тренировок",
+    short_name: "Vibe-trainer",
     description:
       "Создавайте шаблоны тренировок, фиксируйте подходы и получайте AI-анализ прогресса.",
     start_url: "/dashboard",

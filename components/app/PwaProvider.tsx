@@ -73,7 +73,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed inset-x-0 bottom-20 z-50 mx-auto w-[calc(100%-2rem)] max-w-md md:bottom-6"
+            className="fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50 mx-auto w-[calc(100%-2rem)] max-w-md md:bottom-6"
           >
             <div className="bg-card border-border flex items-center gap-3 rounded-2xl border p-4 shadow-lg">
               <div className="bg-primary/10 flex size-10 shrink-0 items-center justify-center rounded-full">
