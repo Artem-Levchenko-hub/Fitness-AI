@@ -38,7 +38,10 @@ export default defineConfig({
     // этот override не получают.
     launchOptions: localProductionResolve
       ? {
-          args: ["--host-resolver-rules=MAP fitnesss.online 127.0.0.1"],
+          args: [
+            "--host-resolver-rules=MAP fitnesss.online 127.0.0.1",
+            "--disable-http2",
+          ],
         }
       : undefined,
   },
