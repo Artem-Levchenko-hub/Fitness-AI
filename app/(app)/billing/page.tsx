@@ -60,30 +60,41 @@ export default async function BillingPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
-      <header className="mb-6">
+      <header className="mb-4">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
           Кошелёк
         </p>
-        <h1 className="font-serif mt-1 text-3xl font-normal tracking-tight md:text-4xl">
+        <h1 className="font-serif mt-1 text-2xl font-normal tracking-tight md:text-3xl">
           Баланс
         </h1>
       </header>
 
-      <section className="bg-card border-border mb-6 rounded-2xl border p-6">
-        <div className="flex items-start gap-4">
-          <div className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-full">
-            <Wallet className="size-5" />
+      <section
+        aria-labelledby="available-balance"
+        className="bg-muted/25 border-border/60 mb-6 rounded-xl border px-4 py-3"
+      >
+        <div className="flex items-center gap-3">
+          <div className="bg-background/70 text-muted-foreground border-border/60 flex size-9 shrink-0 items-center justify-center rounded-lg border">
+            <Wallet className="size-4" aria-hidden="true" />
           </div>
-          <div className="flex-1">
-            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              Доступно
-            </p>
-            <p className="font-serif tabular mt-0.5 text-4xl font-normal tracking-tight">
-              {formatRub(balance.balanceKopecks)}
-            </p>
-            <p className="text-muted-foreground tabular mt-2 text-xs">
+          <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex items-baseline gap-2">
+              <p
+                id="available-balance"
+                className="text-muted-foreground text-xs font-medium"
+              >
+                Доступно
+              </p>
+              <p className="tabular text-lg font-medium tracking-tight">
+                {formatRub(balance.balanceKopecks)}
+              </p>
+            </div>
+            <p className="text-muted-foreground tabular mt-0.5 text-[11px] leading-4 text-pretty sm:mt-0 sm:text-right">
               ≈ {Math.floor(balance.balanceKopecks / coachPrice)} ответов
-              AI-тренера · 1 ответ = {formatRub(coachPrice)}
+              AI-тренера <span aria-hidden="true">·</span>{" "}
+              <span className="whitespace-nowrap">
+                1 ответ — {formatRub(coachPrice)}
+              </span>
             </p>
           </div>
         </div>
