@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   type OutboxMutation,
   dedupeByClientId,
+  dispatchOutboxChanged,
   makeClientId,
+  OUTBOX_CHANGED_EVENT,
   parseOutbox,
   serializeOutbox,
+  subscribeOutboxChanged,
 } from "./outbox";
 
 function mut(over: Partial<OutboxMutation> = {}): OutboxMutation {
@@ -16,6 +19,45 @@ function mut(over: Partial<OutboxMutation> = {}): OutboxMutation {
     queuedAt: over.queuedAt ?? 1000,
   };
 }
+
+describe("outbox change event", () => {
+  it("уведомляет UI об изменении очереди", () => {
+    const target = new EventTarget();
+    let calls = 0;
+    target.addEventListener(OUTBOX_CHANGED_EVENT, () => {
+      calls += 1;
+    });
+
+    dispatchOutboxChanged(target);
+
+    expect(calls).toBe(1);
+  });
+
+  it("уведомляет другую вкладку через broadcast и снимает подписку", () => {
+    const first = new EventTarget();
+    const second = new EventTarget();
+    const channel = (self: EventTarget, peer: EventTarget) => ({
+      addEventListener: self.addEventListener.bind(self),
+      removeEventListener: self.removeEventListener.bind(self),
+      postMessage: () => peer.dispatchEvent(new Event("message")),
+    });
+    let calls = 0;
+    const unsubscribe = subscribeOutboxChanged(
+      () => {
+        calls += 1;
+      },
+      null,
+      channel(second, first),
+    );
+
+    dispatchOutboxChanged(null, channel(first, second));
+    expect(calls).toBe(1);
+
+    unsubscribe();
+    dispatchOutboxChanged(null, channel(first, second));
+    expect(calls).toBe(1);
+  });
+});
 
 describe("makeClientId", () => {
   it("returns a unique UUID-shaped string each call", () => {

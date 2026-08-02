@@ -26,7 +26,7 @@
     <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-2f6b4f?logo=typescript&logoColor=white">
     <img alt="PostgreSQL 15" src="https://img.shields.io/badge/PostgreSQL-15-416b57?logo=postgresql&logoColor=white">
     <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-d09543">
-    <img alt="Tests" src="https://img.shields.io/badge/tests-1100_passed-3a6b4a?logo=vitest&logoColor=white">
+    <img alt="Tests" src="https://img.shields.io/badge/tests-1102_passed-3a6b4a?logo=vitest&logoColor=white">
     <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest"><img alt="Скачать Vibe-trainer 1.2.0" src="https://img.shields.io/badge/скачать-v1.2.0-3a6b4a?logo=github&logoColor=white"></a>
   </p>
 </div>

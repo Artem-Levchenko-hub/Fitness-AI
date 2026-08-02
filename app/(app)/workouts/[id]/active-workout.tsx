@@ -35,7 +35,11 @@ import {
   pendingSetsFromOutbox,
   type PendingSet,
 } from "@/lib/domain/workouts/pending-sets";
-import { enqueue, listPending } from "@/lib/storage/outbox";
+import {
+  enqueue,
+  listPending,
+  subscribeOutboxChanged,
+} from "@/lib/storage/outbox";
 import type { PreviousSessionSummary } from "@/lib/domain/exercise/previous-session";
 import type { GoalProgressView } from "@/lib/domain/progression/goal-projection";
 import type { ActiveWorkout } from "@/lib/repos/workouts.repo";
@@ -72,13 +76,18 @@ export function ActiveWorkoutView({
   const [finishedOffline, setFinishedOffline] = useState(false);
   useEffect(() => {
     let alive = true;
-    listPending().then((mutations) => {
-      if (!alive) return;
-      setPending(pendingSetsFromOutbox(mutations, workout.id));
-      setFinishedOffline(hasPendingFinish(mutations, workout.id));
-    });
+    const syncPending = () => {
+      void listPending().then((mutations) => {
+        if (!alive) return;
+        setPending(pendingSetsFromOutbox(mutations, workout.id));
+        setFinishedOffline(hasPendingFinish(mutations, workout.id));
+      });
+    };
+    syncPending();
+    const unsubscribe = subscribeOutboxChanged(syncPending);
     return () => {
       alive = false;
+      unsubscribe();
     };
   }, [workout.id]);
 

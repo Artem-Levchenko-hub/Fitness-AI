@@ -34,6 +34,15 @@ export type OutboxMutation = {
 const DB_NAME = "fit-outbox";
 const DB_VERSION = 1;
 const STORE = "mutations";
+export const OUTBOX_CHANGED_EVENT = "fitness:outbox-changed";
+const OUTBOX_CHANNEL_NAME = "fitness-outbox";
+
+type OutboxBroadcastChannel = Pick<
+  BroadcastChannel,
+  "addEventListener" | "postMessage" | "removeEventListener"
+>;
+
+let sharedChannel: BroadcastChannel | null | undefined;
 
 // ── Пьюр-логика (без window) ────────────────────────────────────────────────
 
@@ -90,6 +99,48 @@ function hasIndexedDb(): boolean {
   return typeof indexedDB !== "undefined";
 }
 
+/** Сообщает текущей вкладке, что IndexedDB-очередь изменилась. Компоненты,
+ *  показывающие оптимистичные строки, перечитывают outbox после успешного
+ *  drain вместо того, чтобы держать устаревшую пометку «не синхр.». */
+export function dispatchOutboxChanged(
+  target: Pick<EventTarget, "dispatchEvent"> | null =
+    typeof window === "undefined" ? null : window,
+  channel: OutboxBroadcastChannel | null = getOutboxChannel(),
+): void {
+  target?.dispatchEvent(new Event(OUTBOX_CHANGED_EVENT));
+  channel?.postMessage(OUTBOX_CHANGED_EVENT);
+}
+
+/** Подписка объединяет текущую вкладку и остальные вкладки того же origin.
+ * Один channel на вкладку важен: BroadcastChannel не эхо-передаёт сообщение
+ * объекту-отправителю, поэтому локальное событие не дублируется. */
+export function subscribeOutboxChanged(
+  listener: () => void,
+  target: Pick<EventTarget, "addEventListener" | "removeEventListener"> | null =
+    typeof window === "undefined" ? null : window,
+  channel: OutboxBroadcastChannel | null = getOutboxChannel(),
+): () => void {
+  const onLocal = () => listener();
+  const onBroadcast = () => listener();
+  target?.addEventListener(OUTBOX_CHANGED_EVENT, onLocal);
+  channel?.addEventListener("message", onBroadcast);
+
+  return () => {
+    target?.removeEventListener(OUTBOX_CHANGED_EVENT, onLocal);
+    channel?.removeEventListener("message", onBroadcast);
+  };
+}
+
+function getOutboxChannel(): BroadcastChannel | null {
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") {
+    return null;
+  }
+  if (sharedChannel === undefined) {
+    sharedChannel = new BroadcastChannel(OUTBOX_CHANNEL_NAME);
+  }
+  return sharedChannel;
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -119,6 +170,7 @@ export async function enqueue(mutation: OutboxMutation): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
     db.close();
+    dispatchOutboxChanged();
   } catch {
     /* fail-soft — потеря буфера не должна ронять ввод подхода */
   }
@@ -156,6 +208,7 @@ export async function remove(clientId: string): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
     db.close();
+    dispatchOutboxChanged();
   } catch {
     /* fail-soft */
   }
@@ -172,6 +225,7 @@ export async function clear(): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
     db.close();
+    dispatchOutboxChanged();
   } catch {
     /* fail-soft */
   }
