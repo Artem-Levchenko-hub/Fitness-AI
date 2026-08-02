@@ -63,7 +63,7 @@ export const BILLING_PLANS = {
   pro_monthly: {
     code: "pro_monthly",
     title: "Pro на месяц",
-    priceKopecks: 99_000,
+    priceKopecks: 29_000,
     currency: "RUB",
     interval: { unit: "month", count: 1 },
     benefits: PRO_BENEFITS,
@@ -72,7 +72,7 @@ export const BILLING_PLANS = {
   pro_yearly: {
     code: "pro_yearly",
     title: "Pro на год",
-    priceKopecks: 999_000,
+    priceKopecks: 290_000,
     currency: "RUB",
     interval: { unit: "year", count: 1 },
     benefits: PRO_BENEFITS,
