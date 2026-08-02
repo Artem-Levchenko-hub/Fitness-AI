@@ -705,8 +705,9 @@ test("H16.4 — силовая в ожидании разбора: живой л
   await page.goto(`/workouts/${waitingWorkoutId}/trainer`);
   await expect(page).toHaveURL(new RegExp(`/workouts/${waitingWorkoutId}/trainer`));
   await expect(page.getByText("Читаю твои подходы")).toBeVisible();
-  // Скелет разбора живёт под стадиями (role=status) — лоадер не «завис».
-  await expect(page.getByRole("status")).toBeVisible();
+  // На странице может одновременно появиться сетевой role=status, поэтому
+  // выбираем именно занятый live-region разбора, а не глобальный offline-баннер.
+  await expect(page.locator('[role="status"][aria-busy="true"]')).toBeVisible();
 });
 
 test("H16.4 — reduced-motion: лоадер остаётся спокойным, без дёрганья и ложного «готово»", async ({
@@ -857,6 +858,24 @@ test("H15.5 — airplane-mode: офлайн-подход переживает re
   await expect(
     page.getByText("Активная тренировка", { exact: true }),
   ).toBeVisible();
+
+  // Первый визит запускает регистрацию SW асинхронно. До перехода в airplane
+  // mode ждём active registration и гарантируем, что текущая вкладка уже под
+  // его контролем; иначе browser HTTP cache может пережить reload и тест будет
+  // проверять не network-only navigation из public/sw.js.
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  if (
+    !(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))
+  ) {
+    await page.reload();
+  }
+  await expect
+    .poll(() =>
+      page.evaluate(() => Boolean(navigator.serviceWorker.controller)),
+    )
+    .toBe(true);
 
   // 2) Офлайн → подход идёт в IndexedDB-outbox, не на сервер (navigator.onLine=
   //    false → SetInput.recordOffline). Оптимистичная строка видна сразу и

@@ -29,7 +29,8 @@ describe("proxy security headers and deep links", () => {
     expect(csp).toContain("form-action 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("upgrade-insecure-requests");
-    expect(csp).not.toContain("unsafe-eval");
+    expect(csp).toContain("'wasm-unsafe-eval'");
+    expect(csp).not.toContain("'unsafe-eval'");
   });
 
   it("сохраняет deep link для любого app-route, включая billing", async () => {
