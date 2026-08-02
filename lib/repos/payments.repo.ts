@@ -227,6 +227,32 @@ export async function getPaymentForUser(
   return row ?? null;
 }
 
+/** Возвращает единственный незавершённый первый платёж подписки пользователя. */
+export async function getInitialSubscriptionPaymentInFlightForUser(
+  userId: string,
+) {
+  const [row] = await db
+    .select({
+      id: schema.payments.id,
+      status: schema.payments.status,
+      amountKopecks: schema.payments.amountKopecks,
+      planCode: schema.payments.planCode,
+      metadata: schema.payments.metadata,
+    })
+    .from(schema.payments)
+    .where(
+      and(
+        eq(schema.payments.userId, userId),
+        eq(schema.payments.provider, "yookassa"),
+        eq(schema.payments.kind, "subscription_initial"),
+        inArray(schema.payments.status, ["pending", "waiting_for_capture"]),
+      ),
+    )
+    .limit(1);
+
+  return row ?? null;
+}
+
 export async function listRecoverablePayments(limit = 50) {
   return db
     .select()
