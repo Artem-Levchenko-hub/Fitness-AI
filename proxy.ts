@@ -27,6 +27,9 @@ export default auth((req) => {
   );
 
   if (isProtected && !isAuthed) {
+    // TWA передаёт версию оболочки в query. Сохраняем её внутри next/callback,
+    // иначе редирект на вход стирает маркер и web-слой не увидит обновление.
+    const returnPath = `${pathname}${req.nextUrl.search}`;
     // На iOS PWA после suspend session-cookie может пропасть, но
     // долгоживущий refresh-cookie часто переживает. Если он есть —
     // отправляем на /api/auth/restore: оно подменит refresh на свежий
@@ -34,12 +37,12 @@ export default auth((req) => {
     const hasRefresh = req.cookies.has(REFRESH_COOKIE_NAME);
     if (hasRefresh) {
       const restoreUrl = new URL("/api/auth/restore", req.url);
-      restoreUrl.searchParams.set("next", pathname);
+      restoreUrl.searchParams.set("next", returnPath);
       return NextResponse.redirect(restoreUrl);
     }
 
     const url = new URL("/login", req.url);
-    url.searchParams.set("callbackUrl", pathname);
+    url.searchParams.set("callbackUrl", returnPath);
     return NextResponse.redirect(url);
   }
 

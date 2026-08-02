@@ -1,0 +1,154 @@
+name: Publish Vibe-trainer apps
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: version
+        name: Verify tag and platform versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          DESKTOP_VERSION="$(jq -r '.version' desktop/package.json)"
+          ANDROID_VERSION="$(jq -r '.appVersionName' android/twa-manifest.json)"
+          ANDROID_COMPAT_VERSION="$(jq -r '.appVersion' android/twa-manifest.json)"
+          ANDROID_CODE="$(jq -r '.appVersionCode' android/twa-manifest.json)"
+          PREVIOUS_CODE="$(git show "${GITHUB_SHA}^:android/twa-manifest.json" 2>/dev/null | jq -r '.appVersionCode' || echo 0)"
+          test "$DESKTOP_VERSION" = "$VERSION"
+          test "$ANDROID_VERSION" = "$VERSION"
+          test "$ANDROID_COMPAT_VERSION" = "$VERSION"
+          test "$ANDROID_CODE" -gt "$PREVIOUS_CODE"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: validate
+    uses: ./.github/workflows/windows-desktop.yml
+
+  android:
+    needs: validate
+    uses: ./.github/workflows/android-twa.yml
+    secrets: inherit
+
+  publish:
+    needs: [validate, windows, android]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verified build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vibe-trainer-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble and verify release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release
+          INSTALLER="Vibe-trainer-Windows-x64-Setup-v${VERSION}.exe"
+          test -s "artifacts/$INSTALLER"
+          test -s "artifacts/$INSTALLER.blockmap"
+          test -s artifacts/latest.yml
+          test -s artifacts/app-release-signed.apk
+          test -s artifacts/app-release-bundle.aab
+          grep -qx "version: ${VERSION}" artifacts/latest.yml
+          grep -q "$INSTALLER" artifacts/latest.yml
+
+          cp "artifacts/$INSTALLER" "release/$INSTALLER"
+          cp "artifacts/$INSTALLER.blockmap" "release/$INSTALLER.blockmap"
+          cp artifacts/latest.yml release/latest.yml
+          cp artifacts/app-release-signed.apk "release/Vibe-trainer-Android-v${VERSION}.apk"
+          cp artifacts/app-release-bundle.aab "release/Vibe-trainer-Android-Google-Play-v${VERSION}.aab"
+
+          PRIVATE_KEY="$RUNNER_TEMP/windows-update-signing-key.pem"
+          trap 'rm -f "$PRIVATE_KEY"' EXIT
+          printf '%s' "$WINDOWS_UPDATE_SIGNING_KEY_BASE64" | base64 --decode > "$PRIVATE_KEY"
+          test -s "$PRIVATE_KEY"
+          chmod 600 "$PRIVATE_KEY"
+          node desktop/scripts/sign-update.mjs \
+            "release/$INSTALLER" \
+            "$VERSION" \
+            "$PRIVATE_KEY" \
+            desktop/update-public-key.pem \
+            "release/$INSTALLER.update.json"
+          rm -f "$PRIVATE_KEY"
+          trap - EXIT
+
+          cd release
+          sha256sum \
+            "$INSTALLER" \
+            "$INSTALLER.blockmap" \
+            "$INSTALLER.update.json" \
+            latest.yml \
+            "Vibe-trainer-Android-v${VERSION}.apk" \
+            "Vibe-trainer-Android-Google-Play-v${VERSION}.aab" \
+            > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+        env:
+          WINDOWS_UPDATE_SIGNING_KEY_BASE64: ${{ secrets.WINDOWS_UPDATE_SIGNING_KEY_BASE64 }}
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<EOF
+          ## 🏋️ Vibe-trainer ${VERSION}
+
+          ### Что нового
+
+          - Windows автоматически проверяет и загружает новые версии из официальных GitHub Releases;
+          - после загрузки Windows предлагает перезапуск, а при выборе «Позже» устанавливает обновление при выходе;
+          - Android автоматически проверяет новую версию и показывает безопасную ссылку на подписанный APK;
+          - Android App Bundle готов для Google Play, где системное автообновление работает без ручного скачивания;
+          - все бинарники собираются из точного коммита тега и публикуются вместе с SHA-256.
+
+          > Переход с Windows 1.1.0 требует один раз установить ${VERSION} вручную. Все следующие версии будут находиться автоматически.
+          EOF
+
+      - name: Create verified draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TITLE="🏋️ Vibe-trainer ${VERSION} · автообновление Windows + Android"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = true
+            gh release edit "$GITHUB_REF_NAME" --title "$TITLE" --notes-file release-notes.md
+            gh release upload "$GITHUB_REF_NAME" --clobber release/*
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --draft \
+              --title "$TITLE" \
+              --notes-file release-notes.md \
+              release/*
+          fi
+
+          ASSET_COUNT="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length')"
+          test "$ASSET_COUNT" -eq 7
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest

@@ -12,7 +12,7 @@
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#F6F4EF",
   "enableNotifications": true,
-  "startUrl": "/dashboard",
+  "startUrl": "/dashboard?client=android&appVersion=1.2.0",
   "iconUrl": "https://fitnesss.online/icons/icon-512.png",
   "maskableIconUrl": "https://fitnesss.online/icons/maskable-512.png",
   "splashScreenFadeOutDuration": 300,
@@ -20,8 +20,8 @@
     "path": "./android.keystore",
     "alias": "vibe-trainer"
   },
-  "appVersionName": "1.1.0",
-  "appVersionCode": 4,
+  "appVersionName": "1.2.0",
+  "appVersionCode": 5,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://fitnesss.online/manifest.webmanifest",
@@ -44,5 +44,5 @@
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "displayOverride": [],
-  "appVersion": "1.1.0"
+  "appVersion": "1.2.0"
 }

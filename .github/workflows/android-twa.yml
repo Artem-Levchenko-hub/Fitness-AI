@@ -2,11 +2,10 @@ name: Build Android TWA (Vibe-trainer)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [chore/android-twa-build]
-    paths:
-      - 'android/**'
-      - '.github/workflows/android-twa.yml'
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -47,7 +46,7 @@ jobs:
       - name: Decode signing keystore from secret
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/android.keystore
-          test -s android/android.keystore && echo "keystore: $(wc -c < android/android.keystore) bytes"
+          test -s android/android.keystore
 
       - name: Build signed APK + AAB
         working-directory: android
@@ -87,7 +86,9 @@ jobs:
           test "$CERT_SHA256" = "$MANIFEST_SHA256"
           test "$CERT_SHA256" = "$ASSETLINKS_SHA256"
           BADGING="$("$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK")"
-          echo "$BADGING" | grep "package: name='app.leadgenerator.fitness' versionCode='4' versionName='1.1.0'"
+          VERSION_NAME="$(jq -r '.appVersionName' twa-manifest.json)"
+          VERSION_CODE="$(jq -r '.appVersionCode' twa-manifest.json)"
+          echo "$BADGING" | grep "package: name='app.leadgenerator.fitness' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'"
           echo "$BADGING" | grep "targetSdkVersion:'36'"
           jarsigner -verify -verbose -certs "$AAB" | tee /tmp/aab-verify.log
           grep -q "jar verified" /tmp/aab-verify.log

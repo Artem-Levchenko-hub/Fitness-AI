@@ -24,6 +24,7 @@
 # misc
 .DS_Store
 *.pem
+!desktop/update-public-key.pem
 
 # debug
 npm-debug.log*
