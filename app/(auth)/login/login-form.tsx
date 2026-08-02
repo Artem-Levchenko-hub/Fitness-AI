@@ -19,20 +19,28 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function handleEmailSubmit(formData: FormData) {
+  async function handleEmailSubmit(formData: FormData): Promise<SignInState> {
     setError(null);
     setPending(true);
-    const initialState: SignInState = { status: "idle" };
-    const result = await signInWithEmail(initialState, formData);
-    setPending(false);
+    try {
+      const initialState: SignInState = { status: "idle" };
+      const result = await signInWithEmail(initialState, formData);
 
-    if (result.status === "sent") {
-      setEmail(result.email);
-      setSavedCallback(result.callbackUrl);
-      setStep("code");
-    } else if (result.status === "error") {
-      setError(result.message);
+      if (result.status === "sent") {
+        setEmail(result.email);
+        setSavedCallback(result.callbackUrl);
+        setStep("code");
+      } else if (result.status === "error") {
+        setError(result.message);
+      }
+      return result;
+    } finally {
+      setPending(false);
     }
+  }
+
+  async function handleInitialEmailSubmit(formData: FormData) {
+    await handleEmailSubmit(formData);
   }
 
   if (step === "code") {
@@ -48,7 +56,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
           const fd = new FormData();
           fd.set("email", email);
           fd.set("callbackUrl", savedCallback);
-          await handleEmailSubmit(fd);
+          return handleEmailSubmit(fd);
         }}
       />
     );
@@ -56,7 +64,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
 
   return (
     <form
-      action={handleEmailSubmit}
+      action={handleInitialEmailSubmit}
       className="space-y-4"
       noValidate
     >
@@ -103,7 +111,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
   );
 }
 
-function CodeStep({
+export function CodeStep({
   email,
   callbackUrl,
   onBack,
@@ -112,11 +120,12 @@ function CodeStep({
   email: string;
   callbackUrl: string;
   onBack: () => void;
-  onResend: () => void;
+  onResend: () => Promise<SignInState>;
 }) {
   const [code, setCode] = useState("");
   const [resending, setResending] = useState(false);
   const [resentJustNow, setResentJustNow] = useState(false);
+  const [resendError, setResendError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -126,10 +135,24 @@ function CodeStep({
   async function handleResend() {
     setResending(true);
     setResentJustNow(false);
-    await onResend();
-    setResending(false);
-    setResentJustNow(true);
-    setTimeout(() => setResentJustNow(false), 4000);
+    setResendError(null);
+    try {
+      const result = await onResend();
+      if (result.status === "sent") {
+        setResentJustNow(true);
+        setTimeout(() => setResentJustNow(false), 4000);
+      } else {
+        setResendError(
+          result.status === "error"
+            ? result.message
+            : "Не удалось отправить код. Попробуйте позже.",
+        );
+      }
+    } catch {
+      setResendError("Не удалось отправить код. Проверьте соединение.");
+    } finally {
+      setResending(false);
+    }
   }
 
   return (
@@ -185,6 +208,11 @@ function CodeStep({
       </form>
 
       <div className="space-y-3 text-center">
+        {resendError ? (
+          <p className="text-destructive text-sm" role="alert">
+            {resendError}
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={handleResend}

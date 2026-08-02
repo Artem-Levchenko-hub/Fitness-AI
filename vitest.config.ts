@@ -17,6 +17,7 @@ export default defineConfig({
       "lib/**/*.test.ts",
       "server/**/*.test.ts",
       "app/**/*.test.ts",
+      "app/**/*.test.tsx",
       // Чистая (без DOM) логика компонентов — напр. resume-visibility (H12.4).
       "components/**/*.test.ts",
     ],

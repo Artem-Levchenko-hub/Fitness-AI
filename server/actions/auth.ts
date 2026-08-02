@@ -1,6 +1,5 @@
 "use server";
 
-import { AuthError } from "next-auth";
 import { z } from "zod";
 
 import { signIn, signOut } from "@/lib/auth";
@@ -46,14 +45,14 @@ export async function signInWithEmail(
       redirectTo: callbackUrl,
     });
     return { status: "sent", email: parsed.data.email, callbackUrl };
-  } catch (err) {
-    if (err instanceof AuthError) {
-      return {
-        status: "error",
-        message: "Не удалось отправить код. Попробуйте позже.",
-      };
-    }
-    throw err;
+  } catch {
+    // Auth.js оборачивает не все ошибки провайдера в AuthError. Например,
+    // Resend validation error раньше превращался в 500 и терялся на шаге OTP.
+    // Клиенту не раскрываем provider body, но всегда возвращаем явный статус.
+    return {
+      status: "error",
+      message: "Не удалось отправить код. Попробуйте позже.",
+    };
   }
 }
 
