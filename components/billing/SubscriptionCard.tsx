@@ -28,11 +28,13 @@ export function SubscriptionCard({
   plans,
   subscription,
   enabled,
+  recurringEnabled,
   mode,
 }: {
   plans: readonly Plan[];
   subscription: SubscriptionView;
   enabled: boolean;
+  recurringEnabled: boolean;
   mode: "test" | "live";
 }) {
   const [selectedPlan, setSelectedPlan] = useState<Plan["code"]>(
@@ -62,7 +64,8 @@ export function SubscriptionCard({
         body: JSON.stringify({
           planCode: selected.code,
           idempotencyKey: idempotencyKeyRef.current,
-          acceptRecurringTerms: true,
+          paymentMode: recurringEnabled ? "recurring" : "one_time",
+          acceptTerms: true,
         }),
       });
       const body = (await response.json().catch(() => null)) as {
@@ -130,14 +133,19 @@ export function SubscriptionCard({
             dateStyle: "long",
           })}
           .{" "}
-          {subscription.cancelAtPeriodEnd
+          {!recurringEnabled || subscription.cancelAtPeriodEnd
             ? "После этой даты продление отключено."
             : "Следующий платёж пройдёт автоматически."}
         </p>
 
         {error ? <p className="text-destructive text-sm">{error}</p> : null}
 
-        {subscription.cancelAtPeriodEnd && subscription.renewalAvailable ? (
+        {!recurringEnabled ? (
+          <p className="bg-muted text-muted-foreground rounded-xl px-4 py-3 text-sm leading-relaxed">
+            Автопродление пока недоступно. Повторного списания не будет; после
+            окончания периода подписку можно оформить снова.
+          </p>
+        ) : subscription.cancelAtPeriodEnd && subscription.renewalAvailable ? (
           <Button
             type="button"
             variant="outline"
@@ -232,6 +240,13 @@ export function SubscriptionCard({
         ))}
       </ul>
 
+      {!recurringEnabled ? (
+        <p className="bg-primary/5 text-muted-foreground rounded-xl px-4 py-3 text-sm leading-relaxed">
+          Оплата разовая. Повторных списаний не будет: после окончания периода
+          подписку можно оформить снова.
+        </p>
+      ) : null}
+
       <label className="flex cursor-pointer items-start gap-3 text-sm">
         <input
           type="checkbox"
@@ -247,9 +262,10 @@ export function SubscriptionCard({
           ,{" "}
           <Link className="text-foreground underline" href="/legal/privacy">
             политику конфиденциальности
-          </Link>{" "}
-          и разрешаю регулярное списание выбранной суммы. Автопродление можно
-          отключить здесь в любой момент.
+          </Link>
+          {recurringEnabled
+            ? " и разрешаю регулярное списание выбранной суммы. Автопродление можно отключить здесь в любой момент."
+            : " и подтверждаю разовую оплату выбранного периода без автопродления."}
         </span>
       </label>
 

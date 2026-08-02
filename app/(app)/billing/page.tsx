@@ -51,8 +51,10 @@ export default async function BillingPage({ searchParams }: Props) {
     priceKopecks: plan.priceKopecks,
     intervalLabel:
       plan.code === "pro_yearly"
-        ? `за год · экономия ${formatRub(yearlySavings)} (${yearlySavingsPercent}%)`
-        : "списание раз в месяц",
+        ? `${readiness.recurringPaymentsEnabled ? "списание раз в год" : "доступ на год"} · экономия ${formatRub(yearlySavings)} (${yearlySavingsPercent}%)`
+        : readiness.recurringPaymentsEnabled
+          ? "списание раз в месяц"
+          : "доступ на 1 месяц",
     benefits: plan.benefits.map((benefit) => benefit.label),
   }));
 
@@ -110,6 +112,7 @@ export default async function BillingPage({ searchParams }: Props) {
               : null
           }
           enabled={readiness.subscriptionsEnabled}
+          recurringEnabled={readiness.recurringPaymentsEnabled}
           mode={readiness.mode}
         />
       </div>

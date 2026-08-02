@@ -169,7 +169,18 @@ export async function markSubscriptionRenewalFailed(
     .where(eq(schema.subscriptions.userId, userId));
 }
 
-export async function expirePastDueSubscriptions(now = new Date()) {
+export async function expirePastDueSubscriptions(
+  now = new Date(),
+  options: { includeRenewing?: boolean } = {},
+) {
+  const conditions = [
+    inArray(schema.subscriptions.status, ["past_due", "active"]),
+    lte(schema.subscriptions.currentPeriodEnd, now),
+  ];
+  if (!options.includeRenewing) {
+    conditions.push(eq(schema.subscriptions.cancelAtPeriodEnd, true));
+  }
+
   return db
     .update(schema.subscriptions)
     .set({
@@ -178,11 +189,7 @@ export async function expirePastDueSubscriptions(now = new Date()) {
       nextChargeAt: null,
     })
     .where(
-      and(
-        inArray(schema.subscriptions.status, ["past_due", "active"]),
-        lte(schema.subscriptions.currentPeriodEnd, now),
-        eq(schema.subscriptions.cancelAtPeriodEnd, true),
-      ),
+      and(...conditions),
     )
     .returning({ userId: schema.subscriptions.userId });
 }

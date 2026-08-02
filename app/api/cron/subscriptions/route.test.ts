@@ -60,6 +60,7 @@ describe("subscriptions cron readiness", () => {
     mocks.getBillingReadiness.mockReturnValue({
       paymentsEnabled: false,
       subscriptionsEnabled: false,
+      recurringPaymentsEnabled: false,
       mode: "live",
       paymentMissing: ["BILLING_ENABLED"],
       subscriptionMissing: ["BILLING_ENABLED", "SUBSCRIPTION_ENABLED"],
@@ -88,6 +89,7 @@ describe("subscriptions cron readiness", () => {
     mocks.getBillingReadiness.mockReturnValue({
       paymentsEnabled: true,
       subscriptionsEnabled: true,
+      recurringPaymentsEnabled: true,
       mode: "test",
       paymentMissing: [],
       subscriptionMissing: [],
@@ -110,5 +112,36 @@ describe("subscriptions cron readiness", () => {
     expect(mocks.listUpcomingRenewals).toHaveBeenCalledOnce();
     expect(mocks.expirePastDueSubscriptions).toHaveBeenCalledOnce();
     expect(mocks.listDueSubscriptions).toHaveBeenCalledOnce();
+  });
+
+  it("expires access but skips reminders and charges when recurring payments are disabled", async () => {
+    mocks.getBillingReadiness.mockReturnValue({
+      paymentsEnabled: true,
+      subscriptionsEnabled: true,
+      recurringPaymentsEnabled: false,
+      mode: "live",
+      paymentMissing: [],
+      subscriptionMissing: [],
+    });
+
+    const response = await POST(
+      new Request("https://fitnesss.online/api/cron/subscriptions", {
+        method: "POST",
+        headers: { authorization: "Bearer 0123456789abcdef" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      recurringEnabled: false,
+      processed: 0,
+      remindersSent: 0,
+    });
+    expect(mocks.listUpcomingRenewals).not.toHaveBeenCalled();
+    expect(mocks.listDueSubscriptions).not.toHaveBeenCalled();
+    expect(mocks.expirePastDueSubscriptions).toHaveBeenCalledWith(
+      expect.any(Date),
+      { includeRenewing: true },
+    );
   });
 });

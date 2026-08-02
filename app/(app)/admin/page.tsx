@@ -155,6 +155,9 @@ function BillingReadinessPanel({
           <ReadinessBadge ready={readiness.subscriptionsEnabled}>
             Подписки
           </ReadinessBadge>
+          <ReadinessBadge ready={readiness.recurringPaymentsEnabled}>
+            Автопродление
+          </ReadinessBadge>
         </div>
       </div>
 

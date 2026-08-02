@@ -63,12 +63,13 @@ LEGAL_DOCUMENTS_APPROVED=false
 
 BILLING_ENABLED=false
 SUBSCRIPTION_ENABLED=false
+YOOKASSA_RECURRING_ENABLED=false
 AI_COACH_PRICE_KOPECKS=2200
 CRON_SECRET=<случайная строка длиной не менее 16 символов>
 ```
 
-Сначала оставьте три флага `LEGAL_DOCUMENTS_APPROVED`, `BILLING_ENABLED`,
-`SUBSCRIPTION_ENABLED` выключенными.
+Сначала оставьте флаги `LEGAL_DOCUMENTS_APPROVED`, `BILLING_ENABLED`,
+`SUBSCRIPTION_ENABLED` и `YOOKASSA_RECURRING_ENABLED` выключенными.
 
 ## 3. Юридические тексты
 
@@ -220,7 +221,12 @@ YOOKASSA_MODE=live
 YOOKASSA_WEBHOOK_IP_CHECK=true
 BILLING_ENABLED=true
 SUBSCRIPTION_ENABLED=true
+YOOKASSA_RECURRING_ENABLED=true
 ```
+
+Если менеджер ещё не выдал права на автоплатежи, оставьте
+`YOOKASSA_RECURRING_ENABLED=false`: первый платёж даст доступ на оплаченный
+период, но карта не сохранится и повторного списания не будет.
 
 7. провести один минимальный реальный платёж владельцем;
 8. проверить payment, чек, ledger, баланс/подписку и банковскую выписку;

@@ -25,11 +25,19 @@ import { getSubscriptionForUser } from "@/lib/repos/subscriptions.repo";
 
 export const runtime = "nodejs";
 
-const bodySchema = z.object({
-  planCode: z.string().refine(isBillingPlanCode),
-  idempotencyKey: z.string().uuid(),
-  acceptRecurringTerms: z.literal(true),
-});
+const bodySchema = z
+  .object({
+    planCode: z.string().refine(isBillingPlanCode),
+    idempotencyKey: z.string().uuid(),
+    paymentMode: z.enum(["one_time", "recurring"]).optional(),
+    acceptTerms: z.literal(true).optional(),
+    // Совместимость с уже открытыми вкладками предыдущего релиза.
+    acceptRecurringTerms: z.literal(true).optional(),
+  })
+  .refine(
+    ({ acceptTerms, acceptRecurringTerms }) =>
+      acceptTerms === true || acceptRecurringTerms === true,
+  );
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -44,8 +52,27 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json(
-      { error: "Подтвердите условия автоплатежа и выберите тариф" },
+      { error: "Подтвердите условия оплаты и выберите тариф" },
       { status: 400 },
+    );
+  }
+
+  const paymentMode = readiness.recurringPaymentsEnabled
+    ? "recurring"
+    : "one_time";
+  const requestedPaymentMode =
+    parsed.data.paymentMode ??
+    (parsed.data.acceptRecurringTerms === true ? "recurring" : null);
+  if (requestedPaymentMode === null) {
+    return Response.json(
+      { error: "Обновите страницу и подтвердите условия оплаты заново." },
+      { status: 400 },
+    );
+  }
+  if (requestedPaymentMode !== paymentMode) {
+    return Response.json(
+      { error: "Условия оплаты изменились. Обновите страницу и подтвердите их заново." },
+      { status: 409 },
     );
   }
 
@@ -76,7 +103,7 @@ export async function POST(request: Request) {
   const periodStart = new Date();
   const periodEnd = advanceUtcCalendarPeriod(periodStart, plan.interval);
   const description = `Подписка Fitness AI ${plan.title}`;
-  const consentAt = new Date();
+  const consentAt = paymentMode === "recurring" ? new Date() : null;
 
   let local;
   try {
@@ -89,12 +116,12 @@ export async function POST(request: Request) {
       description,
       receiptEmail: user.email,
       recurringConsentAt: consentAt,
-      recurringConsentVersion: env.LEGAL_OFFER_VERSION,
+      recurringConsentVersion: consentAt ? env.LEGAL_OFFER_VERSION : null,
       customerIp: request.headers.get("x-real-ip"),
       customerUserAgent: request.headers.get("user-agent"),
       periodStart,
       periodEnd,
-      metadata: { source: "subscription_checkout" },
+      metadata: { source: "subscription_checkout", paymentMode },
     });
   } catch (error) {
     if (error instanceof PaymentIdempotencyConflictError) {
@@ -130,12 +157,13 @@ export async function POST(request: Request) {
       description,
       customerEmail: user.email,
       returnUrl: `${env.NEXT_PUBLIC_APP_URL}/billing?payment=${local.payment.id}`,
-      savePaymentMethod: true,
+      savePaymentMethod: paymentMode === "recurring",
       metadata: {
         internalId: local.payment.id,
         userId: user.id,
         kind: "subscription_initial",
         planCode: plan.code,
+        paymentMode,
       },
       idempotenceKey: parsed.data.idempotencyKey,
     });
