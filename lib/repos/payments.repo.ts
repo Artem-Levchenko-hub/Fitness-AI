@@ -5,6 +5,8 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 
+import { getDatabaseConstraintName } from "./db-errors";
+
 type PaymentStatus = (typeof schema.paymentStatus.enumValues)[number];
 
 export class PaymentIdempotencyConflictError extends Error {
@@ -71,12 +73,8 @@ export async function getOrCreatePaymentRecord(
   } catch (error) {
     if (
       input.kind === "subscription_initial" &&
-      typeof error === "object" &&
-      error !== null &&
-      ((error as { constraint_name?: unknown }).constraint_name ===
-        "payments_initial_subscription_inflight_unq" ||
-        (error as { constraint?: unknown }).constraint ===
-          "payments_initial_subscription_inflight_unq")
+      getDatabaseConstraintName(error) ===
+        "payments_initial_subscription_inflight_unq"
     ) {
       throw new SubscriptionPaymentInFlightError();
     }
