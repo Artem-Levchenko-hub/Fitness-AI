@@ -9,6 +9,7 @@ import {
   getBillingPlan,
   isBillingPlanCode,
 } from "@/lib/billing/plans";
+import { resolveSubscriptionRenewalState } from "@/lib/billing/subscription-renewal-state";
 import {
   parseYooRubAmountToKopecks,
   verifyYooPayment,
@@ -255,39 +256,41 @@ async function settleSucceededPayment(
         provider.payment_method?.saved === true
           ? provider.payment_method.id ?? null
           : null;
-      const paymentMethodId =
-        newlySavedMethod ?? existing?.providerPaymentMethodId ?? null;
       // Cancellation requested while a renewal was in flight always wins for
       // the *next* period. The already-created charge still grants its full
       // paid period, but settlement must not silently turn renewal back on.
       const preserveCancellation =
         payment.kind === "subscription_renewal" &&
         existing?.cancelAtPeriodEnd === true;
-      const canAutoRenew = !!paymentMethodId && !preserveCancellation;
+      const renewalState = resolveSubscriptionRenewalState({
+        kind: payment.kind,
+        newlySavedPaymentMethodId: newlySavedMethod,
+        existingPaymentMethodId: existing?.providerPaymentMethodId ?? null,
+        paymentRecurringConsentAt: payment.recurringConsentAt,
+        paymentRecurringConsentVersion: payment.recurringConsentVersion,
+        existingRecurringConsentAt: existing?.recurringConsentAt ?? null,
+        existingRecurringConsentVersion:
+          existing?.recurringConsentVersion ?? null,
+        preserveCancellation,
+      });
 
       await tx
         .insert(schema.subscriptions)
         .values({
           userId: payment.userId,
           provider: "yookassa",
-          providerPaymentMethodId: paymentMethodId,
+          providerPaymentMethodId: renewalState.paymentMethodId,
           planCode: plan.code,
           priceKopecks: payment.amountKopecks,
           tier: "pro",
           status: "active",
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
-          nextChargeAt: canAutoRenew ? periodEnd : null,
-          cancelAtPeriodEnd: !canAutoRenew,
-          canceledAt: canAutoRenew ? null : new Date(),
-          recurringConsentAt:
-            payment.recurringConsentAt ??
-            existing?.recurringConsentAt ??
-            null,
-          recurringConsentVersion:
-            payment.recurringConsentVersion ??
-            existing?.recurringConsentVersion ??
-            null,
+          nextChargeAt: renewalState.canAutoRenew ? periodEnd : null,
+          cancelAtPeriodEnd: !renewalState.canAutoRenew,
+          canceledAt: renewalState.canAutoRenew ? null : new Date(),
+          recurringConsentAt: renewalState.recurringConsentAt,
+          recurringConsentVersion: renewalState.recurringConsentVersion,
           renewalReminderSentAt: null,
           retryCount: 0,
           lastPaymentId: payment.id,
@@ -297,24 +300,18 @@ async function settleSucceededPayment(
           target: schema.subscriptions.userId,
           set: {
             provider: "yookassa",
-            providerPaymentMethodId: paymentMethodId,
+            providerPaymentMethodId: renewalState.paymentMethodId,
             planCode: plan.code,
             priceKopecks: payment.amountKopecks,
             tier: "pro",
             status: "active",
             currentPeriodStart: periodStart,
             currentPeriodEnd: periodEnd,
-            nextChargeAt: canAutoRenew ? periodEnd : null,
-            cancelAtPeriodEnd: !canAutoRenew,
-            canceledAt: canAutoRenew ? null : new Date(),
-            recurringConsentAt:
-              payment.recurringConsentAt ??
-              existing?.recurringConsentAt ??
-              null,
-            recurringConsentVersion:
-              payment.recurringConsentVersion ??
-              existing?.recurringConsentVersion ??
-              null,
+            nextChargeAt: renewalState.canAutoRenew ? periodEnd : null,
+            cancelAtPeriodEnd: !renewalState.canAutoRenew,
+            canceledAt: renewalState.canAutoRenew ? null : new Date(),
+            recurringConsentAt: renewalState.recurringConsentAt,
+            recurringConsentVersion: renewalState.recurringConsentVersion,
             renewalReminderSentAt: null,
             retryCount: 0,
             lastPaymentId: payment.id,

@@ -73,10 +73,13 @@ export async function POST(request: Request) {
   }
 
   const now = new Date();
-  const upcoming = await listUpcomingRenewals(
-    now,
-    new Date(now.getTime() + 7 * 86_400_000),
-  );
+  const recurringEnabled = readiness.recurringPaymentsEnabled;
+  const upcoming = recurringEnabled
+    ? await listUpcomingRenewals(
+        now,
+        new Date(now.getTime() + 7 * 86_400_000),
+      )
+    : [];
   let remindersSent = 0;
   for (const item of upcoming) {
     const subscription = item.subscription;
@@ -110,8 +113,10 @@ export async function POST(request: Request) {
     }
   }
 
-  const expired = await expirePastDueSubscriptions(now);
-  const due = await listDueSubscriptions(now, 25);
+  const expired = await expirePastDueSubscriptions(now, {
+    includeRenewing: !recurringEnabled,
+  });
+  const due = recurringEnabled ? await listDueSubscriptions(now, 25) : [];
   const results: Array<{
     userId: string;
     ok: boolean;
@@ -293,6 +298,7 @@ export async function POST(request: Request) {
   }
 
   return Response.json({
+    recurringEnabled,
     processed: results.length,
     expired: expired.length,
     remindersSent,

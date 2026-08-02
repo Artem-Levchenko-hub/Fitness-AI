@@ -91,12 +91,21 @@ export async function getOrCreatePaymentRecord(
     .where(eq(schema.payments.idempotencyKey, input.idempotencyKey))
     .limit(1);
 
+  const inputPaymentMode = input.metadata?.paymentMode;
+  const existingPaymentMode =
+    existing?.metadata &&
+    typeof existing.metadata === "object" &&
+    "paymentMode" in existing.metadata
+      ? existing.metadata.paymentMode
+      : undefined;
+
   if (
     !existing ||
     existing.userId !== input.userId ||
     existing.kind !== input.kind ||
     existing.amountKopecks !== input.amountKopecks ||
-    existing.planCode !== (input.planCode ?? null)
+    existing.planCode !== (input.planCode ?? null) ||
+    existingPaymentMode !== inputPaymentMode
   ) {
     throw new PaymentIdempotencyConflictError();
   }

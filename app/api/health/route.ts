@@ -19,6 +19,7 @@ export async function GET() {
           mode: billing.mode,
           paymentsReady: billing.paymentsEnabled,
           subscriptionsReady: billing.subscriptionsEnabled,
+          recurringPaymentsReady: billing.recurringPaymentsEnabled,
         },
         latencyMs: Date.now() - startedAt,
         checkedAt: new Date().toISOString(),

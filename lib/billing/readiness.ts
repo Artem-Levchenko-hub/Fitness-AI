@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 export type BillingReadiness = {
   paymentsEnabled: boolean;
   subscriptionsEnabled: boolean;
+  recurringPaymentsEnabled: boolean;
   mode: "test" | "live";
   paymentMissing: string[];
   subscriptionMissing: string[];
@@ -37,11 +38,14 @@ export function getBillingReadiness(): BillingReadiness {
   }
 
   const paymentsEnabled = paymentMissing.length === 0;
+  const subscriptionsEnabled =
+    subscriptionMissing.length === 0 && paymentsEnabled;
 
   return {
     paymentsEnabled,
-    subscriptionsEnabled:
-      subscriptionMissing.length === 0 && paymentsEnabled,
+    subscriptionsEnabled,
+    recurringPaymentsEnabled:
+      subscriptionsEnabled && env.YOOKASSA_RECURRING_ENABLED === true,
     mode: env.YOOKASSA_MODE,
     paymentMissing,
     subscriptionMissing,

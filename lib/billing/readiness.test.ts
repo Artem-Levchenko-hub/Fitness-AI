@@ -13,6 +13,7 @@ const { mockedEnv } = vi.hoisted(() => ({
     LEGAL_DOCUMENTS_APPROVED: true,
     BILLING_ENABLED: true,
     SUBSCRIPTION_ENABLED: true,
+    YOOKASSA_RECURRING_ENABLED: true,
     CRON_SECRET: "0123456789abcdef" as string | undefined,
     NODE_ENV: "production" as "development" | "test" | "production",
   },
@@ -40,6 +41,7 @@ describe("billing readiness", () => {
       LEGAL_DOCUMENTS_APPROVED: true,
       BILLING_ENABLED: true,
       SUBSCRIPTION_ENABLED: true,
+      YOOKASSA_RECURRING_ENABLED: true,
       CRON_SECRET: "0123456789abcdef",
       NODE_ENV: "production",
     });
@@ -49,6 +51,7 @@ describe("billing readiness", () => {
     expect(getBillingReadiness()).toEqual({
       paymentsEnabled: true,
       subscriptionsEnabled: true,
+      recurringPaymentsEnabled: true,
       mode: "test",
       paymentMissing: [],
       subscriptionMissing: [],
@@ -61,6 +64,7 @@ describe("billing readiness", () => {
     expect(getBillingReadiness()).toMatchObject({
       paymentsEnabled: true,
       subscriptionsEnabled: false,
+      recurringPaymentsEnabled: false,
       paymentMissing: [],
       subscriptionMissing: ["CRON_SECRET"],
     });
@@ -73,6 +77,7 @@ describe("billing readiness", () => {
     const readiness = getBillingReadiness();
     expect(readiness.paymentsEnabled).toBe(false);
     expect(readiness.subscriptionsEnabled).toBe(false);
+    expect(readiness.recurringPaymentsEnabled).toBe(false);
     expect(readiness.paymentMissing).toEqual(
       expect.arrayContaining([
         "YOOKASSA_SECRET_KEY",
@@ -88,8 +93,19 @@ describe("billing readiness", () => {
     expect(getBillingReadiness()).toMatchObject({
       paymentsEnabled: false,
       subscriptionsEnabled: false,
+      recurringPaymentsEnabled: false,
       paymentMissing: ["BILLING_ENABLED"],
       subscriptionMissing: ["BILLING_ENABLED", "SUBSCRIPTION_ENABLED"],
+    });
+  });
+
+  it("keeps one-time subscriptions open when recurring payments are unavailable", () => {
+    mockedEnv.YOOKASSA_RECURRING_ENABLED = false;
+
+    expect(getBillingReadiness()).toMatchObject({
+      paymentsEnabled: true,
+      subscriptionsEnabled: true,
+      recurringPaymentsEnabled: false,
     });
   });
 

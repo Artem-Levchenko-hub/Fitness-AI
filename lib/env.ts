@@ -114,6 +114,13 @@ export const env = createEnv({
       .optional()
       .transform((v) => v === "true"),
 
+    /** Право live-магазина сохранять способы оплаты и делать автосписания.
+     *  Включается только после подтверждения менеджером ЮKassa. */
+    YOOKASSA_RECURRING_ENABLED: z
+      .union([z.literal("true"), z.literal("false")])
+      .optional()
+      .transform((v) => v === "true"),
+
     CRON_SECRET: z.string().min(16).optional(),
 
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
