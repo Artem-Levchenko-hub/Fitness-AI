@@ -69,9 +69,37 @@ export default async function BillingPage({ searchParams }: Props) {
         </h1>
       </header>
 
+      {returnPayment ? (
+        <PaymentReturnStatus
+          paymentId={returnPayment.id}
+          initialStatus={returnPayment.status}
+        />
+      ) : null}
+
+      <div className="mb-6">
+        <SubscriptionCard
+          plans={plans}
+          subscription={
+            subscription
+              ? {
+                  planCode: subscription.planCode,
+                  status: subscription.status,
+                  currentPeriodEnd:
+                    subscription.currentPeriodEnd?.toISOString() ?? null,
+                  cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+                  renewalAvailable: !!subscription.providerPaymentMethodId,
+                }
+              : null
+          }
+          enabled={readiness.subscriptionsEnabled}
+          recurringEnabled={readiness.recurringPaymentsEnabled}
+          mode={readiness.mode}
+        />
+      </div>
+
       <section
         aria-labelledby="available-balance"
-        className="bg-muted/25 border-border/60 mb-6 rounded-xl border px-4 py-3"
+        className="bg-muted/25 border-border/60 mb-8 rounded-xl border px-4 py-3"
       >
         <div className="flex items-center gap-3">
           <div className="bg-background/70 text-muted-foreground border-border/60 flex size-9 shrink-0 items-center justify-center rounded-lg border">
@@ -99,34 +127,6 @@ export default async function BillingPage({ searchParams }: Props) {
           </div>
         </div>
       </section>
-
-      {returnPayment ? (
-        <PaymentReturnStatus
-          paymentId={returnPayment.id}
-          initialStatus={returnPayment.status}
-        />
-      ) : null}
-
-      <div className="mb-8">
-        <SubscriptionCard
-          plans={plans}
-          subscription={
-            subscription
-              ? {
-                  planCode: subscription.planCode,
-                  status: subscription.status,
-                  currentPeriodEnd:
-                    subscription.currentPeriodEnd?.toISOString() ?? null,
-                  cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-                  renewalAvailable: !!subscription.providerPaymentMethodId,
-                }
-              : null
-          }
-          enabled={readiness.subscriptionsEnabled}
-          recurringEnabled={readiness.recurringPaymentsEnabled}
-          mode={readiness.mode}
-        />
-      </div>
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold tracking-tight">
