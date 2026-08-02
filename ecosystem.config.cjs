@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- pm2 config is CommonJS */
 const fs = require('fs');
 const path = require('path');
+const { parseEnvValue } = require('./scripts/parse-env-value.cjs');
 
 // Next `next start` НЕ грузит .env в process.env, а pm2 кэширует env первого
 // старта. Поэтому грузим .env здесь и прокидываем в env-блоки приложений.
@@ -8,7 +9,9 @@ function loadEnv(p) {
   try {
     for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
       const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
-      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+      if (m && process.env[m[1]] === undefined) {
+        process.env[m[1]] = parseEnvValue(m[2]);
+      }
     }
   } catch {
     /* .env-файла может не быть — это ок */
