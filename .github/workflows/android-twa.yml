@@ -56,13 +56,15 @@ jobs:
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           # The production host may still be awaiting DNS/TLS during a release
-          # cutover. Bubblewrap only needs these URLs to download the launcher
+          # cutover. Bubblewrap only needs the icon URLs to generate launcher
           # artwork, so use immutable assets from the exact GitHub revision.
+          # webManifestUrl is optional for non-ChromeOS/Meta Quest builds and is
+          # removed only from the ephemeral CI copy to avoid a live-host fetch.
           RAW_ICON_BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/public/icons"
           jq \
             --arg icon "$RAW_ICON_BASE/icon-512.png" \
             --arg maskable "$RAW_ICON_BASE/maskable-512.png" \
-            '.iconUrl = $icon | .maskableIconUrl = $maskable' \
+            '.iconUrl = $icon | .maskableIconUrl = $maskable | del(.webManifestUrl)' \
             twa-manifest.json > twa-manifest.ci.json
           mv twa-manifest.ci.json twa-manifest.json
           bubblewrap update --skipVersionUpgrade
