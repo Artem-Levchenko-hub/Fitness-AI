@@ -37,7 +37,10 @@ type Props = {
 };
 
 export function MuscleModel({ url, data, selected, onSelect }: Props) {
-  const { scene } = useGLTF(url);
+  // Drei по умолчанию забирает Draco с gstatic. Декодер держим same-origin:
+  // это работает с connect-src 'self', не отдаёт запросы третьей стороне и
+  // гарантирует совпадение decoder/runtime с установленной версией three.
+  const { scene } = useGLTF(url, "/draco/");
 
   // Клонируем сцену, даём каждому мешу свой материал + кэшируем muscleKey, и
   // вписываем модель в кадр: центрируем по X/Z, ставим стопы около низа и

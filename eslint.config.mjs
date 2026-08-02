@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Rescue snapshots — не часть проекта, не линтуем.
     ".claude/**",
+    // Скомпилированный Emscripten runtime Draco (vendor asset, не наш JS).
+    "public/draco/*.js",
   ]),
 ]);
 
