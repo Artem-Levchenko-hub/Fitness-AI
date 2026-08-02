@@ -9,6 +9,7 @@ import {
   getBillingPlan,
   isBillingPlanCode,
 } from "@/lib/billing/plans";
+import { getBillingReadiness } from "@/lib/billing/readiness";
 import {
   applyFetchedYooPayment,
   reconcileYooPayment,
@@ -54,6 +55,21 @@ function renewalKey(
 export async function POST(request: Request) {
   if (!authorize(request)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const readiness = getBillingReadiness();
+  if (!readiness.subscriptionsEnabled) {
+    return Response.json(
+      {
+        error: "subscriptions_not_ready",
+        mode: readiness.mode,
+        missing: readiness.subscriptionMissing,
+      },
+      {
+        status: 503,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
   }
 
   const now = new Date();

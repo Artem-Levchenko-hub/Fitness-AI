@@ -21,7 +21,7 @@
   старой схемы.
 - **Charts:** Recharts
 - **PWA:** Serwist
-- **Deploy:** pm2 + nginx reverse proxy + certbot — на `app.lead-generator.ru` (170.168.72.200)
+- **Deploy:** pm2 + nginx reverse proxy + certbot — на `fitnesss.online` (170.168.72.200)
 - **Tests:** Vitest (unit/domain/repos) + Playwright (E2E + visual regression)
 
 ## Commands
@@ -63,7 +63,7 @@
 ## Critical concerns
 
 1. **Self-hosted, не Vercel/Supabase.** Все managed-зависимости заменены: Auth.js вместо Supabase Auth, локальный Postgres вместо Supabase managed, pm2+nginx вместо Vercel, локальный Redis (опционально) вместо Upstash, node-cron / systemd timer вместо Vercel Cron.
-2. **Innertalk Messenger живёт на том же сервере на 80/443.** Не трогать его nginx config — наш subdomain `app.lead-generator.ru` добавляется отдельным server block. Наша БД — отдельная, не share с Innertalk.
+2. **Innertalk Messenger живёт на том же сервере на 80/443.** Не трогать его nginx config — наш домен `fitnesss.online` добавляется отдельным server block. Наша БД — отдельная, не share с Innertalk.
 3. **No RLS** (нет Supabase). Access control реализуем через Data Access Layer: все repo-функции принимают `userId` и фильтруют запросы. Никогда не достаём данные без явного userId. См. R-7.
 4. **DeepSeek timeout & circuit breaker** (R-32, R-33). 30s timeout через AbortSignal, после 3 fails подряд — fallback "анализ временно недоступен". Не блокирует тренировки.
 5. **ЮKassa webhook не является источником истины.** Принимать из тела только
@@ -118,4 +118,4 @@
 - Класть hex-код в `className` (`text-[#abc]`) — использовать tokens из `@theme`.
 - Push to main без локального `pnpm build`.
 - Делать `sudo` команды на сервере без явной директивы пользователя.
-- Трогать nginx config Innertalk на 80/443 — мы добавляем server block для `app.lead-generator.ru` отдельным файлом.
+- Трогать nginx config Innertalk на 80/443 — мы добавляем server block для `fitnesss.online` отдельным файлом.

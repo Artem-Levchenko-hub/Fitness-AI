@@ -6,7 +6,7 @@ import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
   title: "Войти",
-  description: "Вход в Fitness SaaS по ссылке на email.",
+  description: "Вход в Fitness AI по коду из письма.",
 };
 
 type Props = {
@@ -21,7 +21,7 @@ export default async function LoginPage({ searchParams }: Props) {
       <SessionAutoRestore />
       <div className="space-y-2 text-center">
         <p className="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">
-          Fitness SaaS
+          Fitness AI
         </p>
         <h1 className="font-serif text-3xl font-normal tracking-tight md:text-4xl">
           С возвращением

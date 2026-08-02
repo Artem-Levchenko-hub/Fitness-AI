@@ -58,7 +58,7 @@ export default async function SharedAnalysisPage({ params }: Props) {
 
       <section className="border-border mt-8 rounded-2xl border p-6 text-center">
         <p className="text-muted-foreground text-sm">
-          Свой AI-разбор силовых тренировок — в Fitness SaaS.
+          Свой AI-разбор силовых тренировок — в Fitness AI.
         </p>
         <Button asChild variant="outline" className="mt-3 min-h-14">
           <Link href="/">Узнать больше</Link>

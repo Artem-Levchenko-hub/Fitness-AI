@@ -3,7 +3,7 @@
 const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('node:path');
 
-const APP_ORIGIN = 'https://app.lead-generator.ru';
+const APP_ORIGIN = 'https://fitnesss.online';
 const APP_URL = APP_ORIGIN + '/dashboard';
 
 let mainWindow = null;

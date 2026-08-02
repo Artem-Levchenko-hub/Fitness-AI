@@ -38,13 +38,20 @@ export default async function BillingPage({ searchParams }: Props) {
   ]);
 
   const coachPrice = aiCoachPriceKopecks();
+  const yearlyReferencePrice =
+    BILLING_PLANS.pro_monthly.priceKopecks * 12;
+  const yearlySavings =
+    yearlyReferencePrice - BILLING_PLANS.pro_yearly.priceKopecks;
+  const yearlySavingsPercent = Math.round(
+    (yearlySavings / yearlyReferencePrice) * 100,
+  );
   const plans = Object.values(BILLING_PLANS).map((plan) => ({
     code: plan.code,
     title: plan.title,
     priceKopecks: plan.priceKopecks,
     intervalLabel:
       plan.code === "pro_yearly"
-        ? "за год · экономия 1 580 ₽"
+        ? `за год · экономия ${formatRub(yearlySavings)} (${yearlySavingsPercent}%)`
         : "списание раз в месяц",
     benefits: plan.benefits.map((benefit) => benefit.label),
   }));

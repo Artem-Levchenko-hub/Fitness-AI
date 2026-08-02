@@ -10,6 +10,8 @@
   <p>
     <a href="docs/user-guide.md"><strong>Руководство пользователя</strong></a>
     ·
+    <a href="https://fitnesss.online"><strong>Открыть Fitness AI</strong></a>
+    ·
     <a href="#скачать-приложение"><strong>Скачать приложение</strong></a>
     ·
     <a href="#быстрый-старт">Запустить локально</a>
@@ -24,8 +26,8 @@
     <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-2f6b4f?logo=typescript&logoColor=white">
     <img alt="PostgreSQL 15" src="https://img.shields.io/badge/PostgreSQL-15-416b57?logo=postgresql&logoColor=white">
     <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-d09543">
-    <img alt="Tests" src="https://img.shields.io/badge/tests-1034_passed-3a6b4a?logo=vitest&logoColor=white">
-    <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest"><img alt="Скачать Vibe-trainer 1.0.0" src="https://img.shields.io/badge/скачать-v1.0.0-3a6b4a?logo=github&logoColor=white"></a>
+    <img alt="Tests" src="https://img.shields.io/badge/tests-1037_passed-3a6b4a?logo=vitest&logoColor=white">
+    <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest"><img alt="Скачать Vibe-trainer 1.1.0" src="https://img.shields.io/badge/скачать-v1.1.0-3a6b4a?logo=github&logoColor=white"></a>
   </p>
 </div>
 
@@ -124,14 +126,14 @@ flowchart LR
     <td width="50%" align="center" valign="top">
       <h3>🖥️ Vibe-trainer Desktop</h3>
       <p>Ноутбуки и компьютеры с Windows 10/11 · x64</p>
-      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.0.0/Vibe-trainer-Windows-x64-Setup-v1.0.0.exe">
+      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.1.0/Vibe-trainer-Windows-x64-Setup-v1.1.0.exe">
         <img alt="Скачать установщик для Windows" src="https://img.shields.io/badge/Скачать-.EXE-3a6b4a?style=for-the-badge&logo=windows11&logoColor=white">
       </a>
     </td>
     <td width="50%" align="center" valign="top">
       <h3>🤖 Vibe-trainer Mobile</h3>
       <p>Телефоны и планшеты с Android 6.0+</p>
-      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.0.0/Vibe-trainer-Android-v1.0.0.apk">
+      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.1.0/Vibe-trainer-Android-v1.1.0.apk">
         <img alt="Скачать APK для Android" src="https://img.shields.io/badge/Скачать-.APK-3a6b4a?style=for-the-badge&logo=android&logoColor=white">
       </a>
     </td>
@@ -162,7 +164,8 @@ flowchart LR
 На странице релиза также лежит файл `.aab`. Он предназначен только для
 публикации в Google Play — для обычной установки на телефон выбирайте `.apk`.
 
-Также Fitness AI можно установить как PWA: откройте приложение в Edge, Chrome
+Также Fitness AI можно установить как PWA: откройте
+[fitnesss.online](https://fitnesss.online) в Edge, Chrome
 или Android-браузере и выберите «Установить приложение».
 
 ## Подписка и баланс
@@ -171,8 +174,8 @@ flowchart LR
 
 | Вариант | Тестовая цена | Для чего |
 |---|---:|---|
-| Fitness AI Pro, месяц | **1 290 ₽** | Полный доступ без долгого обязательства |
-| Fitness AI Pro, год | **13 900 ₽** | Выгоднее примерно на 10% |
+| Fitness AI Pro, месяц | **990 ₽** | Полный доступ без долгого обязательства |
+| Fitness AI Pro, год | **9 990 ₽** | Экономия 1 890 ₽ (около 16%) |
 | Баланс | Пополнение на выбранную сумму | Оплата отдельных AI-операций |
 
 Поддерживаются сохранённый способ оплаты, автопродление, уведомления,

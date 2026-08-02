@@ -1,8 +1,8 @@
 {
   "name": "vibe-trainer-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Vibe-trainer — десктоп-приложение для силовых тренировок с AI-анализом",
-  "author": "lead-generator.ru",
+  "author": "fitnesss.online",
   "license": "UNLICENSED",
   "private": true,
   "main": "main.js",
@@ -21,7 +21,7 @@
   "build": {
     "appId": "ru.leadgenerator.vibetrainer",
     "productName": "Vibe-trainer",
-    "copyright": "© lead-generator.ru",
+    "copyright": "© fitnesss.online",
     "directories": { "output": "dist", "buildResources": "build" },
     "files": ["main.js", "preload.js", "renderer/**/*"],
     "win": {

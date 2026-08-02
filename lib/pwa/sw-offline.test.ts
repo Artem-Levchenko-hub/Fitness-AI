@@ -140,7 +140,7 @@ function loadSw(fetchImpl: FetchImpl) {
   const skipWaiting = vi.fn(() => Promise.resolve());
   const claim = vi.fn(() => Promise.resolve());
   const self = {
-    location: { origin: "https://app.lead-generator.ru" },
+    location: { origin: "https://fitnesss.online" },
     addEventListener: (type: string, fn: (e: unknown) => void) => {
       listeners[type] = fn;
     },
@@ -185,16 +185,16 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     // версионные кэши прошлого деплоя + текущие (имена держит сам sw.js)
     await caches.open("static-v1");
     await caches.open("runtime-v1");
-    await caches.open("static-v4");
-    await caches.open("runtime-v4");
+    await caches.open("static-v5");
+    await caches.open("runtime-v5");
     const evt = makeEvent("/activate");
     listeners.activate(evt);
     await new Promise((r) => setTimeout(r, 0));
     const remaining = await caches.keys();
     expect(remaining).not.toContain("static-v1");
     expect(remaining).not.toContain("runtime-v1");
-    expect(remaining).toContain("static-v4");
-    expect(remaining).toContain("runtime-v4");
+    expect(remaining).toContain("static-v5");
+    expect(remaining).toContain("runtime-v5");
     expect(claim).toHaveBeenCalled();
   });
 
@@ -209,7 +209,7 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     await new Promise((r) => setTimeout(r, 0));
     const navEvt = makeEvent({
       method: "GET",
-      url: "https://app.lead-generator.ru/dashboard",
+      url: "https://fitnesss.online/dashboard",
       mode: "navigate",
     });
     env.listeners.fetch(navEvt);
@@ -226,7 +226,7 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     );
     const navReq = {
       method: "GET",
-      url: "https://app.lead-generator.ru/dashboard",
+      url: "https://fitnesss.online/dashboard",
       mode: "navigate",
     };
     const navEvt = makeEvent(navReq);
@@ -257,7 +257,7 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     await new Promise((r) => setTimeout(r, 0));
     const statsReq = {
       method: "GET",
-      url: "https://app.lead-generator.ru/stats",
+      url: "https://fitnesss.online/stats",
       mode: "navigate",
     };
     // 1) онлайн-заход прогревает кэш
@@ -287,7 +287,7 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     );
     const navReq = {
       method: "GET",
-      url: "https://app.lead-generator.ru/dashboard",
+      url: "https://fitnesss.online/dashboard",
       mode: "navigate",
     };
     const navEvt = makeEvent(navReq);
@@ -304,7 +304,7 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     const env = loadSw(offlineFetch);
     const apiEvt = makeEvent({
       method: "GET",
-      url: "https://app.lead-generator.ru/api/ai/trainer/insights",
+      url: "https://fitnesss.online/api/ai/trainer/insights",
       mode: "cors",
     });
     env.listeners.fetch(apiEvt);
