@@ -2,11 +2,10 @@ name: Build Windows Desktop (Vibe-trainer)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [chore/android-twa-build]
-    paths:
-      - 'desktop/**'
-      - '.github/workflows/windows-desktop.yml'
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -20,22 +19,59 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.12.0'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Test auto-update lifecycle
+        run: npm test
 
       - name: Generate branded assets (icon + installer images)
         run: npm run assets
 
-      - name: Build signed-less NSIS installer
+      - name: Build unsigned NSIS installer and update metadata
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --win nsis
+        run: npx electron-builder --win nsis --publish never
 
-      - name: Upload installer
+      - name: Verify Windows release artifacts
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $installer = "dist/Vibe-trainer-Windows-x64-Setup-v$version.exe"
+          $blockmap = "$installer.blockmap"
+          $metadata = "dist/latest.yml"
+          foreach ($file in @($installer, $blockmap, $metadata)) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Missing release artifact: $file"
+            }
+            if ((Get-Item -LiteralPath $file).Length -eq 0) {
+              throw "Empty release artifact: $file"
+            }
+          }
+          $latest = Get-Content -Raw -LiteralPath $metadata
+          if ($latest -notmatch "(?m)^version: $([regex]::Escape($version))$") {
+            throw "latest.yml version does not match $version"
+          }
+          if ($latest -notmatch [regex]::Escape("Vibe-trainer-Windows-x64-Setup-v$version.exe")) {
+            throw "latest.yml does not reference the installer"
+          }
+
+          $packagedFiles = npx --no-install asar list dist/win-unpacked/resources/app.asar |
+            ForEach-Object { $_ -replace '\\', '/' }
+          foreach ($requiredFile in @("/update-verifier.js", "/update-public-key.pem")) {
+            if ($packagedFiles -notcontains $requiredFile) {
+              throw "Missing packaged update verification file: $requiredFile"
+            }
+          }
+
+      - name: Upload installer and auto-update metadata
         uses: actions/upload-artifact@v4
         with:
           name: vibe-trainer-windows
-          path: desktop/dist/*.exe
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.exe.blockmap
+            desktop/dist/latest.yml
           if-no-files-found: error

@@ -1,13 +1,18 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Electron main process is CommonJS */
 'use strict';
-const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
+
+const { createAutoUpdateController } = require('./auto-updater');
+const { createUpdateVerifier } = require('./update-verifier');
 
 const APP_ORIGIN = 'https://fitnesss.online';
 const APP_URL = APP_ORIGIN + '/dashboard';
 
 let mainWindow = null;
 let splash = null;
+let updateController = null;
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -58,6 +63,15 @@ function createWindows() {
     },
   });
 
+  updateController = createAutoUpdateController({
+    app,
+    autoUpdater,
+    dialog,
+    getWindow: () => mainWindow,
+    verifyUpdate: createUpdateVerifier({
+      publicKeyPath: path.join(__dirname, 'update-public-key.pem'),
+    }),
+  });
   buildMenu();
 
   mainWindow.loadURL(APP_URL);
@@ -84,6 +98,7 @@ function createWindows() {
     if (isExternal(url)) { e.preventDefault(); shell.openExternal(url); }
   });
 
+  updateController.start();
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -101,6 +116,7 @@ function buildMenu() {
       submenu: [
         { label: 'Домой', accelerator: 'Alt+Home', click: () => mainWindow && mainWindow.loadURL(APP_URL) },
         { label: 'Обновить', role: 'reload' },
+        { label: 'Проверить обновления', click: () => updateController && void updateController.checkNow({ manual: true }) },
         { type: 'separator' },
         { label: 'Открыть в браузере', click: () => shell.openExternal(APP_URL) },
         { type: 'separator' },
@@ -132,3 +148,4 @@ function buildMenu() {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindows(); });
+app.on('before-quit', () => { if (updateController) updateController.dispose(); });

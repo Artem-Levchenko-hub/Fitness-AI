@@ -4,6 +4,7 @@ import { Download, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { AppUpdateBanner } from "@/components/app/AppUpdateBanner";
 import { Button } from "@/components/ui/button";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -18,6 +19,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [showBanner, setShowBanner] = useState(false);
+  const [appUpdateVisible, setAppUpdateVisible] = useState(false);
   const deferredRef = useRef<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
@@ -66,8 +68,9 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
+      <AppUpdateBanner onAvailabilityChange={setAppUpdateVisible} />
       <AnimatePresence>
-        {showBanner && installPrompt ? (
+        {showBanner && installPrompt && !appUpdateVisible ? (
           <motion.div
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
