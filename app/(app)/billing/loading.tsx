@@ -4,25 +4,27 @@ import { Skeleton } from "@/components/ui/skeleton";
  *  на /billing, пока серверный компонент тянет 2 источника в Promise.all
  *  (getOrCreateBalance + listTransactions 12).
  *  Структура повторяет реальную страницу: заголовок «Кошелёк / Баланс»
- *  + карточка «Доступно» (иконка + сумма) + секция «Пополнить» (форма)
+ *  + компактная строка «Доступно» (иконка + сумма) + секция «Пополнить» (форма)
  *  + список «История операций».
  *  Next 16: файл loading.tsx авто-оборачивает сегмент в <Suspense>. */
 export default function BillingLoading() {
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <div aria-hidden="true">
-        <header className="mb-6">
+        <header className="mb-4">
           <Skeleton className="h-3 w-20" />
-          <Skeleton className="mt-2 h-9 w-32 md:h-10" />
+          <Skeleton className="mt-2 h-8 w-28 md:h-9" />
         </header>
 
-        <section className="bg-card border-border mb-6 rounded-2xl border p-6">
-          <div className="flex items-start gap-4">
-            <Skeleton className="size-11 shrink-0 rounded-full" />
-            <div className="flex-1">
-              <Skeleton className="h-2.5 w-20" />
-              <Skeleton className="mt-1.5 h-9 w-40" />
-              <Skeleton className="mt-2 h-3 w-56" />
+        <section className="bg-muted/25 border-border/60 mb-6 rounded-xl border px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-9 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-7 w-16" />
+              </div>
+              <Skeleton className="mt-0.5 h-4 w-52 sm:mt-0" />
             </div>
           </div>
         </section>
