@@ -15,6 +15,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const externalBaseUrl = process.env.E2E_BASE_URL;
 const baseURL = externalBaseUrl ?? "http://127.0.0.1:3000";
+const localProductionResolve = process.env.E2E_LOCAL_PRODUCTION_RESOLVE === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -31,6 +32,15 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    // На production VPS публичный адрес может не поддерживать NAT loopback.
+    // Оставляем URL/certificate/Host каноническими, но в явно включённом smoke
+    // направляем Chromium напрямую в локальный nginx. Внешние CI и dev-запуски
+    // этот override не получают.
+    launchOptions: localProductionResolve
+      ? {
+          args: ["--host-resolver-rules=MAP fitnesss.online 127.0.0.1"],
+        }
+      : undefined,
   },
   webServer: externalBaseUrl
     ? undefined
