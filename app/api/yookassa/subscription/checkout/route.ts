@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
+import { getResumableYookassaConfirmationUrl } from "@/lib/billing/payment-resume";
 import {
   advanceUtcCalendarPeriod,
   getBillingPlan,
@@ -16,6 +17,7 @@ import { env } from "@/lib/env";
 import {
   attachProviderPayment,
   countRecentPaymentIntents,
+  getInitialSubscriptionPaymentInFlightForUser,
   getOrCreatePaymentRecord,
   markPaymentFailed,
   PaymentIdempotencyConflictError,
@@ -131,6 +133,25 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof SubscriptionPaymentInFlightError) {
+      const inFlight =
+        await getInitialSubscriptionPaymentInFlightForUser(user.id);
+      const confirmationUrl = inFlight
+        ? getResumableYookassaConfirmationUrl(inFlight, {
+            amountKopecks: plan.priceKopecks,
+            planCode: parsed.data.planCode,
+            paymentMode,
+          })
+        : null;
+
+      if (inFlight && confirmationUrl) {
+        return Response.json({
+          confirmationUrl,
+          internalId: inFlight.id,
+          status: inFlight.status,
+          resumed: true,
+        });
+      }
+
       return Response.json(
         {
           error:
