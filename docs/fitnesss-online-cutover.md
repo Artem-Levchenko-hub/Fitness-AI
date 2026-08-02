@@ -61,4 +61,4 @@ SUBSCRIPTION_ENABLED=true
 - Web: точный проверенный commit из `master`.
 - Windows: `Vibe-trainer-Windows-x64-Setup-v1.1.0.exe`.
 - Android: `Vibe-trainer-Android-v1.1.0.apk` и AAB для Google Play.
-- Каталожные цены: 990 ₽/месяц и 9 990 ₽/год.
+- Каталожные цены: 290 ₽/месяц и 2 900 ₽/год.

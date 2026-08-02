@@ -14,13 +14,13 @@ describe("billing plans", () => {
   it("publishes the exact monthly and yearly prices in integer kopecks", () => {
     expect(BILLING_PLANS.pro_monthly).toMatchObject({
       code: "pro_monthly",
-      priceKopecks: 99_000,
+      priceKopecks: 29_000,
       currency: "RUB",
       interval: { unit: "month", count: 1 },
     });
     expect(BILLING_PLANS.pro_yearly).toMatchObject({
       code: "pro_yearly",
-      priceKopecks: 999_000,
+      priceKopecks: 290_000,
       currency: "RUB",
       interval: { unit: "year", count: 1 },
     });
