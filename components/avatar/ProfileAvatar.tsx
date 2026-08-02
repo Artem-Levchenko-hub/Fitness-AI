@@ -133,7 +133,7 @@ export function ProfileAvatar({
 
       {/* Атрибуция CC BY-SA 4.0 — обязательна при использовании Z-Anatomy. */}
       {MUSCLE_MODEL_URL ? (
-        <p className="text-muted-foreground/60 text-center text-[10px]">
+        <p className="text-muted-foreground text-center text-[10px]">
           3D-модель на основе{" "}
           <a
             href="https://sketchfab.com/3d-models/myology-31b40fd809b14665b93773936d67c52c"

@@ -21,7 +21,7 @@ export default async function AppLayout({
     <div className="bg-background flex min-h-dvh flex-col">
       <SessionRefreshSync />
       <OfflineBanner />
-      <div className="flex-1 pb-20">{children}</div>
+      <div className="flex-1 pb-36">{children}</div>
       <GlobalResumeBar initial={initialResumes} />
       <BottomTabBar />
     </div>

@@ -7,6 +7,13 @@ import { buildCoachContext } from "@/lib/ai/context-builder";
 import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
 import { COACH_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
+  capacityDuplicateResponse,
+  capacityErrorResponse,
+  claimAiCapacity,
+  requireOwnedWorkout,
+  settleAiCapacity,
+} from "@/lib/ai/guard";
+import {
   formatRetrievedChunks,
   retrieveRelevant,
 } from "@/lib/ai/rag/retrieve";
@@ -26,7 +33,7 @@ export const maxDuration = 60;
 
 const messageSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().min(1).max(20_000),
+  content: z.string().trim().min(1).max(8_000),
 });
 
 const bodySchema = z.object({
@@ -34,7 +41,7 @@ const bodySchema = z.object({
   messages: z
     .array(messageSchema)
     .min(1)
-    .max(40)
+    .max(32)
     .refine(
       (messages) => messages.some((message) => message.role === "user"),
       "At least one user message is required",
@@ -42,7 +49,7 @@ const bodySchema = z.object({
     .refine(
       (messages) =>
         messages.reduce((total, message) => total + message.content.length, 0) <=
-        80_000,
+        24_000,
       "Conversation is too large",
     ),
 });
@@ -65,6 +72,10 @@ export async function POST(request: Request) {
   }
   const parsed = parsedResult.data;
 
+  if (!(await requireOwnedWorkout(user.id, parsed.workoutId))) {
+    return Response.json({ error: "workout_not_found" }, { status: 404 });
+  }
+
   const operationId = createHash("sha256")
     .update(
       JSON.stringify({
@@ -74,6 +85,24 @@ export async function POST(request: Request) {
       }),
     )
     .digest("hex");
+
+  const capacity = await claimAiCapacity({
+    userId: user.id,
+    operation: "coach_reply",
+    requestKey: `coach:${operationId}`,
+    scopeKey: parsed.workoutId,
+    allowWallet: true,
+  });
+  if (capacity.kind !== "allowed" && capacity.kind !== "duplicate") {
+    return capacityErrorResponse(capacity);
+  }
+  // При включённом биллинге durable billing-operation безопасно возвращает
+  // cached/in-progress и не допускает двойное списание/генерацию. Без него
+  // дубликат нельзя пропускать к LLM.
+  if (capacity.kind === "duplicate" && !isBillingEnabled()) {
+    return capacityDuplicateResponse(capacity);
+  }
+  const usageId = capacity.kind === "allowed" ? capacity.usageId : null;
 
   let claim: Extract<ClaimAiBillingOperation, { kind: "claimed" }> | undefined;
   if (isBillingEnabled()) {
@@ -116,6 +145,7 @@ export async function POST(request: Request) {
   }
 
   const failOperation = async (code: string) => {
+    if (usageId) await settleAiCapacity(usageId, false);
     if (!claim) return;
     try {
       await failAndRefundAiBillingOperation(operationId, code);
@@ -162,6 +192,7 @@ export async function POST(request: Request) {
       abortSignal: AbortSignal.timeout(45_000),
       temperature: 0.3,
       onFinish: async ({ text }) => {
+        if (usageId) await settleAiCapacity(usageId, true);
         if (!claim) return;
         await completeAiBillingOperation(operationId, text);
       },

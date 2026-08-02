@@ -3,6 +3,12 @@ import type { NextAuthConfig } from "next-auth";
 const NINETY_DAYS_SECONDS = 60 * 60 * 24 * 90;
 const ONE_DAY_SECONDS = 60 * 60 * 24;
 
+/** HttpOnly refresh-cookie живёт заметно меньше основной сессии и всегда
+ * ротируется на восстановлении. Константы лежат в edge-safe модуле, потому что
+ * proxy.ts должен видеть только имя cookie, не импортируя DB-код. */
+export const REFRESH_COOKIE_NAME = "fitness-refresh-token";
+export const REFRESH_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+
 /** Edge-safe Auth.js конфиг — без БД-адаптера и без Resend SDK.
  *  Используется в `proxy.ts` (Edge runtime) и расширяется в `lib/auth/index.ts`
  *  для Node runtime (там добавляются adapter и providers).

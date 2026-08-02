@@ -34,6 +34,8 @@ function createAutoUpdateController({
   let manualCheck = false;
   let promptingForRestart = false;
   let deferredVersion = null;
+  let approvedVersion = null;
+  let updateGeneration = 0;
 
   const listeners = [];
   const listen = (event, handler) => {
@@ -63,6 +65,10 @@ function createAutoUpdateController({
   };
 
   const onError = (error) => {
+    updateGeneration += 1;
+    approvedVersion = null;
+    deferredVersion = null;
+    autoUpdater.autoInstallOnAppQuit = false;
     logger.warn("Desktop auto-update failed", error);
     if (manualCheck) void showUpdateError();
     manualCheck = false;
@@ -75,6 +81,11 @@ function createAutoUpdateController({
     autoUpdater.autoInstallOnAppQuit = false;
 
     listen("update-available", (info) => {
+      // A later candidate must never inherit an earlier candidate's approval.
+      updateGeneration += 1;
+      approvedVersion = null;
+      deferredVersion = null;
+      autoUpdater.autoInstallOnAppQuit = false;
       manualCheck = false;
       logger.info(`Downloading Vibe-trainer ${info.version}`);
     });
@@ -85,14 +96,25 @@ function createAutoUpdateController({
     });
 
     listen("update-downloaded", async (info) => {
-      if (promptingForRestart || deferredVersion === info.version) return;
+      // Repeated notification for the exact deferred, verified binary is safe.
+      if (
+        !promptingForRestart &&
+        deferredVersion === info.version &&
+        approvedVersion === info.version
+      ) return;
+
+      // Fail closed before any asynchronous verification or user interaction.
+      const generation = ++updateGeneration;
+      approvedVersion = null;
+      deferredVersion = null;
+      autoUpdater.autoInstallOnAppQuit = false;
+      if (promptingForRestart) return;
       promptingForRestart = true;
       try {
         await verifyUpdate({
           downloadedFile: info.downloadedFile,
           version: info.version,
         });
-        autoUpdater.autoInstallOnAppQuit = true;
         const result = await showMessage(dialog, getWindow, {
           type: "info",
           title: "Обновление готово",
@@ -104,13 +126,20 @@ function createAutoUpdateController({
           cancelId: 1,
           noLink: true,
         });
+        // A second update event may have arrived while the dialog was open.
+        // Never apply a candidate that was not the one just verified.
+        if (generation !== updateGeneration) return;
         if (result.response === 0) {
           autoUpdater.quitAndInstall(false, true);
         } else {
           deferredVersion = info.version;
+          approvedVersion = info.version;
+          autoUpdater.autoInstallOnAppQuit = true;
         }
       } catch (error) {
         logger.warn("Downloaded update signature is invalid", error);
+        approvedVersion = null;
+        deferredVersion = null;
         autoUpdater.autoInstallOnAppQuit = false;
         await showMessage(dialog, getWindow, {
           type: "error",

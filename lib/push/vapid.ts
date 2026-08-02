@@ -7,6 +7,10 @@ import {
   type PushKindLiteral,
 } from "@/lib/repos/push.repo";
 import type { PushSubscription } from "@/db/schema";
+import {
+  isSafePushEndpoint,
+  PUSH_SUBSCRIPTIONS_PER_USER_LIMIT,
+} from "@/lib/push/endpoint-policy";
 
 let configured = false;
 function ensureConfigured(): boolean {
@@ -60,8 +64,18 @@ export async function sendPushToUser(
   let failed = 0;
   let firstError: string | undefined;
 
+  const boundedSubscriptions = subscriptions.slice(
+    0,
+    PUSH_SUBSCRIPTIONS_PER_USER_LIMIT,
+  );
   await Promise.all(
-    subscriptions.map(async (sub) => {
+    boundedSubscriptions.map(async (sub) => {
+      if (!isSafePushEndpoint(sub.endpoint)) {
+        failed += 1;
+        firstError ??= "Unsupported stored push endpoint";
+        await disableSubscription(sub.endpoint).catch(() => {});
+        return;
+      }
       try {
         await webpush.sendNotification(
           {

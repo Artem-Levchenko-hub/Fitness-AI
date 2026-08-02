@@ -32,6 +32,7 @@
     },
     "files": [
       "main.js",
+      "security-policy.js",
       "auto-updater.js",
       "update-verifier.js",
       "update-public-key.pem",

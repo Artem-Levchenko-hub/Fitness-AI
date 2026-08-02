@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { buildTrainerContext } from "@/lib/ai/context-builder";
+import {
+  claimAiCapacity,
+  requireOwnedCircuitWorkout,
+  requireOwnedWorkout,
+  settleAiCapacity,
+} from "@/lib/ai/guard";
 import { adaptCircuitTemplateFromWorkout } from "@/lib/repos/circuit-templates.repo";
 import {
   generateTrainerResponse,
@@ -63,17 +69,17 @@ export async function POST(req: Request) {
         ),
       )
       .orderBy(asc(schema.aiJobs.scheduledAt))
+      .for("update", { skipLocked: true })
       .limit(BATCH_SIZE);
 
     if (pending.length === 0) return [];
 
     const ids = pending.map((j) => j.id);
-    await tx
+    return tx
       .update(schema.aiJobs)
       .set({ status: "running", startedAt: new Date() })
-      .where(inArray(schema.aiJobs.id, ids));
-
-    return pending;
+      .where(inArray(schema.aiJobs.id, ids))
+      .returning();
   });
 
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
@@ -131,6 +137,14 @@ async function processJob(
     return processWeeklyReview(job);
   }
 
+  if (
+    (job.workoutId && !(await requireOwnedWorkout(job.userId, job.workoutId))) ||
+    (job.circuitWorkoutId &&
+      !(await requireOwnedCircuitWorkout(job.userId, job.circuitWorkoutId)))
+  ) {
+    throw new Error("AI job target no longer belongs to its user");
+  }
+
   // Идемпотентность: живой стрим (POST /api/ai/trainer/stream) генерит разбор
   // inline и сохраняет ai_analyses раньше, чем отложенный safety-net job
   // успевает стартовать. Если разбор по этой тренировке уже есть — НЕ
@@ -141,10 +155,32 @@ async function processJob(
     return existing;
   }
 
-  const context = await buildTrainerContext(job.userId, job.workoutId, {
-    kind: job.kind,
-    circuitWorkoutId: job.circuitWorkoutId ?? null,
+  const capacity = await claimAiCapacity({
+    userId: job.userId,
+    operation:
+      job.kind === "daily_digest" ? "daily_digest" : "post_workout_analysis",
+    requestKey: `ai-job:${job.id}:${job.attempts + 1}`,
   });
+  if (capacity.kind !== "allowed") {
+    throw new Error(
+      capacity.kind === "subscription_required"
+        ? "Active Pro subscription is required for AI analysis"
+        : capacity.kind === "quota_exceeded"
+          ? capacity.message
+          : "AI capacity temporarily unavailable",
+    );
+  }
+
+  let context: Awaited<ReturnType<typeof buildTrainerContext>>;
+  try {
+    context = await buildTrainerContext(job.userId, job.workoutId, {
+      kind: job.kind,
+      circuitWorkoutId: job.circuitWorkoutId ?? null,
+    });
+  } catch (error) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw error;
+  }
 
   const systemPrompt =
     job.kind === "daily_digest"
@@ -169,34 +205,56 @@ ${canonContext}
 
 ${context.prompt}`;
 
-  const result = await withCircuitBreaker(
-    "trainer-llm",
-    () =>
-      generateTrainerResponse({
-        systemInstruction: systemPrompt,
-        userPrompt: userPromptWithCanon,
-        signal: AbortSignal.timeout(45_000),
-      }),
-    { threshold: 3, cooldownMs: 60_000 },
-  );
+  let result: Awaited<ReturnType<typeof generateTrainerResponse>>;
+  try {
+    result = await withCircuitBreaker(
+      "trainer-llm",
+      () =>
+        generateTrainerResponse({
+          systemInstruction: systemPrompt,
+          userPrompt: userPromptWithCanon,
+          signal: AbortSignal.timeout(45_000),
+        }),
+      { threshold: 3, cooldownMs: 60_000 },
+    );
+  } catch (error) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw error;
+  }
 
-  const md = renderTrainerMarkdown(result.json);
+  let md: string;
+  try {
+    md = renderTrainerMarkdown(result.json);
+  } catch (error) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw error;
+  }
 
-  const [analysis] = await db
-    .insert(schema.aiAnalyses)
-    .values({
-      userId: job.userId,
-      workoutId: job.workoutId,
-      circuitWorkoutId: job.circuitWorkoutId ?? null,
-      content: md,
-      resultJson: result.json as object,
-      modelVersion: result.modelVersion ?? TRAINER_MODEL,
-      promptTokens: result.promptTokens,
-      completionTokens: result.completionTokens,
-    })
-    .returning({ id: schema.aiAnalyses.id });
+  let analysis: { id: string } | undefined;
+  try {
+    [analysis] = await db
+      .insert(schema.aiAnalyses)
+      .values({
+        userId: job.userId,
+        workoutId: job.workoutId,
+        circuitWorkoutId: job.circuitWorkoutId ?? null,
+        content: md,
+        resultJson: result.json as object,
+        modelVersion: result.modelVersion ?? TRAINER_MODEL,
+        promptTokens: result.promptTokens,
+        completionTokens: result.completionTokens,
+      })
+      .returning({ id: schema.aiAnalyses.id });
+  } catch (error) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw error;
+  }
 
-  if (!analysis) throw new Error("Не удалось сохранить ai_analyses");
+  if (!analysis) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw new Error("Не удалось сохранить ai_analyses");
+  }
+  await settleAiCapacity(capacity.usageId, true);
   await maybeAdaptCircuitTemplate(job);
   return { analysisId: analysis.id, result: result.json };
 }
@@ -260,24 +318,61 @@ async function processWeeklyReview(
   const profile = await getUserProfile(job.userId);
   const tz = profile?.timezone ?? "Europe/Moscow";
 
-  const { result } = await generateWeeklyReview(job.userId, tz, new Date());
-  const md = renderTrainerMarkdown(result.json);
+  const capacity = await claimAiCapacity({
+    userId: job.userId,
+    operation: "weekly_review",
+    requestKey: `ai-job:${job.id}:${job.attempts + 1}`,
+  });
+  if (capacity.kind !== "allowed") {
+    throw new Error(
+      capacity.kind === "subscription_required"
+        ? "Active Pro subscription is required for AI analysis"
+        : capacity.kind === "quota_exceeded"
+          ? capacity.message
+          : "AI capacity temporarily unavailable",
+    );
+  }
 
-  const [analysis] = await db
-    .insert(schema.aiAnalyses)
-    .values({
-      userId: job.userId,
-      workoutId: null,
-      circuitWorkoutId: null,
-      content: md,
-      resultJson: result.json as object,
-      modelVersion: result.modelVersion ?? TRAINER_MODEL,
-      promptTokens: result.promptTokens,
-      completionTokens: result.completionTokens,
-    })
-    .returning({ id: schema.aiAnalyses.id });
+  let result: Awaited<ReturnType<typeof generateWeeklyReview>>["result"];
+  try {
+    ({ result } = await generateWeeklyReview(job.userId, tz, new Date()));
+  } catch (error) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw error;
+  }
+  let md: string;
+  try {
+    md = renderTrainerMarkdown(result.json);
+  } catch (error) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw error;
+  }
 
-  if (!analysis) throw new Error("Не удалось сохранить weekly review");
+  let analysis: { id: string } | undefined;
+  try {
+    [analysis] = await db
+      .insert(schema.aiAnalyses)
+      .values({
+        userId: job.userId,
+        workoutId: null,
+        circuitWorkoutId: null,
+        content: md,
+        resultJson: result.json as object,
+        modelVersion: result.modelVersion ?? TRAINER_MODEL,
+        promptTokens: result.promptTokens,
+        completionTokens: result.completionTokens,
+      })
+      .returning({ id: schema.aiAnalyses.id });
+  } catch (error) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw error;
+  }
+
+  if (!analysis) {
+    await settleAiCapacity(capacity.usageId, false);
+    throw new Error("Не удалось сохранить weekly review");
+  }
+  await settleAiCapacity(capacity.usageId, true);
   return { analysisId: analysis.id, result: result.json };
 }
 

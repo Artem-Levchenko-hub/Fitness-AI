@@ -91,7 +91,7 @@ test("проверенный установщик запускается пос�
 
   assert.equal(fixture.messages.at(-1).title, "Обновление готово");
   assert.deepEqual(fixture.autoUpdater.installs, [[false, true]]);
-  assert.equal(fixture.autoUpdater.autoInstallOnAppQuit, true);
+  assert.equal(fixture.autoUpdater.autoInstallOnAppQuit, false);
 });
 
 test("блокирует установщик с неверной Ed25519-подписью", async () => {
@@ -127,6 +127,47 @@ test("не повторяет предложение для отложенной
   assert.equal(fixture.messages.length, 1);
   assert.deepEqual(fixture.autoUpdater.installs, []);
   assert.equal(fixture.autoUpdater.autoInstallOnAppQuit, true);
+});
+
+test("не переносит разрешение на новую версию, пока пользователь отвечает на старую", async () => {
+  let resolveDialog;
+  const dialog = {
+    showMessageBox: async (...args) => {
+      const options = args.at(-1);
+      if (options.title !== "Обновление готово") return { response: 1 };
+      return new Promise((resolve) => { resolveDialog = resolve; });
+    },
+  };
+  const fixture = createFixture({ dialog });
+
+  fixture.autoUpdater.emit("update-downloaded", {
+    version: "1.3.0",
+    downloadedFile: "Vibe-trainer-Windows-x64-Setup-v1.3.0.exe",
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  fixture.autoUpdater.emit("update-downloaded", {
+    version: "1.4.0",
+    downloadedFile: "Vibe-trainer-Windows-x64-Setup-v1.4.0.exe",
+  });
+  resolveDialog({ response: 1 });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(fixture.autoUpdater.installs, []);
+  assert.equal(fixture.autoUpdater.autoInstallOnAppQuit, false);
+});
+
+test("новая доступная версия отзывает отложенное разрешение", async () => {
+  const fixture = createFixture({ readyResponse: 1 });
+  fixture.autoUpdater.emit("update-downloaded", {
+    version: "1.3.0",
+    downloadedFile: "Vibe-trainer-Windows-x64-Setup-v1.3.0.exe",
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fixture.autoUpdater.autoInstallOnAppQuit, true);
+
+  fixture.autoUpdater.emit("update-available", { version: "1.4.0" });
+
+  assert.equal(fixture.autoUpdater.autoInstallOnAppQuit, false);
 });
 
 test("в dev-режиме не обращается к серверу обновлений", async () => {

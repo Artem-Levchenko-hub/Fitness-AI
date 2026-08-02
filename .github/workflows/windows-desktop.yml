@@ -3,6 +3,17 @@ name: Build Windows Desktop (Vibe-trainer)
 on:
   workflow_dispatch:
   workflow_call:
+    outputs:
+      publisher:
+        description: Verified Authenticode publisher shown to users
+        value: ${{ jobs.build.outputs.publisher }}
+    secrets:
+      WINDOWS_CERTIFICATE_BASE64:
+        required: true
+      WINDOWS_CERTIFICATE_PASSWORD:
+        required: true
+      WINDOWS_CERTIFICATE_SHA256:
+        required: true
 
 permissions:
   contents: read
@@ -10,14 +21,19 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      publisher: ${{ steps.verify-signature.outputs.publisher }}
+    # The environment must require owner approval before the Authenticode
+    # certificate is exposed to the runner.
+    environment: windows-signing
     defaults:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.4.0
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22.12.0'
 
@@ -30,13 +46,23 @@ jobs:
       - name: Generate branded assets (icon + installer images)
         run: npm run assets
 
-      - name: Build unsigned NSIS installer and update metadata
+      - name: Build Authenticode-signed NSIS installer and update metadata
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --win nsis --publish never
-
-      - name: Verify Windows release artifacts
+          CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CSC_LINK) -or
+              [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)) {
+            throw "Authenticode certificate secrets are required"
+          }
+          npx electron-builder --win nsis --publish never
+
+      - id: verify-signature
+        name: Verify Windows release artifacts
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_SHA256: ${{ secrets.WINDOWS_CERTIFICATE_SHA256 }}
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $installer = "dist/Vibe-trainer-Windows-x64-Setup-v$version.exe"
@@ -58,6 +84,32 @@ jobs:
             throw "latest.yml does not reference the installer"
           }
 
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Installer Authenticode signature is not valid: $($signature.StatusMessage)"
+          }
+          if (-not $signature.SignerCertificate) {
+            throw "Installer has no Authenticode signer certificate"
+          }
+          $expectedFingerprint = $env:WINDOWS_CERTIFICATE_SHA256.Replace(':', '').ToUpperInvariant()
+          if ($expectedFingerprint -notmatch '^[A-F0-9]{64}$') {
+            throw "WINDOWS_CERTIFICATE_SHA256 must contain a SHA-256 certificate fingerprint"
+          }
+          $actualFingerprint = $signature.SignerCertificate.GetCertHashString(
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256
+          ).ToUpperInvariant()
+          if ($actualFingerprint -ne $expectedFingerprint) {
+            throw "Installer was signed by an unexpected Authenticode certificate"
+          }
+          $publisher = $signature.SignerCertificate.GetNameInfo(
+            [System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,
+            $false
+          )
+          if ($publisher -notmatch '^[\p{L}\p{N} .,&()_-]{1,128}$') {
+            throw "Authenticode publisher contains unsupported characters"
+          }
+          "publisher=$publisher" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
           $packagedFiles = npx --no-install asar list dist/win-unpacked/resources/app.asar |
             ForEach-Object { $_ -replace '\\', '/' }
           foreach ($requiredFile in @("/update-verifier.js", "/update-public-key.pem")) {
@@ -66,8 +118,8 @@ jobs:
             }
           }
 
-      - name: Upload installer and auto-update metadata
-        uses: actions/upload-artifact@v4
+      - name: Upload signed installer and auto-update metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vibe-trainer-windows
           path: |

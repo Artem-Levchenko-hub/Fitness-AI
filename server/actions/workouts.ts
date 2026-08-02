@@ -161,6 +161,13 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
   // Pliability-тап «легко/норм/тяжело» (H11.3) — одно касание вместо набора.
   const feelingLine = feelingNoteLine(String(formData.get("feelingTag") ?? ""));
 
+  // Не продолжаем цепочку (notes/job) после zero-row finish: иначе чужой или
+  // уже завершённый UUID мог создать данные AI от имени текущего пользователя.
+  const beforeFinish = await getActiveWorkoutForUser(user.id, workoutId);
+  if (!beforeFinish || beforeFinish.status !== "active") {
+    throw new Error("Активная тренировка не найдена");
+  }
+
   await finishWorkout(user.id, workoutId);
 
   // Самочувствие атлета → одна workout_note. Тап и/или свободный текст

@@ -6,8 +6,8 @@ const path = require('node:path');
 
 const { createAutoUpdateController } = require('./auto-updater');
 const { createUpdateVerifier } = require('./update-verifier');
+const { APP_ORIGIN, secureWebContents } = require('./security-policy');
 
-const APP_ORIGIN = 'https://fitnesss.online';
 const APP_URL = APP_ORIGIN + '/dashboard';
 
 let mainWindow = null;
@@ -23,6 +23,11 @@ if (!gotLock) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+  });
+  // Remote content is treated as untrusted.  Apply one policy to every
+  // renderer, including future windows created by Electron internals.
+  app.on('web-contents-created', (_event, webContents) => {
+    secureWebContents(webContents, { shell });
   });
   app.whenReady().then(createWindows);
 }
@@ -59,6 +64,7 @@ function createWindows() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: false,
       spellcheck: true,
     },
   });
@@ -84,18 +90,6 @@ function createWindows() {
     if (!isMainFrame || code === -3) return;
     mainWindow.loadFile(path.join(__dirname, 'renderer', 'offline.html'));
     revealMain();
-  });
-
-  // Keep in-app navigation on our origin; send everything else to the OS browser.
-  const isExternal = (url) => {
-    try { return new URL(url).origin !== APP_ORIGIN; } catch { return true; }
-  };
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isExternal(url)) { shell.openExternal(url); return { action: 'deny' }; }
-    return { action: 'allow' };
-  });
-  mainWindow.webContents.on('will-navigate', (e, url) => {
-    if (isExternal(url)) { e.preventDefault(); shell.openExternal(url); }
   });
 
   updateController.start();

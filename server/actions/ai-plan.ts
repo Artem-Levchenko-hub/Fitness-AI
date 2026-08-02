@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/require-user";
 import { composeAiPlan, isAiConfigured } from "@/lib/ai/plan-composer";
+import { claimAiCapacity, settleAiCapacity } from "@/lib/ai/guard";
 import {
   planIntakeSchema,
   type PlanCatalogEntry,
@@ -67,12 +68,33 @@ export async function composeAiPlanAction(
     };
   }
 
+  const capacity = await claimAiCapacity({
+    userId: user.id,
+    operation: "one_shot",
+    requestKey: `plan:${crypto.randomUUID()}`,
+  });
+  if (capacity.kind !== "allowed") {
+    return {
+      status: "error",
+      message:
+        capacity.kind === "subscription_required"
+          ? "Для персонального AI-плана нужна активная подписка Pro."
+          : capacity.kind === "rate_limited"
+            ? "Слишком много AI-запросов. Подождите минуту."
+            : capacity.kind === "quota_exceeded"
+              ? capacity.message
+              : "Этот запрос уже обрабатывается.",
+    };
+  }
+
   let programId: string;
   try {
     const plan = await composeAiPlan({ intake: parsed.data, catalog });
     const created = await createAiProgramForUser(user.id, plan);
     programId = created.id;
+    await settleAiCapacity(capacity.usageId, true);
   } catch (err) {
+    await settleAiCapacity(capacity.usageId, false);
     return {
       status: "error",
       message:

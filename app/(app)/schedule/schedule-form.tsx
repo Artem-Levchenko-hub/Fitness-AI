@@ -64,24 +64,25 @@ export function ScheduleForm({ presetGroups }: ScheduleFormProps) {
           {WEEKDAYS.map((d) => (
             <label
               key={d.iso}
-              className="border-border bg-card text-card-foreground has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary flex min-h-14 cursor-pointer items-center justify-center rounded-xl border text-sm font-medium transition-colors select-none"
+              className="border-border bg-card text-card-foreground has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary has-[:focus-visible]:ring-ring flex min-h-14 cursor-pointer items-center justify-center rounded-xl border text-sm font-medium transition-colors select-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-offset-2"
             >
               <input
                 type="checkbox"
                 name="days"
                 value={d.iso}
+                aria-label={d.full}
                 className="sr-only"
               />
-              <span aria-label={d.full}>{d.short}</span>
+              <span aria-hidden="true">{d.short}</span>
             </label>
           ))}
         </div>
       </fieldset>
 
       <div className="space-y-2">
-        <Label>Во сколько напомнить</Label>
+        <Label id="schedule-hour-label" htmlFor="schedule-hour-trigger">Во сколько напомнить</Label>
         <Select name="hour" defaultValue="18">
-          <SelectTrigger className="h-11">
+          <SelectTrigger id="schedule-hour-trigger" aria-labelledby="schedule-hour-label" className="h-11">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -151,7 +152,7 @@ export function ScheduleForm({ presetGroups }: ScheduleFormProps) {
         </p>
       ) : null}
       {state.status === "success" ? (
-        <p className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
+        <p role="status" aria-live="polite" className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
           Расписание добавлено
         </p>
       ) : null}

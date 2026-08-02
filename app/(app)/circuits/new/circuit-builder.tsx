@@ -412,6 +412,7 @@ function KindToggle({
       <div className="bg-muted text-muted-foreground mt-1 grid h-9 grid-cols-2 rounded-md p-0.5 text-sm">
         <button
           type="button"
+          aria-pressed={value === "reps"}
           onClick={() => onChange("reps")}
           className={cn(
             "rounded transition-colors",
@@ -424,6 +425,7 @@ function KindToggle({
         </button>
         <button
           type="button"
+          aria-pressed={value === "duration"}
           onClick={() => onChange("duration")}
           className={cn(
             "rounded transition-colors",

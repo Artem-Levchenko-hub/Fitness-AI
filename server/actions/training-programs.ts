@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { isAiConfigured, reviewProgram } from "@/lib/ai/program-review";
+import { claimAiCapacity, settleAiCapacity } from "@/lib/ai/guard";
 import { requireUser } from "@/lib/auth/require-user";
 import type { ProgramReviewResult } from "@/lib/domain/programs/program-review";
 import { createProgramFromWorkouts } from "@/lib/repos/plan-from-history.repo";
@@ -50,12 +51,31 @@ export async function reviewProgramAction(
     };
   }
 
+  const capacity = await claimAiCapacity({
+    userId: user.id,
+    operation: "one_shot",
+    requestKey: `program-review:${programId}:${crypto.randomUUID()}`,
+  });
+  if (capacity.kind !== "allowed") {
+    return {
+      status: "error",
+      message:
+        capacity.kind === "subscription_required"
+          ? "Для оценки программы нужна активная подписка Pro."
+          : capacity.kind === "quota_exceeded"
+            ? capacity.message
+            : "Слишком много AI-запросов. Попробуйте позже.",
+    };
+  }
+
   try {
     const review = await reviewProgram(input);
     await saveProgramReview(user.id, programId, review);
+    await settleAiCapacity(capacity.usageId, true);
     revalidatePath(`/programs/${programId}`);
     return { status: "success", review };
   } catch (err) {
+    await settleAiCapacity(capacity.usageId, false);
     return {
       status: "error",
       message:

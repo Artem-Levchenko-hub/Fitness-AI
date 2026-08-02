@@ -44,4 +44,29 @@ describe("signInWithEmail", () => {
       message: "Не удалось отправить код. Попробуйте позже.",
     });
   });
+
+  it("не передаёт внешний callbackUrl в Auth.js", async () => {
+    const data = form();
+    data.set("callbackUrl", "https://attacker.example/steal");
+    mocks.signIn.mockResolvedValue(undefined);
+
+    await expect(signInWithEmail({ status: "idle" }, data)).resolves.toMatchObject({
+      status: "sent",
+      callbackUrl: "/dashboard",
+    });
+    expect(mocks.signIn).toHaveBeenCalledWith(
+      "resend",
+      expect.objectContaining({ redirectTo: "/dashboard" }),
+    );
+  });
+
+  it("отклоняет non-ASCII email до отправки OTP", async () => {
+    const data = form();
+    data.set("email", "юзер@example.test");
+
+    await expect(signInWithEmail({ status: "idle" }, data)).resolves.toMatchObject({
+      status: "error",
+    });
+    expect(mocks.signIn).not.toHaveBeenCalled();
+  });
 });

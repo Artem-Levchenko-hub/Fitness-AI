@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils/index";
-import { muscleLabelRu, type MuscleKey } from "@/lib/domain/avatar/heat";
+import type { MuscleKey } from "@/lib/domain/avatar/heat";
 
 /** Мини-силуэт мышц (перёд + спина) — инлайновый SVG, НЕ WebGL/three.js: не
  *  тянет тяжёлую сцену в бандл и надёжно проверяется в headless-прогоне
@@ -18,19 +18,11 @@ export function BodySilhouette({
   shapeFill,
   className,
   ariaLabel,
-  onMuscle,
 }: {
   shapeFill: ShapeFill;
   /** Размер/позиционирование силуэта (h-/w-/shrink-0). */
   className?: string;
   ariaLabel: string;
-  /**
-   * H17.0-B — когда задан, каждая фигура-группа кликабельна (вход в данные:
-   * тренер назвал мышцу → тап ведёт в её историю). Без него силуэт чисто
-   * визуальный (дашборд-витрина H9.2, карточка ожидания H16.4 — не тронуты).
-   * Каллбэк требует клиентского вызывающего (useRouter и т.п.).
-   */
-  onMuscle?: (key: MuscleKey) => void;
 }) {
   return (
     <svg
@@ -45,23 +37,6 @@ export function BodySilhouette({
       {MUSCLE_SHAPES.map(({ key, shapes }) =>
         shapes.map((s, i) => {
           const paint = shapeFill(key);
-          // Интерактивные атрибуты — только когда задан onMuscle (иначе фигура
-          // остаётся статичной, R-39 keyboard для кликабельного варианта).
-          const interactive = onMuscle
-            ? {
-                role: "button",
-                tabIndex: 0,
-                "aria-label": muscleLabelRu(key),
-                className: cn(paint.className, "cursor-pointer outline-none"),
-                onClick: () => onMuscle(key),
-                onKeyDown: (e: React.KeyboardEvent) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onMuscle(key);
-                  }
-                },
-              }
-            : { className: paint.className };
           return s.t === "r" ? (
             <rect
               key={`${key}-${i}`}
@@ -72,7 +47,7 @@ export function BodySilhouette({
               height={s.h}
               rx={s.rx ?? 2}
               fill={paint.fill}
-              {...interactive}
+              className={paint.className}
             />
           ) : (
             <ellipse
@@ -83,7 +58,7 @@ export function BodySilhouette({
               rx={s.rx ?? 4}
               ry={s.ry ?? 4}
               fill={paint.fill}
-              {...interactive}
+              className={paint.className}
             />
           );
         }),

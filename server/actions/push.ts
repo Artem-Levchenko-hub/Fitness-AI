@@ -1,6 +1,7 @@
 "use server";
 
 import { requireUser } from "@/lib/auth/require-user";
+import { pushSubscriptionSchema } from "@/lib/push/subscription-input";
 import { subscribeUser, unsubscribeByEndpoint } from "@/lib/repos/push.repo";
 
 export async function saveSubscription(payload: {
@@ -9,15 +10,16 @@ export async function saveSubscription(payload: {
   userAgent?: string | null;
 }) {
   const user = await requireUser();
+  const parsed = pushSubscriptionSchema.parse(payload);
   await subscribeUser(user.id, {
-    endpoint: payload.endpoint,
-    p256dh: payload.keys.p256dh,
-    auth: payload.keys.auth,
+    endpoint: parsed.endpoint,
+    p256dh: parsed.keys.p256dh,
+    auth: parsed.keys.auth,
     userAgent: payload.userAgent ?? null,
   });
 }
 
 export async function removeSubscription(endpoint: string) {
-  await requireUser();
-  await unsubscribeByEndpoint(endpoint);
+  const user = await requireUser();
+  await unsubscribeByEndpoint(user.id, endpoint);
 }

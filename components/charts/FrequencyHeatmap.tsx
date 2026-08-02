@@ -45,18 +45,25 @@ export function FrequencyHeatmap({
     }
   }
 
+  const countLabel = (count: number) =>
+    count === 1 ? "тренировка" : count < 5 ? "тренировки" : "тренировок";
+
   return (
-    <div className="overflow-x-auto pb-1">
+    <figure className="overflow-x-auto pb-1">
+      <figcaption className="sr-only">
+        Частота тренировок по дням за последние {weeks} недель
+      </figcaption>
       <div
         className="grid auto-cols-min grid-flow-col gap-[3px]"
         style={{ gridTemplateRows: "repeat(7, 1fr)" }}
+        aria-hidden="true"
       >
         {cells.map((c, i) => {
           const intensity = c.count === 0 ? 0 : 0.25 + 0.75 * (c.count / max);
           return (
             <motion.div
               key={c.date}
-              title={`${c.date}: ${c.count} ${c.count === 1 ? "тренировка" : c.count < 5 ? "тренировки" : "тренировок"}`}
+              title={`${c.date}: ${c.count} ${countLabel(c.count)}`}
               initial={{ opacity: 0, scale: 0.6 }}
               animate={{ opacity: 1, scale: 1 }}
               whileHover={{ scale: 1.4, zIndex: 10 }}
@@ -65,7 +72,7 @@ export function FrequencyHeatmap({
                 scale: { type: "spring", stiffness: 400, damping: 28 },
               }}
               className={cn(
-                "size-3 cursor-pointer rounded-[3px]",
+                "size-3 rounded-[3px]",
                 c.count === 0 && "bg-muted",
               )}
               style={{
@@ -80,11 +87,19 @@ export function FrequencyHeatmap({
           );
         })}
       </div>
+      <ul className="sr-only">
+        {cells.map((cell) => (
+          <li key={cell.date}>
+            {cell.date}: {cell.count} {countLabel(cell.count)}
+          </li>
+        ))}
+      </ul>
       <div className="text-muted-foreground mt-2 flex items-center gap-1.5 text-[10px]">
-        <span>меньше</span>
-        <div className="bg-muted size-2.5 rounded-[2px]" />
+        <span>0</span>
+        <div className="bg-muted size-2.5 rounded-[2px]" aria-hidden="true" />
         <div
           className="size-2.5 rounded-[2px]"
+          aria-hidden="true"
           style={{
             backgroundColor:
               "color-mix(in oklch, var(--primary) 35%, var(--muted))",
@@ -92,6 +107,7 @@ export function FrequencyHeatmap({
         />
         <div
           className="size-2.5 rounded-[2px]"
+          aria-hidden="true"
           style={{
             backgroundColor:
               "color-mix(in oklch, var(--primary) 65%, var(--muted))",
@@ -99,10 +115,11 @@ export function FrequencyHeatmap({
         />
         <div
           className="size-2.5 rounded-[2px]"
+          aria-hidden="true"
           style={{ backgroundColor: "var(--primary)" }}
         />
-        <span>больше</span>
+        <span>больше тренировок</span>
       </div>
-    </div>
+    </figure>
   );
 }

@@ -43,33 +43,47 @@ export function GlobalResumeBar({ initial }: { initial: ResumeView[] }) {
 
   const visible = visibleResumes(resumes, pathname);
   if (visible.length === 0) return null;
+  const compact = visible.length > 1;
 
   return (
     <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 px-5 md:px-8">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
-        {visible.map((r) => (
+      <div className="mx-auto w-full max-w-2xl">
+        <nav
+          aria-label="Активные тренировки"
+          data-resume-bar
+          className="bg-primary text-primary-foreground flex overflow-hidden rounded-2xl shadow-lg"
+        >
+          {visible.map((resume) => (
           <Link
-            key={r.href}
-            href={r.href}
-            data-resume-bar
-            className="bg-primary text-primary-foreground flex min-h-12 items-center justify-between rounded-2xl px-4 py-2.5 shadow-lg transition-transform hover:-translate-y-px"
+              key={resume.href}
+              href={resume.href}
+              title={`${resume.label} — продолжить`}
+              className={`flex min-h-14 min-w-0 flex-1 items-center gap-2 border-primary-foreground/15 py-2.5 transition-colors hover:bg-primary-foreground/10 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none [&+&]:border-l ${
+                compact ? "justify-center px-2" : "justify-between px-4"
+              }`}
           >
-            <span className="flex items-center gap-2.5">
+              <span className="flex min-w-0 items-center gap-2.5">
               <span className="bg-primary-foreground/15 flex size-7 items-center justify-center rounded-full">
                 <Play className="size-3.5 fill-current" />
               </span>
-              <span className="flex flex-col leading-tight">
-                <span className="text-[10px] font-medium tracking-[0.16em] uppercase opacity-70">
-                  {r.label}
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className="truncate text-[10px] font-medium tracking-[0.08em] uppercase opacity-70">
+                  {resume.label}
                 </span>
-                <span className="text-sm font-semibold tracking-tight">
+                  <span className="truncate text-sm font-semibold tracking-tight">
                   Продолжить
                 </span>
               </span>
             </span>
-            <ChevronRight className="size-4 opacity-70" aria-hidden="true" />
+              {!compact && (
+                <ChevronRight
+                  className="size-4 shrink-0 opacity-70"
+                  aria-hidden="true"
+                />
+              )}
           </Link>
-        ))}
+          ))}
+        </nav>
       </div>
     </div>
   );

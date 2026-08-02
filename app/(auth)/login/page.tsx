@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { SessionAutoRestore } from "@/components/auth/SessionAutoRestore";
 
@@ -33,8 +34,22 @@ export default async function LoginPage({ searchParams }: Props) {
 
       <LoginForm callbackUrl={callbackUrl} />
 
-      <p className="text-muted-foreground/80 text-center text-xs leading-relaxed">
-        Продолжая, вы соглашаетесь с условиями использования.
+      <p className="text-muted-foreground text-center text-xs leading-relaxed">
+        Продолжая, вы принимаете{" "}
+        <Link
+          href="/legal/offer"
+          className="text-foreground underline underline-offset-4"
+        >
+          условия оферты
+        </Link>{" "}
+        и{" "}
+        <Link
+          href="/legal/privacy"
+          className="text-foreground underline underline-offset-4"
+        >
+          политику конфиденциальности
+        </Link>
+        .
         <br />
         Регистрация автоматическая при первом входе.
       </p>

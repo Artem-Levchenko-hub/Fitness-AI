@@ -6,6 +6,7 @@ on:
       - 'v*.*.*'
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -15,53 +16,83 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     outputs:
+      commit: ${{ steps.version.outputs.commit }}
       version: ${{ steps.version.outputs.value }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.4.0
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - id: version
-        name: Verify tag and platform versions
+        name: Verify protected tag, quality gate and platform versions
         shell: bash
         run: |
           set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          TAG_COMMIT="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          git fetch --no-tags origin "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          git merge-base --is-ancestor "$TAG_COMMIT" "origin/$DEFAULT_BRANCH"
+
+          QUALITY_RUN_ID="$(gh run list \
+            --workflow ci.yml \
+            --branch "$DEFAULT_BRANCH" \
+            --commit "$TAG_COMMIT" \
+            --status success \
+            --limit 100 \
+            --json databaseId,conclusion \
+            --jq '[.[] | select(.conclusion == "success")][0].databaseId')"
+          test -n "$QUALITY_RUN_ID" -a "$QUALITY_RUN_ID" != "null"
+
           VERSION="${GITHUB_REF_NAME#v}"
           DESKTOP_VERSION="$(jq -r '.version' desktop/package.json)"
           ANDROID_VERSION="$(jq -r '.appVersionName' android/twa-manifest.json)"
           ANDROID_COMPAT_VERSION="$(jq -r '.appVersion' android/twa-manifest.json)"
           ANDROID_CODE="$(jq -r '.appVersionCode' android/twa-manifest.json)"
-          PREVIOUS_CODE="$(git show "${GITHUB_SHA}^:android/twa-manifest.json" 2>/dev/null | jq -r '.appVersionCode' || echo 0)"
+          PREVIOUS_CODE="$(git show "${TAG_COMMIT}^:android/twa-manifest.json" 2>/dev/null | jq -r '.appVersionCode' || echo 0)"
           test "$DESKTOP_VERSION" = "$VERSION"
           test "$ANDROID_VERSION" = "$VERSION"
           test "$ANDROID_COMPAT_VERSION" = "$VERSION"
           test "$ANDROID_CODE" -gt "$PREVIOUS_CODE"
+          echo "commit=$TAG_COMMIT" >> "$GITHUB_OUTPUT"
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
   windows:
     needs: validate
     uses: ./.github/workflows/windows-desktop.yml
+    secrets:
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      WINDOWS_CERTIFICATE_SHA256: ${{ secrets.WINDOWS_CERTIFICATE_SHA256 }}
 
   android:
     needs: validate
     uses: ./.github/workflows/android-twa.yml
-    secrets: inherit
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   publish:
     needs: [validate, windows, android]
     runs-on: ubuntu-latest
+    # Configure this GitHub Environment with required reviewers before enabling
+    # release publication.  The environment is the manual promotion boundary.
+    environment: release-publish
     permissions:
       actions: read
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.validate.outputs.version }}
+      WINDOWS_PUBLISHER: ${{ needs.windows.outputs.publisher }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.4.0
 
       - name: Download verified build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: vibe-trainer-*
           path: artifacts
@@ -127,6 +158,8 @@ jobs:
           - Android автоматически проверяет новую версию и показывает безопасную ссылку на подписанный APK;
           - Android App Bundle готов для Google Play, где системное автообновление работает без ручного скачивания;
           - все бинарники собираются из точного коммита тега и публикуются вместе с SHA-256.
+
+          Проверенный издатель цифровой подписи Windows: ${WINDOWS_PUBLISHER}
 
           > Переход с Windows 1.1.0 требует один раз установить ${VERSION} вручную. Все следующие версии будут находиться автоматически.
           EOF

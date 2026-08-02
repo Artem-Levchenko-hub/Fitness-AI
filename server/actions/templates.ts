@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { isAiConfigured, refineTemplate } from "@/lib/ai/template-refine";
+import { claimAiCapacity, settleAiCapacity } from "@/lib/ai/guard";
 import { requireUser } from "@/lib/auth/require-user";
 import type { PlanCatalogEntry } from "@/lib/domain/programs/ai-plan";
 import { listExercises } from "@/lib/repos/exercises.repo";
@@ -175,6 +176,23 @@ export async function refineTemplateAction(
   // slug → {id, nameRu} для резолва предложения тренера в id и показа названий.
   const bySlug = new Map(exercises.map((e) => [e.slug, e]));
 
+  const capacity = await claimAiCapacity({
+    userId: user.id,
+    operation: "one_shot",
+    requestKey: `template-refine:${parsed.data.templateId}:${crypto.randomUUID()}`,
+  });
+  if (capacity.kind !== "allowed") {
+    return {
+      status: "error",
+      message:
+        capacity.kind === "subscription_required"
+          ? "Для улучшения шаблона нужна активная подписка Pro."
+          : capacity.kind === "quota_exceeded"
+            ? capacity.message
+            : "Слишком много AI-запросов. Попробуйте позже.",
+    };
+  }
+
   try {
     const refined = await refineTemplate({
       name: source.name,
@@ -198,8 +216,11 @@ export async function refineTemplateAction(
       });
     }
     if (items.length === 0) {
+      await settleAiCapacity(capacity.usageId, false);
       return { status: "error", message: "Тренер не собрал улучшение. Попробуйте ещё раз." };
     }
+
+    await settleAiCapacity(capacity.usageId, true);
 
     return {
       status: "success",
@@ -209,6 +230,7 @@ export async function refineTemplateAction(
       items,
     };
   } catch (err) {
+    await settleAiCapacity(capacity.usageId, false);
     return {
       status: "error",
       message:

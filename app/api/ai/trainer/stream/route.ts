@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { streamText } from "ai";
 import { z } from "zod";
 
@@ -5,6 +7,13 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import { buildTrainerContext } from "@/lib/ai/context-builder";
+import {
+  capacityDuplicateResponse,
+  capacityErrorResponse,
+  claimAiCapacity,
+  requireOwnedWorkout,
+  settleAiCapacity,
+} from "@/lib/ai/guard";
 import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
 import { TRAINER_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
@@ -51,25 +60,43 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const context = await buildTrainerContext(user.id, parsed.workoutId, {
-    kind: "on_demand",
-    circuitWorkoutId: null,
-  });
-
-  // RAG: канон под контекст тренировки (тот же паттерн, что в cron-воркере).
-  let canonContext: string;
-  try {
-    const chunks = await retrieveRelevant(context.prompt.slice(0, 1200), {
-      topK: 4,
-    });
-    canonContext = formatRetrievedChunks(chunks);
-  } catch (e) {
-    console.error("[trainer-stream] RAG retrieve failed:", e);
-    canonContext =
-      "_(база знаний недоступна — отвечай только на основе цифр атлета и явно скажи об этом)_";
+  if (!(await requireOwnedWorkout(user.id, parsed.workoutId))) {
+    return Response.json({ error: "workout_not_found" }, { status: 404 });
   }
+  const capacity = await claimAiCapacity({
+    userId: user.id,
+    operation: "post_workout_analysis",
+    requestKey: `trainer-stream:${createHash("sha256").update(`${user.id}:${parsed.workoutId}`).digest("hex")}`,
+  });
+  if (capacity.kind === "duplicate") {
+    return capacityDuplicateResponse(capacity);
+  }
+  if (capacity.kind !== "allowed") {
+    return capacityErrorResponse(capacity);
+  }
+  const usageId = capacity.usageId;
 
-  const userPrompt = `## Контекст из канона (загруженная литература)
+  let result: ReturnType<typeof streamText>;
+  try {
+    const context = await buildTrainerContext(user.id, parsed.workoutId, {
+      kind: "on_demand",
+      circuitWorkoutId: null,
+    });
+
+    // RAG: канон под контекст тренировки (тот же паттерн, что в cron-воркере).
+    let canonContext: string;
+    try {
+      const chunks = await retrieveRelevant(context.prompt.slice(0, 1200), {
+        topK: 4,
+      });
+      canonContext = formatRetrievedChunks(chunks);
+    } catch (e) {
+      console.error("[trainer-stream] RAG retrieve failed:", e);
+      canonContext =
+        "_(база знаний недоступна — отвечай только на основе цифр атлета и явно скажи об этом)_";
+    }
+
+    const userPrompt = `## Контекст из канона (загруженная литература)
 
 ${canonContext}
 
@@ -77,32 +104,45 @@ ${canonContext}
 
 ${context.prompt}`;
 
-  const result = streamText({
-    model: aiClient(COACH_MODEL),
-    system: `${TRAINER_SYSTEM_PROMPT}\n\n${JSON_SHAPE_INSTRUCTION}`,
-    prompt: userPrompt,
-    temperature: 0.4,
-    // Только timeout (не request.signal): если клиент уйдёт со страницы,
-    // генерация всё равно завершится и сохранит разбор.
-    abortSignal: AbortSignal.timeout(45_000),
-    onFinish: async ({ text, usage }) => {
-      if (!text) return;
-      try {
-        const json = parseTrainerJson(text);
-        await db.insert(schema.aiAnalyses).values({
-          userId: user.id,
-          workoutId: parsed.workoutId,
-          content: renderTrainerMarkdown(json),
-          resultJson: json as object,
-          modelVersion: TRAINER_MODEL,
-          promptTokens: usage?.inputTokens ?? null,
-          completionTokens: usage?.outputTokens ?? null,
-        });
-      } catch (e) {
-        console.error("[trainer-stream] save analysis failed:", e);
-      }
-    },
-  });
+    result = streamText({
+      model: aiClient(COACH_MODEL),
+      system: `${TRAINER_SYSTEM_PROMPT}\n\n${JSON_SHAPE_INSTRUCTION}`,
+      prompt: userPrompt,
+      temperature: 0.4,
+      // Только timeout (не request.signal): если клиент уйдёт со страницы,
+      // генерация всё равно завершится и сохранит разбор.
+      abortSignal: AbortSignal.timeout(45_000),
+      onFinish: async ({ text, usage }) => {
+        if (!text) {
+          await settleAiCapacity(usageId, false);
+          return;
+        }
+        try {
+          const json = parseTrainerJson(text);
+          await db.insert(schema.aiAnalyses).values({
+            userId: user.id,
+            workoutId: parsed.workoutId,
+            content: renderTrainerMarkdown(json),
+            resultJson: json as object,
+            modelVersion: TRAINER_MODEL,
+            promptTokens: usage?.inputTokens ?? null,
+            completionTokens: usage?.outputTokens ?? null,
+          });
+          await settleAiCapacity(usageId, true);
+        } catch (e) {
+          await settleAiCapacity(usageId, false);
+          console.error("[trainer-stream] save analysis failed:", e);
+        }
+      },
+      onError: async () => {
+        await settleAiCapacity(usageId, false);
+      },
+    });
+  } catch (error) {
+    await settleAiCapacity(usageId, false);
+    console.error("[trainer-stream] failed before stream start:", error);
+    return Response.json({ error: "ai_provider_failed" }, { status: 502 });
+  }
 
   // Кадрируем поток: текст ответа (JSON) и «мысли» модели (reasoning) — две
   // дорожки в одном text-стриме (см. splitTrainerStream). Клиент льёт JSON в
@@ -125,6 +165,7 @@ ${context.prompt}`;
           }
         }
       } catch (err) {
+        await settleAiCapacity(usageId, false);
         console.error("[trainer-stream] fullStream error:", err);
       } finally {
         controller.close();

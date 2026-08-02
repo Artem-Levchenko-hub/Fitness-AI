@@ -31,6 +31,7 @@
 # для синтетической проверки dead-man (см. гейт H10.5).
 #
 set -euo pipefail
+umask 077
 
 REMOTE="${REMOTE:-kanavto-vps}"
 REMOTE_DIR="${REMOTE_DIR:-backups}"
@@ -44,29 +45,46 @@ fail() { echo "backup-pull: $1" >&2; exit 1; }
 command -v ssh  >/dev/null 2>&1 || fail "ssh not found in PATH"
 command -v scp  >/dev/null 2>&1 || fail "scp not found in PATH"
 command -v gzip >/dev/null 2>&1 || fail "gzip not found in PATH"
+command -v sha256sum >/dev/null 2>&1 || fail "sha256sum not found in PATH"
 
 # --- свежайший дамп на сервере (по mtime), одной ssh-командой -----------------
-# stat -c '%n|%Y|%s' = путь|epoch-mtime|размер; GNU coreutils (Linux+Git Bash).
+# stat + SHA-256 arrive through the authenticated SSH channel. The digest does
+# not replace an immutable signed backup manifest, but prevents accepting a
+# truncated or substituted SCP result.
 REMOTE_STAT="$(ssh -o BatchMode=yes "$REMOTE" \
   "f=\$(ls -1t ~/$REMOTE_DIR/$PATTERN 2>/dev/null | head -1); \
-   [ -n \"\$f\" ] && stat -c '%n|%Y|%s' \"\$f\"" || true)"
+   [ -n \"\$f\" ] && printf '%s|' \"\$f\" && \
+   stat -c '%Y|%s' \"\$f\" | tr -d '\n' && printf '|' && \
+   sha256sum \"\$f\" | awk '{print \$1}'" || true)"
 [ -n "$REMOTE_STAT" ] || fail "no remote dump matching $PATTERN in $REMOTE:~/$REMOTE_DIR — cron-backup may be dead (run /api/cron/backup-db?)"
 
 REMOTE_PATH="${REMOTE_STAT%%|*}"
 _rest="${REMOTE_STAT#*|}"
 REMOTE_MTIME="${_rest%%|*}"
-REMOTE_SIZE="${_rest##*|}"
+_rest="${_rest#*|}"
+REMOTE_SIZE="${_rest%%|*}"
+REMOTE_SHA256="${_rest##*|}"
 REMOTE_BASENAME="$(basename "$REMOTE_PATH")"
+[[ "$REMOTE_BASENAME" =~ ^fitness-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql\.gz$ ]] || fail "unexpected remote backup name"
+[[ "$REMOTE_SHA256" =~ ^[a-f0-9]{64}$ ]] || fail "invalid remote SHA-256"
 
 # --- pull (scp) --------------------------------------------------------------
-mkdir -p "$LOCAL_BACKUP_DIR"
+mkdir -p -m 700 "$LOCAL_BACKUP_DIR"
+chmod 700 "$LOCAL_BACKUP_DIR"
 DEST="$LOCAL_BACKUP_DIR/$REMOTE_BASENAME"
+PART="${DEST}.part.$$"
+trap 'rm -f "$PART"' EXIT
 echo "backup-pull: freshest remote dump = $REMOTE_BASENAME (${REMOTE_SIZE}B) → $DEST"
-scp -o BatchMode=yes "$REMOTE:$REMOTE_PATH" "$DEST" || fail "scp failed for $REMOTE:$REMOTE_PATH"
+scp -o BatchMode=yes "$REMOTE:$REMOTE_PATH" "$PART" || fail "scp failed for $REMOTE:$REMOTE_PATH"
+chmod 600 "$PART"
 
 # --- целостность off-site копии ----------------------------------------------
-[ -s "$DEST" ] || fail "copied file is empty: $DEST"
-gzip -t "$DEST" || fail "gzip integrity check FAILED: $DEST (corrupt transfer?)"
+[ -s "$PART" ] || fail "copied file is empty: $PART"
+gzip -t "$PART" || fail "gzip integrity check FAILED: $PART (corrupt transfer?)"
+LOCAL_SHA256="$(sha256sum "$PART" | awk '{print $1}')"
+[ "$LOCAL_SHA256" = "$REMOTE_SHA256" ] || fail "SHA-256 mismatch after transfer"
+mv -f "$PART" "$DEST"
+chmod 600 "$DEST"
 LOCAL_SIZE="$(stat -c %s "$DEST")"
 echo "backup-pull: verified $DEST (${LOCAL_SIZE}B, gzip OK)"
 

@@ -67,9 +67,9 @@ export function ProfileForm(props: Props) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Пол</Label>
+          <Label id="sex-label" htmlFor="sex-trigger">Пол</Label>
           <Select name="sex" defaultValue={props.initialSex ?? ""}>
-            <SelectTrigger className="h-11">
+            <SelectTrigger id="sex-trigger" aria-labelledby="sex-label" className="h-11">
               <SelectValue placeholder="Не указан" />
             </SelectTrigger>
             <SelectContent>
@@ -80,12 +80,12 @@ export function ProfileForm(props: Props) {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Единицы веса</Label>
+          <Label id="weight-unit-label" htmlFor="weight-unit-trigger">Единицы веса</Label>
           <Select
             name="weightUnitPref"
             defaultValue={props.initialWeightUnit}
           >
-            <SelectTrigger className="h-11">
+            <SelectTrigger id="weight-unit-trigger" aria-labelledby="weight-unit-label" className="h-11">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -98,9 +98,9 @@ export function ProfileForm(props: Props) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Опыт</Label>
+          <Label id="experience-label" htmlFor="experience-trigger">Опыт</Label>
           <Select name="experience" defaultValue={props.initialExperience}>
-            <SelectTrigger className="h-11">
+            <SelectTrigger id="experience-trigger" aria-labelledby="experience-label" className="h-11">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -133,7 +133,7 @@ export function ProfileForm(props: Props) {
         </p>
       ) : null}
       {state.status === "success" ? (
-        <p className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
+        <p role="status" aria-live="polite" className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
           Профиль сохранён
         </p>
       ) : null}

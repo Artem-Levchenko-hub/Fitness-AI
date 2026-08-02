@@ -68,6 +68,7 @@ export function ExercisesExplorer({ exercises, muscleKeys }: Props) {
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
         <button
           type="button"
+          aria-pressed={muscle === null}
           onClick={() => setMuscle(null)}
           className={cn(
             "rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
@@ -82,6 +83,7 @@ export function ExercisesExplorer({ exercises, muscleKeys }: Props) {
           <button
             key={k}
             type="button"
+            aria-pressed={muscle === k}
             onClick={() => setMuscle(muscle === k ? null : k)}
             className={cn(
               "rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",

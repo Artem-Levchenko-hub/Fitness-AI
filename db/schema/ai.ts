@@ -6,7 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
+    uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
@@ -96,6 +96,27 @@ export const aiJobs = pgTable(
     index("ai_jobs_workout_idx").on(t.workoutId),
     index("ai_jobs_user_kind_idx").on(t.userId, t.kind, t.scheduledAt),
     index("ai_jobs_circuit_workout_idx").on(t.circuitWorkoutId),
+  ],
+);
+
+/** Durable reservation/settlement ledger for every LLM operation. */
+export const aiUsageLedger = pgTable(
+  "ai_usage_ledger",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    operation: text("operation").notNull(),
+    requestKey: text("request_key").notNull(),
+    scopeKey: text("scope_key"),
+    status: text("status", { enum: ["processing", "succeeded", "failed"] }).notNull().default("processing"),
+    bucketStart: timestamp("bucket_start", { mode: "date", withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("ai_usage_ledger_request_key_unq").on(t.requestKey),
+    index("ai_usage_ledger_quota_idx").on(t.userId, t.operation, t.bucketStart, t.status),
+    index("ai_usage_ledger_rate_idx").on(t.userId, t.createdAt),
   ],
 );
 

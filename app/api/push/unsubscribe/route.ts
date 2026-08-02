@@ -1,22 +1,19 @@
-import { z } from "zod";
-
 import { requireUser } from "@/lib/auth/require-user";
+import { pushEndpointSchema } from "@/lib/push/subscription-input";
 import { unsubscribeByEndpoint } from "@/lib/repos/push.repo";
 
 export const runtime = "nodejs";
 
-const bodySchema = z.object({
-  endpoint: z.string().url(),
-});
-
 export async function POST(req: Request) {
-  await requireUser();
+  const user = await requireUser();
   let parsed;
   try {
-    parsed = bodySchema.parse(await req.json());
+    parsed = pushEndpointSchema.parse(
+      (await req.json())?.endpoint,
+    );
   } catch {
     return Response.json({ error: "Invalid endpoint" }, { status: 400 });
   }
-  await unsubscribeByEndpoint(parsed.endpoint);
+  await unsubscribeByEndpoint(user.id, parsed);
   return Response.json({ ok: true });
 }

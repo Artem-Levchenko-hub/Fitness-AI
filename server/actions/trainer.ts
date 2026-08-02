@@ -1,11 +1,12 @@
 "use server";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
+import { requireOwnedCircuitWorkout, requireOwnedWorkout } from "@/lib/ai/guard";
 import {
   disableAnalysisSharing,
   enableAnalysisSharing,
@@ -14,12 +15,34 @@ import {
 /** Создаёт aiJob (kind=on_demand) и возвращает jobId для поллинга. */
 export async function requestTrainerOnDemand(workoutId: string | null) {
   const user = await requireUser();
+  if (workoutId && !(await requireOwnedWorkout(user.id, workoutId))) {
+    throw new Error("Тренировка не найдена");
+  }
+  const kind = workoutId ? "on_demand" : "daily_digest";
+  const [existing] = await db
+    .select({ id: schema.aiJobs.id })
+    .from(schema.aiJobs)
+    .where(
+      and(
+        eq(schema.aiJobs.userId, user.id),
+        eq(schema.aiJobs.kind, kind),
+        workoutId ? eq(schema.aiJobs.workoutId, workoutId) : isNull(schema.aiJobs.workoutId),
+        inArray(schema.aiJobs.status, ["pending", "running"]),
+      ),
+    )
+    .limit(1);
+  if (existing) return { jobId: existing.id };
+  const [queued] = await db
+    .select({ total: count() })
+    .from(schema.aiJobs)
+    .where(and(eq(schema.aiJobs.userId, user.id), inArray(schema.aiJobs.status, ["pending", "running"])));
+  if ((queued?.total ?? 0) >= 3) throw new Error("Очередь AI занята. Подождите завершения текущих задач.");
   const [job] = await db
     .insert(schema.aiJobs)
     .values({
       userId: user.id,
       workoutId,
-      kind: workoutId ? "on_demand" : "daily_digest",
+      kind,
       status: "pending",
     })
     .returning({ id: schema.aiJobs.id });
@@ -66,6 +89,12 @@ export async function retryAnalysisAction(input: {
   const circuitWorkoutId = input.circuitWorkoutId ?? null;
   if (!workoutId && !circuitWorkoutId) {
     return { status: "error", message: "Нет id тренировки" };
+  }
+  if (workoutId && !(await requireOwnedWorkout(user.id, workoutId))) {
+    return { status: "error", message: "Тренировка не найдена" };
+  }
+  if (circuitWorkoutId && !(await requireOwnedCircuitWorkout(user.id, circuitWorkoutId))) {
+    return { status: "error", message: "Круговая тренировка не найдена" };
   }
 
   const kind = circuitWorkoutId ? "circuit_post_workout" : "post_workout";

@@ -7,8 +7,8 @@ import { test, expect } from "@playwright/test";
  * H7.3b — мутирующие потоки на детерминированной фикстуре: разбор тренировки
  *   виден + навигация в профиль друга. Фикстуру сидит scripts/e2e-seed.mjs на
  *   проде (он же чистит её через --cleanup, не оставляя данных). Тесты читают
- *   id фикстуры из env и пропускаются, когда фикстура не засеяна (как и
- *   read-only тесты при отсутствии токена) — гейт не краснеет вхолостую.
+ *   id фикстуры из env. Неполная fixture теперь валит suite до первого теста:
+ *   частично skipped прогон не является релизным гейтом.
  */
 
 const trainerWorkoutId = process.env.E2E_TRAINER_WORKOUT_ID;
@@ -24,6 +24,31 @@ const strengthTemplateId = process.env.E2E_STRENGTH_TEMPLATE_ID;
 const waitingCircuitId = process.env.E2E_WAITING_CIRCUIT_ID;
 const waitingWorkoutId = process.env.E2E_WAITING_WORKOUT_ID;
 const activeWorkoutId = process.env.E2E_ACTIVE_WORKOUT_ID;
+
+const requiredFixtures = {
+  E2E_TRAINER_WORKOUT_ID: trainerWorkoutId,
+  E2E_PREV_WORKOUT_ID: prevWorkoutId,
+  E2E_EXERCISE_ID: exerciseId,
+  E2E_FRIEND_ID: friendId,
+  E2E_CIRCUIT_ID: circuitId,
+  E2E_PREV_CIRCUIT_ID: prevCircuitId,
+  E2E_CARDIO_ID: cardioId,
+  E2E_CIRCUIT_TEMPLATE_ID: circuitTemplateId,
+  E2E_CARDIO_TEMPLATE_ID: cardioTemplateId,
+  E2E_STRENGTH_TEMPLATE_ID: strengthTemplateId,
+  E2E_WAITING_CIRCUIT_ID: waitingCircuitId,
+  E2E_WAITING_WORKOUT_ID: waitingWorkoutId,
+  E2E_ACTIVE_WORKOUT_ID: activeWorkoutId,
+};
+
+test.beforeAll(() => {
+  const missing = Object.entries(requiredFixtures)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(`Неполная E2E fixture: ${missing.join(", ")}`);
+  }
+});
 
 test("/stats открывается с контентом, а не error-boundary", async ({ page }) => {
   await page.goto("/stats");
@@ -510,7 +535,7 @@ test("разбор завершённой тренировки виден (Train
   }
 });
 
-test("H17.0-B — силуэт под «Баланс по аватару» кликабелен: тап группы → /profile?muscle=<key>", async ({
+test("H17.0-B — баланс по аватару: доступная кнопка группы → /profile?muscle=<key>", async ({
   page,
 }) => {
   test.skip(
@@ -521,14 +546,13 @@ test("H17.0-B — силуэт под «Баланс по аватару» кл�
   await expect(page).toHaveURL(new RegExp(`/workouts/${trainerWorkoutId}/trainer`));
 
   // Сид кладёт muscleBalanceNote + balanceMuscleKeys=["chest","quads"] →
-  // секция «Баланс по аватару» несёт кликабельный мини-силуэт (BalanceSilhouette).
+  // секция несёт статичный силуэт и отдельные клавиатурно-доступные кнопки.
   await expect(page.getByText("Баланс по аватару", { exact: true })).toBeVisible();
   const silhouette = page.locator('svg[aria-label*="Баланс групп"]');
   await expect(silhouette).toBeVisible();
 
-  // Тап по фигуре «грудь» (named тренером) → /profile?muscle=chest. Deep-link
-  // (sub-slice A) открывает панель мышцы «Грудь» на маунте.
-  await silhouette.locator('[data-muscle="chest"]').first().click();
+  // Кнопка «Грудь» → /profile?muscle=chest. Deep-link открывает панель мышцы.
+  await page.getByRole("button", { name: "Грудь", exact: true }).click();
   await expect(page).toHaveURL(/\/profile\?muscle=chest/);
   await expect(page.getByRole("heading", { name: "Грудь" })).toBeVisible();
 });
@@ -827,8 +851,8 @@ test("H15.5 — airplane-mode: офлайн-подход переживает re
   // активную тренировку нетронутой для H12.1/H12.4 выше.
   const ctx = page.context();
 
-  // 1) Онлайн-визит прогревает SW-кэш страницы (reload офлайн затем отдаётся из
-  //    него — network-first sw.js). Свежий seed = 0 подходов.
+  // 1) Онлайн-визит активирует приложение. Приватный RSC/HTML намеренно не
+  //    попадает в SW-кэш. Свежий seed = 0 подходов.
   await page.goto(`/workouts/${activeWorkoutId}`);
   await expect(
     page.getByText("Активная тренировка", { exact: true }),
@@ -850,23 +874,25 @@ test("H15.5 — airplane-mode: офлайн-подход переживает re
   // Бейдж сетевого статуса виден — единственный носитель сигнала (OfflineBanner).
   await expect(page.locator("[data-offline-banner]")).toBeVisible();
 
-  // 3) Reload ОФЛАЙН (страница из SW-кэша) → офлайн-подход переживает: на маунте
-  //    ActiveWorkoutView восстанавливает его из outbox (listPending). Активная
-  //    тренировка = серверный RSC-рендер без подхода → доказывает, что строка
-  //    живёт именно в IndexedDB, а не в серверном снимке.
+  // 3) Reload ОФЛАЙН показывает только нейтральный fallback: приватный HTML и
+  //    данные подхода не должны утечь в Cache Storage. Сам outbox при этом
+  //    остаётся в origin-scoped IndexedDB и будет восстановлен после reconnect.
   await page.reload();
   await expect(
-    page.locator("li.border-dashed", { hasText: "не синхр." }),
-  ).toContainText("70 кг × 6");
+    page.getByRole("heading", { name: "Нет подключения" }),
+  ).toBeVisible();
+  await expect(page.getByText("70 кг × 6")).toHaveCount(0);
 
-  // 4) Реконнект → online-событие → OfflineBanner дренажит outbox через ТОТ ЖЕ
-  //    recordSetAction под тем же client_set_id (идемпотентно). Индикатор «N
-  //    несинхронизировано» опускается до 0 → бейдж исчезает из DOM. Auto-retry
-  //    assertion (expect.timeout=10s) поглощает латентность дренажа.
+  // 4) После reconnect возвращаемся в приложение. На маунте оно читает тот же
+  //    IndexedDB-outbox и дренажит его через recordSetAction с исходным
+  //    client_set_id (идемпотентно).
   await ctx.setOffline(false);
-  await expect(page.locator("[data-offline-banner]")).toHaveCount(0);
+  await page.goto(`/workouts/${activeWorkoutId}`);
+  await expect(
+    page.getByText("Активная тренировка", { exact: true }),
+  ).toBeVisible();
 
-  // 5) Reload ОНЛАЙН → подход теперь СЕРВЕРНАЯ строка (несёт «Удалить подход»),
+  // 5) Подход становится СЕРВЕРНОЙ строкой (несёт «Удалить подход»),
   //    оптимистичная «не синхр.» исчезла, и таких строк РОВНО одна (ноль дублей —
   //    partial-unique client_set_id отбил бы повторный дренаж).
   await page.reload();
@@ -880,6 +906,7 @@ test("H15.5 — airplane-mode: офлайн-подход переживает re
   await expect(
     serverRow.getByRole("button", { name: "Удалить подход" }),
   ).toBeVisible();
+  await expect(page.locator("[data-offline-banner]")).toHaveCount(0);
   await expect(page.getByText("не синхр.")).toHaveCount(0);
 });
 
