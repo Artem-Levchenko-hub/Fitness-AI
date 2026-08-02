@@ -55,6 +55,16 @@ jobs:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          # The production host may still be awaiting DNS/TLS during a release
+          # cutover. Bubblewrap only needs these URLs to download the launcher
+          # artwork, so use immutable assets from the exact GitHub revision.
+          RAW_ICON_BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/public/icons"
+          jq \
+            --arg icon "$RAW_ICON_BASE/icon-512.png" \
+            --arg maskable "$RAW_ICON_BASE/maskable-512.png" \
+            '.iconUrl = $icon | .maskableIconUrl = $maskable' \
+            twa-manifest.json > twa-manifest.ci.json
+          mv twa-manifest.ci.json twa-manifest.json
           bubblewrap update --skipVersionUpgrade
           bubblewrap build --skipPwaValidation
           echo "=== artifacts ==="
