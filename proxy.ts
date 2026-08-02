@@ -1,61 +1,105 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
-import { authConfig } from "@/lib/auth/config";
-import { REFRESH_COOKIE_NAME } from "@/lib/auth/refresh";
+import { authConfig, REFRESH_COOKIE_NAME } from "@/lib/auth/config";
 
 const PROTECTED_PREFIXES = [
+  "/admin",
+  "/billing",
+  "/body",
+  "/cardio",
+  "/circuits",
+  "/create",
   "/dashboard",
-  "/workouts",
   "/exercises",
-  "/templates",
+  "/friends",
+  "/library",
   "/notes",
-  "/stats",
+  "/nutrition",
   "/profile",
+  "/programs",
+  "/schedule",
   "/settings",
-  "/upgrade",
+  "/sleep",
+  "/stats",
+  "/templates",
+  "/workouts",
 ];
 
 const { auth } = NextAuth(authConfig);
 
-export default auth((req) => {
-  const isAuthed = !!req.auth;
-  const { pathname } = req.nextUrl;
+type Csp = { value: string; requestHeaders: Headers };
 
+function createCsp(headers: Headers): Csp {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const isDev = process.env.NODE_ENV === "development";
+  // Sonner 2.0.7 создаёт сначала пустой <style>, затем заполняет его своей
+  // статичной таблицей. Разрешаем ровно эти два содержимых, не весь inline CSS.
+  const value = `
+    default-src 'self';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""};
+    style-src-elem 'self' 'nonce-${nonce}' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=' 'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY=';
+    style-src-attr 'unsafe-inline';
+    img-src 'self' blob: data:;
+    font-src 'self';
+    connect-src 'self';
+    worker-src 'self' blob:;
+    manifest-src 'self';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+    upgrade-insecure-requests;
+  `
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", value);
+  return { value, requestHeaders };
+}
+
+function withCsp(response: NextResponse, csp: Csp): NextResponse {
+  response.headers.set("Content-Security-Policy", csp.value);
+  return response;
+}
+
+export default auth((req) => {
+  const csp = createCsp(req.headers);
+  const { pathname } = req.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
-  if (isProtected && !isAuthed) {
-    // TWA передаёт версию оболочки в query. Сохраняем её внутри next/callback,
-    // иначе редирект на вход стирает маркер и web-слой не увидит обновление.
+  if (isProtected && !req.auth) {
     const returnPath = `${pathname}${req.nextUrl.search}`;
-    // На iOS PWA после suspend session-cookie может пропасть, но
-    // долгоживущий refresh-cookie часто переживает. Если он есть —
-    // отправляем на /api/auth/restore: оно подменит refresh на свежий
-    // session и редиректнет назад. Пользователь видит лишь короткий flash.
-    const hasRefresh = req.cookies.has(REFRESH_COOKIE_NAME);
-    if (hasRefresh) {
+    if (req.cookies.has(REFRESH_COOKIE_NAME)) {
       const restoreUrl = new URL("/api/auth/restore", req.url);
       restoreUrl.searchParams.set("next", returnPath);
-      return NextResponse.redirect(restoreUrl);
+      return withCsp(NextResponse.redirect(restoreUrl), csp);
     }
 
-    const url = new URL("/login", req.url);
-    url.searchParams.set("callbackUrl", returnPath);
-    return NextResponse.redirect(url);
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", returnPath);
+    return withCsp(NextResponse.redirect(loginUrl), csp);
   }
 
-  // Не редиректим /login → /dashboard:
-  // - edge `auth()` без adapter может возвращать ложно-truthy session
-  //   и создать цикл /login → /dashboard → /login.
-  // - залогиненный пользователь, попавший на /login, просто увидит форму.
-
-  return NextResponse.next();
+  return withCsp(
+    NextResponse.next({ request: { headers: csp.requestHeaders } }),
+    csp,
+  );
 });
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|sw.js|robots.txt|sitemap.xml).*)",
+    {
+      source:
+        "/((?!api|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|sw.js|robots.txt|sitemap.xml).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };

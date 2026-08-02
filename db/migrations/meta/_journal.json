@@ -260,6 +260,13 @@
       "when": 1785440688054,
       "tag": "0036_unknown_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1785703353376,
+      "tag": "0037_ai_usage_ledger",
+      "breakpoints": true
     }
   ]
 }

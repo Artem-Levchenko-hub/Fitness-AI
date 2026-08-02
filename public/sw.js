@@ -1,8 +1,7 @@
 /// <reference lib="webworker" />
 
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
-const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = ["/offline.html"];
 
@@ -27,7 +26,7 @@ self.addEventListener("activate", (event) => {
         Promise.all(
           keys
             .filter(
-              (key) => key !== STATIC_CACHE && key !== RUNTIME_CACHE,
+              (key) => key !== STATIC_CACHE,
             )
             .map((key) => caches.delete(key)),
         ),
@@ -58,18 +57,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation (HTML pages) — network-FIRST с офлайн-фоллбэком на последнюю
-  // закэшированную версию страницы (офлайн-чтение, H15.2). Онлайн сеть
-  // выигрывает всегда → свежий RSC-рендер, никакого stale-shell. В кэш
-  // кладём ТОЛЬКО чистый 200 (НЕ редиректы): закэшированный 307→/login
-  // пережил бы валидный логин (известный баг iOS PWA).
+  // HTML/RSC-контент может быть персональным. Его нельзя класть в Cache API:
+  // ключ не учитывает cookie, поэтому на общем устройстве это раскрыло бы
+  // данные предыдущего аккаунта. Офлайн показывает только нейтральную страницу.
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(request));
+    event.respondWith(networkOnlyNavigation(request));
     return;
   }
 
-  // Everything else — stale while revalidate
-  event.respondWith(staleWhileRevalidate(request, RUNTIME_CACHE));
+  // Динамические GET/RSC запросы тоже network-only. Кэшируем лишь immutable
+  // static assets выше.
 });
 
 async function cacheFirst(request, cacheName) {
@@ -88,22 +85,10 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-async function networkFirstNavigation(request) {
+async function networkOnlyNavigation(request) {
   try {
-    const response = await fetch(request);
-    // Кэшируем для офлайн-чтения ТОЛЬКО чистый 200 — не редиректы (307→/login
-    // не должен пережить логин). Онлайн всё равно отдаём сетевой ответ ниже,
-    // так что свежесть не страдает.
-    if (response.status === 200 && !response.redirected) {
-      const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, response.clone());
-    }
-    return response;
+    return await fetch(request);
   } catch {
-    // Офлайн → последняя закэшированная версия этой страницы, иначе offline.html.
-    const cached = await caches.match(request);
-    if (cached) return cached;
-
     const offlinePage = await caches.match("/offline.html");
     if (offlinePage) return offlinePage;
 
@@ -114,21 +99,20 @@ async function networkFirstNavigation(request) {
   }
 }
 
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => cached);
-
-  return cached || fetchPromise;
-}
+// При logout и смене сессии очищаем runtime-кэши предыдущих версий. static
+// assets остаются: они не содержат пользовательских данных и нужны офлайн.
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "FITNESS_PURGE_RUNTIME_CACHE") return;
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key.startsWith("runtime-"))
+          .map((key) => caches.delete(key)),
+      ),
+    ),
+  );
+});
 
 // --- Web Push: receive + click ----------------------------------------------
 

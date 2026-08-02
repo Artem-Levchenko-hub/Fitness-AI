@@ -1,43 +1,86 @@
-import { decode, encode } from "next-auth/jwt";
+import { createHash, randomBytes } from "node:crypto";
+import { and, eq, gt } from "drizzle-orm";
 
-/** Долгоживущий refresh-токен. Идея: основной session-cookie живёт 90 дней,
- *  но iOS Safari в standalone-режиме может терять его при возврате PWA из
- *  фона. Параллельный refresh-cookie живёт год, имеет другое имя/срок и
- *  обычно переживает суспенд. Когда proxy.ts видит «нет session, но есть
- *  refresh» — он редиректит на /api/auth/restore, который меняет refresh
- *  на свежий session-cookie без участия пользователя. */
+import { db } from "@/db/client";
+import { sessions } from "@/db/schema";
 
-export const REFRESH_COOKIE_NAME = "fitness-refresh-token";
-export const REFRESH_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 year
-const REFRESH_SALT = "fitness.refresh-token";
+import {
+  REFRESH_COOKIE_NAME,
+  REFRESH_MAX_AGE_SECONDS,
+} from "./config";
 
-function getSecret(): string {
-  const s = process.env.AUTH_SECRET;
-  if (!s) throw new Error("AUTH_SECRET is not set");
-  return s;
+export { REFRESH_COOKIE_NAME, REFRESH_MAX_AGE_SECONDS };
+
+/**
+ * Opaque refresh-token хранится только в HttpOnly cookie. В БД попадает лишь
+ * SHA-256, поэтому утечка базы не становится готовой сессией. Удаление записи
+ * немедленно отзывает токен, а restore меняет его одноразово.
+ */
+const REFRESH_PREFIX = "fitness-refresh:";
+
+function tokenKey(token: string): string {
+  return `${REFRESH_PREFIX}${createHash("sha256").update(token).digest("hex")}`;
 }
 
 export async function createRefreshToken(userId: string): Promise<string> {
-  return await encode({
-    token: { uid: userId },
-    secret: getSecret(),
-    salt: REFRESH_SALT,
-    maxAge: REFRESH_MAX_AGE_SECONDS,
+  const token = randomBytes(32).toString("base64url");
+  await db.insert(sessions).values({
+    sessionToken: tokenKey(token),
+    userId,
+    expires: expiresAt(),
   });
+  return token;
 }
 
 export async function verifyRefreshToken(
   token: string,
 ): Promise<string | null> {
-  try {
-    const decoded = await decode({
-      token,
-      secret: getSecret(),
-      salt: REFRESH_SALT,
+  const [stored] = await db
+    .select({ userId: sessions.userId })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.sessionToken, tokenKey(token)),
+        gt(sessions.expires, new Date()),
+      ),
+    )
+    .limit(1);
+  return stored?.userId ?? null;
+}
+
+/** Атомарно отзывает предъявленный токен и создаёт следующий. Повторное
+ * предъявление старого токена уже не работает даже при параллельных запросах. */
+export async function rotateRefreshToken(
+  token: string,
+): Promise<{ userId: string; token: string } | null> {
+  return db.transaction(async (tx) => {
+    const [stored] = await tx
+      .delete(sessions)
+      .where(
+        and(
+          eq(sessions.sessionToken, tokenKey(token)),
+          gt(sessions.expires, new Date()),
+        ),
+      )
+      .returning({ userId: sessions.userId });
+    if (!stored) return null;
+
+    const nextToken = randomBytes(32).toString("base64url");
+    await tx.insert(sessions).values({
+      sessionToken: tokenKey(nextToken),
+      userId: stored.userId,
+      expires: expiresAt(),
     });
-    if (decoded && typeof decoded.uid === "string") return decoded.uid;
-    return null;
-  } catch {
-    return null;
-  }
+    return { userId: stored.userId, token: nextToken };
+  });
+}
+
+export async function revokeRefreshToken(token: string): Promise<void> {
+  await db
+    .delete(sessions)
+    .where(eq(sessions.sessionToken, tokenKey(token)));
+}
+
+function expiresAt(): Date {
+  return new Date(Date.now() + REFRESH_MAX_AGE_SECONDS * 1000);
 }

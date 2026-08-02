@@ -26,7 +26,7 @@
     <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-2f6b4f?logo=typescript&logoColor=white">
     <img alt="PostgreSQL 15" src="https://img.shields.io/badge/PostgreSQL-15-416b57?logo=postgresql&logoColor=white">
     <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-d09543">
-    <img alt="Tests" src="https://img.shields.io/badge/tests-1069_passed-3a6b4a?logo=vitest&logoColor=white">
+    <img alt="Tests" src="https://img.shields.io/badge/tests-1100_passed-3a6b4a?logo=vitest&logoColor=white">
     <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest"><img alt="Скачать Vibe-trainer 1.2.0" src="https://img.shields.io/badge/скачать-v1.2.0-3a6b4a?logo=github&logoColor=white"></a>
   </p>
 </div>
@@ -155,13 +155,23 @@ Android просит подтвердить обновление. При пуб�
 **🖥️ На ноутбук или компьютер с Windows**
 
 1. Нажмите зелёную кнопку **«Скачать .EXE»** выше.
-2. Откройте скачанный файл. Если появилось синее окно SmartScreen, нажмите
-   **«Подробнее» → «Выполнить в любом случае»**.
+2. Откройте скачанный файл и убедитесь, что в свойствах указана действительная
+   цифровая подпись ожидаемого издателя, названного в заметках релиза. Не обходите
+   предупреждение SmartScreen: если оно появилось, отмените установку и
+   скачайте файл заново только со страницы официального релиза.
 3. Нажимайте **«Далее» → «Установить» → «Готово»**. Vibe-trainer появится на
    рабочем столе и в меню «Пуск».
 
 Если у вас установлена версия 1.1.0 или старше, один раз установите 1.2.0
 вручную поверх неё. Следующие версии приложение найдёт само.
+
+Публикация нового Windows-установщика разрешена только после настройки
+защищённой GitHub Environment `windows-signing` с обязательным подтверждением
+владельца и секретами `WINDOWS_CERTIFICATE_BASE64`,
+`WINDOWS_CERTIFICATE_PASSWORD`, `WINDOWS_CERTIFICATE_SHA256`. Workflow
+останавливается, если Authenticode-подпись невалидна или принадлежит другому
+сертификату. SHA-256 файла полезен для целостности, но не заменяет подпись
+издателя при первой установке.
 
 **🤖 На телефон или планшет с Android**
 

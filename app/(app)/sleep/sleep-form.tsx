@@ -43,13 +43,13 @@ export function SleepForm({
         />
       </div>
 
-      <div>
-        <Label htmlFor="quality">Качество сна (1–5, опционально)</Label>
+      <fieldset>
+        <legend className="text-sm font-medium">Качество сна (1–5, опционально)</legend>
         <div className="mt-1 flex gap-2">
           {[1, 2, 3, 4, 5].map((n) => (
             <label
               key={n}
-              className="bg-card hover:bg-accent border-border flex flex-1 cursor-pointer items-center justify-center rounded-lg border py-2 text-sm font-medium has-[input:checked]:bg-primary has-[input:checked]:text-primary-foreground has-[input:checked]:border-primary"
+              className="bg-card hover:bg-accent border-border has-[:focus-visible]:ring-ring flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg border py-2 text-sm font-medium has-[input:checked]:bg-primary has-[input:checked]:text-primary-foreground has-[input:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-offset-2"
             >
               <input
                 type="radio"
@@ -62,7 +62,7 @@ export function SleepForm({
             </label>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       <div>
         <Label htmlFor="notes">Заметка (опционально)</Label>
@@ -78,10 +78,10 @@ export function SleepForm({
       </div>
 
       {state.status === "error" ? (
-        <p className="text-destructive text-sm">{state.message}</p>
+        <p className="text-destructive text-sm" role="alert">{state.message}</p>
       ) : null}
       {state.status === "success" ? (
-        <p className="text-success text-sm">{state.message}</p>
+        <p className="text-success text-sm" role="status" aria-live="polite">{state.message}</p>
       ) : null}
 
       <Button type="submit" disabled={pending} size="xl" className="w-full">

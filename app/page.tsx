@@ -28,7 +28,7 @@ export default function HomePage() {
         </Button>
       </div>
 
-      <p className="text-muted-foreground/60 mt-8 text-xs">
+      <p className="text-muted-foreground mt-8 text-xs">
         MVP · регистрация по 6-значному коду из письма
       </p>
     </main>

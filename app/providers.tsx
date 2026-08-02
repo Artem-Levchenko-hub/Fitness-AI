@@ -7,7 +7,13 @@ import { useState } from "react";
 import { PwaProvider } from "@/components/app/PwaProvider";
 import { Toaster } from "@/components/ui/sonner";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  nonce,
+}: {
+  children: React.ReactNode;
+  nonce?: string;
+}) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -28,6 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultTheme="light"
         enableSystem
         disableTransitionOnChange
+        nonce={nonce}
       >
         <PwaProvider>{children}</PwaProvider>
         <Toaster position="top-center" richColors closeButton duration={3000} />

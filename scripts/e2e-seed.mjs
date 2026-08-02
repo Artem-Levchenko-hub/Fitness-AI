@@ -28,9 +28,8 @@
  *    node --env-file=.env.production scripts/e2e-seed.mjs
  *    node --env-file=.env.production scripts/e2e-seed.mjs --cleanup
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import postgres from "postgres";
-import { encode } from "next-auth/jwt";
 
 const VERIFY_EMAIL = "claude-verify@local.test";
 const FRIEND_EMAIL = "claude-friend@local.test";
@@ -548,12 +547,20 @@ try {
       insert into workout_exercises (id, workout_id, exercise_id, position)
       values (${randomUUID()}, ${activeWorkoutId}, ${exerciseId}, 0)`;
 
-    const refresh = await encode({
-      token: { uid: verifyId },
-      secret: process.env.AUTH_SECRET,
-      salt: "fitness.refresh-token",
-      maxAge: 60 * 60 * 24 * 365,
-    });
+    // Тот же формат, что lib/auth/refresh.ts: наружу уходит только случайный
+    // opaque token, а в БД хранится его SHA-256. Старые E2E refresh-сессии
+    // отзываем, чтобы повторный seed не оставлял действующие токены.
+    const refresh = randomBytes(32).toString("base64url");
+    const refreshKey =
+      "fitness-refresh:" +
+      createHash("sha256").update(refresh).digest("hex");
+    await sql`
+      delete from sessions
+      where user_id = ${verifyId}
+        and session_token like 'fitness-refresh:%'`;
+    await sql`
+      insert into sessions (session_token, user_id, expires)
+      values (${refreshKey}, ${verifyId}, now() + interval '30 days')`;
 
     console.log("ACTIVE_WORKOUT_ID=" + activeWorkoutId);
     console.log("WAITING_WORKOUT_ID=" + waitingWorkoutId);

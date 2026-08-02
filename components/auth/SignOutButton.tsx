@@ -5,17 +5,17 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "@/server/actions/auth";
 
-import { deleteRefreshToken } from "./session-storage";
+import { purgePrivateRuntimeCache } from "./SessionRefreshSync";
+import { clearLegacyRefreshStorage } from "./session-storage";
 
-/** Очищает refresh-токен из localStorage + IndexedDB перед серверным
- *  signOut. Иначе следующий заход на /login auto-restore сразу же
- *  воссоздаст сессию — выйти не получится. */
+/** Отзывает HttpOnly refresh на сервере и удаляет только legacy browser state. */
 export function SignOutButton() {
   const [pending, setPending] = useState(false);
 
   async function handleClick() {
     setPending(true);
-    await deleteRefreshToken();
+    await clearLegacyRefreshStorage();
+    await purgePrivateRuntimeCache();
     await signOutAction();
   }
 

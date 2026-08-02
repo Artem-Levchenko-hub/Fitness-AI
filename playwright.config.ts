@@ -4,17 +4,17 @@ import { defineConfig, devices } from "@playwright/test";
  * H7.3 — регрессионный смоук-гейт. Минимальный набор критических потоков,
  * который ОБЯЗАН пройти зелёным перед деплоем каждого consolidation-слайса H7.
  *
- * Цель — внешний прод-билд, НЕ локальный dev-сервер: проект self-hosted, локальная
- * Docker-тест-БД сломана, поэтому единственный рабочий E2E-путь — живой прод
- * (fitnesss.online) с восстановленной сессией. Это тот же путь, что и
- * ручной протокол верификации (issue-session.mjs → /api/auth/restore). Поэтому
- * здесь нет `webServer` — мы НЕ поднимаем приложение, а ходим к уже задеплоенному.
+ * По умолчанию public-smoke запускается против локального production build.
+ * Authenticated/mutating smoke разрешён только при явных E2E_BASE_URL,
+ * E2E_REFRESH_TOKEN и полном наборе одноразовых fixtures; production никогда не
+ * является неявной целью теста.
  *
  * Аутентификация — проект `setup` (auth.setup.ts) восстанавливает сессию из
  * E2E_REFRESH_TOKEN и сохраняет storageState; смоук-проект его переиспользует.
  */
 
-const baseURL = process.env.E2E_BASE_URL ?? "https://fitnesss.online";
+const externalBaseUrl = process.env.E2E_BASE_URL;
+const baseURL = externalBaseUrl ?? "http://127.0.0.1:3000";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -32,11 +32,36 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
+  webServer: externalBaseUrl
+    ? undefined
+    : {
+        command: "pnpm start",
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 60_000,
+        env: {
+          ...process.env,
+          SKIP_ENV_VALIDATION: "1",
+          AUTH_SECRET:
+            process.env.AUTH_SECRET ??
+            "local-public-e2e-secret-is-not-used-outside-this-test-run",
+        },
+      },
   projects: [
     { name: "setup", testMatch: /.*\.setup\.ts/ },
     {
+      name: "public",
+      testMatch: /public\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "public-mobile",
+      testMatch: /public\.spec\.ts/,
+      use: { ...devices["Pixel 7"] },
+    },
+    {
       name: "smoke",
-      testMatch: /.*\.spec\.ts/,
+      testMatch: /smoke\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: "e2e/.auth/user.json",

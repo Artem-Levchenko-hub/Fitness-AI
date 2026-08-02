@@ -13,12 +13,9 @@ import { describe, expect, it, vi } from "vitest";
  *
  *  1. **Офлайн-fallback (столп 4).** Любая навигация без сети → закэшированная
  *     `/offline.html`, а не браузерный dino. Прекэш `/offline.html` на install.
- *  2. **Свежий билд + офлайн-чтение (network-first, H15.2).** Навигации идут
- *     network-FIRST: онлайн сеть выигрывает всегда → свежий RSC-рендер, никакого
- *     stale-shell. Офлайн → последняя закэшированная версия страницы (чтение без
- *     сети, столп 4), иначе `/offline.html`. В кэш кладём ТОЛЬКО чистый `200`
- *     (не редиректы): закэшированный 307→/login пережил бы валидный логин (баг
- *     iOS PWA) — поэтому редиректы в кэш не попадают никогда.
+ *  2. **Изоляция аккаунтов.** Navigation/RSC никогда не попадают в Cache API:
+ *     cookie не входит в ключ, поэтому offline отдаёт только нейтральный
+ *     `/offline.html`, а не данные предыдущего аккаунта на общем устройстве.
  *  3. **Стратегия обновления SW.** `skipWaiting` + `clients.claim` + чистка
  *     старых версионных кэшей на activate — новый SW берёт управление сразу,
  *     осиротевшие кэши прошлых версий сносятся.
@@ -185,16 +182,14 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     // версионные кэши прошлого деплоя + текущие (имена держит сам sw.js)
     await caches.open("static-v1");
     await caches.open("runtime-v1");
-    await caches.open("static-v5");
-    await caches.open("runtime-v5");
+    await caches.open("static-v6");
     const evt = makeEvent("/activate");
     listeners.activate(evt);
     await new Promise((r) => setTimeout(r, 0));
     const remaining = await caches.keys();
     expect(remaining).not.toContain("static-v1");
     expect(remaining).not.toContain("runtime-v1");
-    expect(remaining).toContain("static-v5");
-    expect(remaining).toContain("runtime-v5");
+    expect(remaining).toContain("static-v6");
     expect(claim).toHaveBeenCalled();
   });
 
@@ -217,7 +212,7 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     expect(res?.body).toBe(OFFLINE_BODY);
   });
 
-  it("навигация онлайн (200) → отдаёт сетевой ответ и кэширует его для офлайна (инвариант 2, network-first)", async () => {
+  it("навигация онлайн (200) → отдаёт сетевой ответ, но НЕ кэширует private HTML", async () => {
     const networkBody = "FRESH_NETWORK_RENDER";
     const env = loadSw((req) =>
       keyOf(req).endsWith("/dashboard")
@@ -232,16 +227,16 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     const navEvt = makeEvent(navReq);
     env.listeners.fetch(navEvt);
     const res = await navEvt.responded;
-    // сеть выигрывает онлайн → свежий рендер, никакого stale-shell
+    // сеть выигрывает онлайн → свежий рендер.
     expect(res?.body).toBe(networkBody);
-    // дать put-в-кэш в network-first завершиться
+    // Личный HTML не может быть доступен следующему пользователю offline.
     await new Promise((r) => setTimeout(r, 0));
     // чистый 200 ОСЕЛ в кэше → доступен офлайн следующим заходом
     const cached = await env.caches.match(navReq);
-    expect(cached?.body).toBe(networkBody);
+    expect(cached).toBeUndefined();
   });
 
-  it("навигация офлайн на ранее закэшированную страницу → отдаёт кэш, не offline.html (H15.2, офлайн-чтение)", async () => {
+  it("навигация офлайн на ранее открытую private страницу → отдаёт только neutral offline.html", async () => {
     const statsBody = "STATS_KPI_SNAPSHOT";
     let online = true;
     const env = loadSw((req) => {
@@ -260,7 +255,7 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
       url: "https://fitnesss.online/stats",
       mode: "navigate",
     };
-    // 1) онлайн-заход прогревает кэш
+    // 1) онлайн-заход не прогревает private cache
     const onlineEvt = makeEvent(statsReq);
     env.listeners.fetch(onlineEvt);
     await onlineEvt.responded;
@@ -270,11 +265,11 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     const offlineEvt = makeEvent(statsReq);
     env.listeners.fetch(offlineEvt);
     const res = await offlineEvt.responded;
-    // видим последние данные, а не дино/offline.html
-    expect(res?.body).toBe(statsBody);
+    // Данные прошлого аккаунта не доступны без сети.
+    expect(res?.body).toBe(OFFLINE_BODY);
   });
 
-  it("навигация онлайн (307 редирект) → отдаёт ответ, но НЕ кэширует (анти-stale-login guard)", async () => {
+  it("навигация онлайн (307 редирект) → отдаёт ответ, но НЕ кэширует", async () => {
     const env = loadSw((req) =>
       keyOf(req).endsWith("/dashboard")
         ? Promise.resolve(

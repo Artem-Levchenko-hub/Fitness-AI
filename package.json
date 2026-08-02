@@ -29,13 +29,21 @@
       "unrs-resolver",
       "@google/genai",
       "protobufjs"
-    ]
+    ],
+    "overrides": {
+      "postcss@<8.5.18": "8.5.25",
+      "uuid@<11.1.1": "11.1.1",
+      "ws@>=8.0.0 <8.21.0": "8.21.1",
+      "protobufjs@<7.6.5": "7.6.5",
+      "@babel/core@<=7.29.0": "7.29.6",
+      "sharp@<0.35.0": "0.35.3"
+    }
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.79",
     "@ai-sdk/openai": "^3.0.54",
     "@ai-sdk/react": "^3.0.172",
-    "@auth/drizzle-adapter": "^1.11.2",
+    "@auth/drizzle-adapter": "^1.11.3",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
@@ -58,8 +66,8 @@
     "framer-motion": "^12.38.0",
     "geist": "^1.7.2",
     "lucide-react": "^1.14.0",
-    "next": "16.2.4",
-    "next-auth": "5.0.0-beta.31",
+    "next": "16.2.12",
+    "next-auth": "5.0.0-beta.32",
     "next-themes": "^0.4.6",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.9",
@@ -74,7 +82,6 @@
     "tailwind-merge": "^3.5.0",
     "three": "^0.184.0",
     "ts-pattern": "^5.9.0",
-    "undici": "^6.25.0",
     "web-push": "^3.6.7",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
@@ -97,7 +104,7 @@
     "draco3dgltf": "^1.5.7",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.2.12",
     "jsdom": "^29.1.0",
     "lefthook": "^2.1.6",
     "meshoptimizer": "^1.1.1",

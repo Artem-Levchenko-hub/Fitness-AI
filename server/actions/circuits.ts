@@ -14,6 +14,7 @@ import {
   cloneCircuit,
   deleteCircuit,
   finishCircuit,
+  getCircuitForUser,
   logCircuitRound,
   startCircuit,
 } from "@/lib/repos/circuits.repo";
@@ -195,6 +196,11 @@ export async function finishCircuitAction(formData: FormData) {
     notes: formData.get("notes") || null,
   });
   if (!parsed.success) throw new Error("Bad circuitId");
+
+  const beforeFinish = await getCircuitForUser(user.id, parsed.data.circuitId);
+  if (!beforeFinish || beforeFinish.workout.status !== "active") {
+    throw new Error("Активная круговая тренировка не найдена");
+  }
 
   await finishCircuit(user.id, parsed.data.circuitId, parsed.data.notes);
 

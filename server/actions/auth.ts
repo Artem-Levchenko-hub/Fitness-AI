@@ -8,7 +8,8 @@ const emailSchema = z.object({
   email: z
     .string()
     .min(1, "Введите email")
-    .email("Похоже на неправильный email"),
+    .email("Похоже на неправильный email")
+    .regex(/^[\x21-\x7e]+$/, "Используйте email латиницей"),
   callbackUrl: z.string().optional(),
 });
 
@@ -36,7 +37,7 @@ export async function signInWithEmail(
     };
   }
 
-  const callbackUrl = parsed.data.callbackUrl ?? "/dashboard";
+  const callbackUrl = sanitizeCallbackUrl(parsed.data.callbackUrl);
 
   try {
     await signIn("resend", {
@@ -58,4 +59,13 @@ export async function signInWithEmail(
 
 export async function signOutAction() {
   await signOut({ redirectTo: "/" });
+}
+
+/** Server action можно вызвать вне формы, поэтому callback валидируется здесь,
+ * а не доверяется hidden input. */
+function sanitizeCallbackUrl(raw: string | undefined): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) {
+    return "/dashboard";
+  }
+  return raw;
 }

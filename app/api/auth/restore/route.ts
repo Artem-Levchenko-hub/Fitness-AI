@@ -8,18 +8,16 @@ import { eq } from "drizzle-orm";
 
 import {
   REFRESH_COOKIE_NAME,
-  verifyRefreshToken,
+  REFRESH_MAX_AGE_SECONDS,
+  rotateRefreshToken,
 } from "@/lib/auth/refresh";
 
 const SESSION_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
 const SESSION_COOKIE = "authjs.session-token";
 
-/** Возвращает свежий session-cookie по любому действующему refresh-токену.
- *  Используется в двух режимах:
- *  - GET — proxy.ts заворачивает сюда, когда видит refresh-cookie
- *    (для браузеров где cookies стабильны).
- *  - POST {token} — клиент с /login отправляет refresh из localStorage
- *    (для iOS PWA, где cookies теряются при suspend). */
+/** Возвращает свежий session-cookie только по HttpOnly refresh-cookie. Каждый
+ * restore атомарно ротирует opaque token в БД, поэтому украденная старая копия
+ * не переживает первое же законное восстановление. */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const next = sanitizeNext(url.searchParams.get("next"));
@@ -31,14 +29,16 @@ export async function GET(req: Request) {
     return redirectToLogin(req, next);
   }
 
-  const userId = await verifyRefreshToken(refreshValue);
-  if (!userId) {
-    const res = redirectToLogin(req, next);
-    res.cookies.delete(REFRESH_COOKIE_NAME);
-    return res;
+  const refresh = await rotateRefreshToken(refreshValue);
+  if (!refresh) {
+    // Не отправляем Set-Cookie delete: два параллельных restore могут предъявить
+    // один старый token. Первый атомарно ротирует его, а запоздавший ответ второго
+    // не должен стереть уже выданную successor-cookie. Невалидный opaque token
+    // всё равно ничего не авторизует и будет заменён при следующем входе.
+    return redirectToLogin(req, next);
   }
 
-  const sessionToken = await issueSessionToken(userId);
+  const sessionToken = await issueSessionToken(refresh.userId);
   if (!sessionToken) {
     const res = redirectToLogin(req, next);
     res.cookies.delete(REFRESH_COOKIE_NAME);
@@ -47,34 +47,18 @@ export async function GET(req: Request) {
 
   const response = NextResponse.redirect(new URL(next, req.url));
   setSessionCookie(response, sessionToken);
+  setRefreshCookie(response, refresh.token);
   return response;
 }
 
-export async function POST(req: Request) {
-  let token: string | null = null;
-  try {
-    const body = (await req.json()) as { token?: unknown };
-    if (typeof body.token === "string") token = body.token;
-  } catch {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  }
-  if (!token) {
-    return NextResponse.json({ error: "missing_token" }, { status: 400 });
-  }
-
-  const userId = await verifyRefreshToken(token);
-  if (!userId) {
-    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
-  }
-
-  const sessionToken = await issueSessionToken(userId);
-  if (!sessionToken) {
-    return NextResponse.json({ error: "user_not_found" }, { status: 401 });
-  }
-
-  const response = NextResponse.json({ ok: true });
-  setSessionCookie(response, sessionToken);
-  return response;
+export async function POST() {
+  // Раньше этот маршрут принимал bearer из localStorage/IndexedDB. Оставляем
+  // явный 405 вместо silent fallback, чтобы старые клиенты не могли вернуть
+  // небезопасный канал хранения токена.
+  return NextResponse.json(
+    { error: "method_not_allowed" },
+    { status: 405, headers: { Allow: "GET", "Cache-Control": "no-store" } },
+  );
 }
 
 async function issueSessionToken(userId: string): Promise<string | null> {
@@ -106,6 +90,18 @@ function setSessionCookie(response: NextResponse, value: string) {
     path: "/",
     secure: process.env.NODE_ENV === "production",
     maxAge: SESSION_MAX_AGE,
+  });
+}
+
+function setRefreshCookie(response: NextResponse, value: string) {
+  response.cookies.set({
+    name: REFRESH_COOKIE_NAME,
+    value,
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: REFRESH_MAX_AGE_SECONDS,
   });
 }
 

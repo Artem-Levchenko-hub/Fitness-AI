@@ -9,6 +9,7 @@ import {
 } from "@/lib/ai/weekly-review-run";
 import { requireUser } from "@/lib/auth/require-user";
 import { getUserProfile } from "@/lib/repos/body.repo";
+import { claimAiCapacity, settleAiCapacity } from "@/lib/ai/guard";
 import { CircuitOpenError } from "@/lib/safety/circuit-breaker";
 
 export type WeeklyReviewResult =
@@ -33,10 +34,28 @@ export async function requestWeeklyReview(): Promise<WeeklyReviewResult> {
     return { ok: false, error: "AI-тренер сейчас не настроен." };
   }
 
+  const capacity = await claimAiCapacity({
+    userId: user.id,
+    operation: "weekly_review",
+    requestKey: `weekly-manual:${user.id}:${new Date().toISOString().slice(0, 10)}`,
+  });
+  if (capacity.kind !== "allowed") {
+    return {
+      ok: false,
+      error:
+        capacity.kind === "subscription_required"
+          ? "Для недельного AI-разбора нужна активная подписка Pro."
+          : capacity.kind === "quota_exceeded"
+            ? capacity.message
+            : "Слишком много AI-запросов. Попробуйте чуть позже.",
+    };
+  }
+
   try {
     const profile = await getUserProfile(user.id);
     const tz = profile?.timezone ?? "Europe/Moscow";
     const { data, result } = await generateWeeklyReview(user.id, tz, new Date());
+    await settleAiCapacity(capacity.usageId, true);
     const exerciseLinks = buildExerciseLinkMap(
       data.keyMovements.map((m) => ({
         exerciseId: m.exerciseId,
@@ -46,6 +65,7 @@ export async function requestWeeklyReview(): Promise<WeeklyReviewResult> {
     );
     return { ok: true, data: result.json, exerciseLinks };
   } catch (err) {
+    await settleAiCapacity(capacity.usageId, false);
     if (err instanceof NoWeeklyDataError) {
       return { ok: false, error: err.message };
     }
