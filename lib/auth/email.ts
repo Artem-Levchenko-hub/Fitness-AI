@@ -10,7 +10,7 @@ type SendVerificationRequestParams = {
   provider: { from?: string; apiKey?: string };
 };
 
-const APP_NAME = "Fitness SaaS";
+const APP_NAME = "Fitness AI";
 const EXPIRES_MINUTES = 10;
 
 let _resend: Resend | null = null;

@@ -6,7 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * Цель — внешний прод-билд, НЕ локальный dev-сервер: проект self-hosted, локальная
  * Docker-тест-БД сломана, поэтому единственный рабочий E2E-путь — живой прод
- * (app.lead-generator.ru) с восстановленной сессией. Это тот же путь, что и
+ * (fitnesss.online) с восстановленной сессией. Это тот же путь, что и
  * ручной протокол верификации (issue-session.mjs → /api/auth/restore). Поэтому
  * здесь нет `webServer` — мы НЕ поднимаем приложение, а ходим к уже задеплоенному.
  *
@@ -14,7 +14,7 @@ import { defineConfig, devices } from "@playwright/test";
  * E2E_REFRESH_TOKEN и сохраняет storageState; смоук-проект его переиспользует.
  */
 
-const baseURL = process.env.E2E_BASE_URL ?? "https://app.lead-generator.ru";
+const baseURL = process.env.E2E_BASE_URL ?? "https://fitnesss.online";
 
 export default defineConfig({
   testDir: "./e2e",

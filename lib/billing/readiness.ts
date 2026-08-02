@@ -26,19 +26,22 @@ export function getBillingReadiness(): BillingReadiness {
   if (!env.LEGAL_DOCUMENTS_APPROVED) {
     paymentMissing.push("LEGAL_DOCUMENTS_APPROVED");
   }
+  if (env.BILLING_ENABLED !== true) {
+    paymentMissing.push("BILLING_ENABLED");
+  }
 
   const subscriptionMissing = [...paymentMissing];
   if (!env.CRON_SECRET) subscriptionMissing.push("CRON_SECRET");
+  if (env.SUBSCRIPTION_ENABLED !== true) {
+    subscriptionMissing.push("SUBSCRIPTION_ENABLED");
+  }
 
-  const paymentsEnabled =
-    paymentMissing.length === 0 && env.BILLING_ENABLED === true;
+  const paymentsEnabled = paymentMissing.length === 0;
 
   return {
     paymentsEnabled,
     subscriptionsEnabled:
-      subscriptionMissing.length === 0 &&
-      paymentsEnabled &&
-      env.SUBSCRIPTION_ENABLED === true,
+      subscriptionMissing.length === 0 && paymentsEnabled,
     mode: env.YOOKASSA_MODE,
     paymentMissing,
     subscriptionMissing,

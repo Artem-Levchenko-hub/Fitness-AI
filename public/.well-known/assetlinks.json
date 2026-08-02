@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.leadgenerator.fitness",
+      "sha256_cert_fingerprints": [
+        "F7:3B:6F:A0:60:75:59:16:88:B6:6E:6C:3E:DD:12:EB:E6:1D:FD:CB:D7:95:EB:82:59:50:5F:9D:0C:FD:4F:6A"
+      ]
+    }
+  }
+]

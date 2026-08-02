@@ -2,28 +2,30 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 
+import { getAppOrigin } from "@/lib/app-origin";
+
 import { Providers } from "./providers";
 import "@fontsource-variable/lora/wght.css";
 import "./globals.css";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const appUrl = getAppOrigin();
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: "Fitness SaaS — трекинг силовых тренировок с AI-анализом",
-    template: "%s · Fitness SaaS",
+    default: "Fitness AI — дневник тренировок с AI-анализом",
+    template: "%s · Fitness AI",
   },
   description:
     "Создавайте шаблоны тренировок, фиксируйте подходы и получайте AI-анализ прогресса по силе, объёму и технике.",
-  applicationName: "Fitness SaaS",
+  applicationName: "Fitness AI",
   authors: [{ name: "Innertalk Studio" }],
   creator: "Innertalk Studio",
   formatDetection: { telephone: false, email: false, address: false },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Fitness",
+    title: "Fitness AI",
   },
   other: {
     "mobile-web-app-capable": "yes",

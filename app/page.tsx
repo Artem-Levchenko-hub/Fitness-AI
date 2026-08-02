@@ -6,7 +6,7 @@ export default function HomePage() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 px-6 py-16">
       <p className="text-muted-foreground text-xs font-medium tracking-[0.24em] uppercase">
-        Fitness SaaS
+        Fitness AI
       </p>
 
       <h1 className="font-serif max-w-2xl text-balance text-center text-5xl font-normal leading-[1.05] tracking-tight md:text-7xl">

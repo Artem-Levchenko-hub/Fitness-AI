@@ -81,6 +81,18 @@ describe("billing readiness", () => {
     );
   });
 
+  it("reports disabled payment and subscription feature flags explicitly", () => {
+    mockedEnv.BILLING_ENABLED = false;
+    mockedEnv.SUBSCRIPTION_ENABLED = false;
+
+    expect(getBillingReadiness()).toMatchObject({
+      paymentsEnabled: false,
+      subscriptionsEnabled: false,
+      paymentMissing: ["BILLING_ENABLED"],
+      subscriptionMissing: ["BILLING_ENABLED", "SUBSCRIPTION_ENABLED"],
+    });
+  });
+
   it("checks webhook IPs by default only for live production", () => {
     expect(shouldCheckYookassaWebhookIp()).toBe(false);
 

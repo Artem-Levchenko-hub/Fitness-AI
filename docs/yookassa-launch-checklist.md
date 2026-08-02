@@ -1,7 +1,7 @@
 # Fitness AI — подключение ЮKassa и официальный запуск
 
-Этот чек-лист готовит тестовый магазин. Он **не разрешает** production и
-Google Play: боевой режим включается только отдельным подтверждением владельца.
+Этот чек-лист готовит тестовый и боевой магазин. Боевой режим и Google Play
+включаются только после выполнения юридических, кассовых и платёжных проверок.
 
 ## Что уже реализовано
 
@@ -97,7 +97,7 @@ LEGAL_DOCUMENTS_APPROVED=true
 В кабинете ЮKassa → Интеграция → HTTP-уведомления:
 
 ```text
-https://<dev-host>/api/yookassa/webhook
+https://fitnesss.online/api/yookassa/webhook
 ```
 
 Включить:
@@ -139,7 +139,7 @@ Cron должен вызывать:
 Проверка:
 
 ```bash
-curl -fsS https://<dev-host>/api/health
+curl -fsS https://fitnesss.online/api/health
 ```
 
 Ожидаемо в test mode после включения флагов:
@@ -187,15 +187,22 @@ curl -fsS https://<dev-host>/api/health
 
 ## 7. Android и Google Play
 
-ЮKassa подходит для web/PWA. Продажа цифровой подписки внутри приложения,
-распространяемого через Google Play, может подпадать под обязательное
-использование Google Play Billing или отдельную разрешённую программу
-альтернативного биллинга. До публикации Android release:
+ЮKassa подходит для web/PWA и APK, распространяемого напрямую. Для пользователей
+Google Play в России Google сейчас приостановил Play Billing и отдельно указывает,
+что требование использовать его не применяется к принимающим оплату приложениям.
+Для пользователей за пределами России остаются общая Payments policy и
+региональные программы alternative/user-choice billing. До публикации в Play:
 
 1. проверить актуальную политику Google Play для региона распространения;
 2. решить, будет Android-клиент consumption-only или получит Play Billing;
 3. не показывать YooKassa checkout в Play-сборке без подтверждённого основания;
 4. отдельно получить подтверждение владельца на публикацию.
+
+Актуальные официальные источники:
+
+- <https://support.google.com/googleplay/android-developer/answer/11950272>;
+- <https://support.google.com/googleplay/android-developer/answer/9858738>;
+- <https://support.google.com/googleplay/android-developer/answer/13821247>.
 
 ## 8. Переход в live
 
