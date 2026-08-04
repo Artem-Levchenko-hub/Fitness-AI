@@ -97,6 +97,9 @@ export function TemplateBuilder({
   const [items, setItems] = useState<BuilderItem[]>(
     initial?.items ?? [],
   );
+  const [defaultMyoReps, setDefaultMyoReps] = useState(
+    () => initial?.items.some((item) => item.myoReps) ?? false,
+  );
 
   const [state, formAction, pending] = useActionState<
     TemplateActionState,
@@ -122,9 +125,22 @@ export function TemplateBuilder({
   }
 
   function addItem() {
+    const myoDefaults = defaultMyoReps
+      ? {
+          myoReps: true,
+          targetRepsMin: MYO_ACTIVATION_MIN,
+          targetRepsMax: MYO_ACTIVATION_MAX,
+        }
+      : {};
+
     setItems((prev) => [
       ...prev,
-      { uid: crypto.randomUUID(), exerciseId: "", ...DEFAULT_ITEM },
+      {
+        uid: crypto.randomUUID(),
+        exerciseId: "",
+        ...DEFAULT_ITEM,
+        ...myoDefaults,
+      },
     ]);
   }
 
@@ -199,7 +215,52 @@ export function TemplateBuilder({
             Упражнения ({items.length})
           </h2>
           <p className="text-muted-foreground mt-1 text-xs">
-            Для каждого упражнения можно включить Мио-репсы.
+            Выбери режим новых упражнений. Его можно изменить у каждого упражнения.
+          </p>
+        </div>
+
+        <div className="bg-card border-border mb-4 rounded-2xl border p-4">
+          <p className="text-muted-foreground text-[10px] font-medium tracking-[0.18em] uppercase">
+            Режим новых упражнений
+          </p>
+          <div
+            role="group"
+            aria-label="Режим новых упражнений"
+            className="bg-muted/50 mt-3 grid grid-cols-2 gap-1 rounded-xl p-1"
+          >
+            <button
+              type="button"
+              aria-pressed={!defaultMyoReps}
+              onClick={() => setDefaultMyoReps(false)}
+              className={cn(
+                "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
+                !defaultMyoReps
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Классические
+            </button>
+            <button
+              type="button"
+              aria-pressed={defaultMyoReps}
+              onClick={() => setDefaultMyoReps(true)}
+              className={cn(
+                "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
+                defaultMyoReps
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Zap className="size-4" aria-hidden="true" />
+                Myo-reps
+              </span>
+            </button>
+          </div>
+          <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+            Myo-reps: один активационный подход и короткие мини-сеты с тем же
+            весом. Настройка сохраняется в каждом упражнении шаблона.
           </p>
         </div>
 
@@ -298,6 +359,17 @@ function SortableItem({
     zIndex: isDragging ? 50 : undefined,
   };
 
+  function setMyoReps(enabled: boolean) {
+    const bumpReps =
+      enabled && item.targetRepsMin === 8 && item.targetRepsMax === 12
+        ? {
+            targetRepsMin: MYO_ACTIVATION_MIN,
+            targetRepsMax: MYO_ACTIVATION_MAX,
+          }
+        : {};
+    onChange({ myoReps: enabled, ...bumpReps });
+  }
+
   return (
     <li
       ref={setNodeRef}
@@ -340,82 +412,62 @@ function SortableItem({
       </div>
 
       <div
-        className={cn(
-          "mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5",
-          item.myoReps
-            ? "border-primary/30 bg-primary/5"
-            : "border-border bg-muted/30",
-        )}
+        role="group"
+        aria-label="Система подходов"
+        className="bg-muted/50 mb-3 grid grid-cols-2 gap-1 rounded-xl p-1"
       >
-        <div className="min-w-0">
-          <span className="flex items-center gap-1.5 text-sm font-medium">
-            <Zap
-              className={cn(
-                "size-4",
-                item.myoReps ? "text-primary" : "text-muted-foreground",
-              )}
-              aria-hidden="true"
-            />
-            Мио-репсы
+        <button
+          type="button"
+          aria-pressed={!item.myoReps}
+          onClick={() => setMyoReps(false)}
+          className={cn(
+            "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
+            !item.myoReps
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Классические
+        </button>
+        <button
+          type="button"
+          aria-pressed={item.myoReps}
+          onClick={() => setMyoReps(true)}
+          className={cn(
+            "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
+            item.myoReps
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Zap className="size-3.5" aria-hidden="true" />
+            Myo-reps
           </span>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            {item.myoReps
-              ? "Активационный подход и мини-сеты"
-              : "Включите для этого упражнения"}
-          </p>
-        </div>
-        <MyoToggle
-          enabled={item.myoReps}
-          onToggle={() => {
-            const next = !item.myoReps;
-            // Включили протокол при дефолтном диапазоне 8–12 — подсказываем
-            // активационные 12–20 (почти до отказа). Свой диапазон не трогаем.
-            const bumpReps =
-              next && item.targetRepsMin === 8 && item.targetRepsMax === 12
-                ? {
-                    targetRepsMin: MYO_ACTIVATION_MIN,
-                    targetRepsMax: MYO_ACTIVATION_MAX,
-                  }
-                : {};
-            onChange({ myoReps: next, ...bumpReps });
-          }}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <NumField
-          label="Подходы"
-          value={item.targetSets}
-          min={1}
-          max={20}
-          onChange={(v) => onChange({ targetSets: v ?? 1 })}
-        />
-        <RangeField
-          label="Повторения"
-          min={item.targetRepsMin}
-          max={item.targetRepsMax}
-          onMinChange={(v) => onChange({ targetRepsMin: v })}
-          onMaxChange={(v) => onChange({ targetRepsMax: v })}
-        />
-        <NumField
-          label="Вес (кг)"
-          value={item.targetWeightKg}
-          decimal
-          allowEmpty
-          onChange={(v) => onChange({ targetWeightKg: v })}
-        />
-        <NumField
-          label="Отдых (сек)"
-          value={item.targetRestSeconds}
-          min={15}
-          max={900}
-          onChange={(v) => onChange({ targetRestSeconds: v ?? 60 })}
-        />
+        </button>
       </div>
 
       {item.myoReps ? (
-        <div className="border-primary/20 mt-3 border-t pt-3">
-          <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="border-primary/20 bg-primary/5 rounded-xl border p-3">
+          <p className="text-primary mb-3 inline-flex items-center gap-1.5 text-xs font-semibold">
+            <Zap className="size-3.5" aria-hidden="true" />
+            Активация + мини-сеты
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <RangeField
+              label="Активация"
+              min={item.targetRepsMin}
+              max={item.targetRepsMax}
+              onMinChange={(v) => onChange({ targetRepsMin: v })}
+              onMaxChange={(v) => onChange({ targetRepsMax: v })}
+            />
+            <NumField
+              label="Вес (кг)"
+              value={item.targetWeightKg}
+              decimal
+              allowEmpty
+              onChange={(v) => onChange({ targetWeightKg: v })}
+            />
             <NumField
               label="Мини-сеты"
               value={item.myoMiniSets}
@@ -439,41 +491,42 @@ function SortableItem({
           </p>
           <MyoRepsInfo />
         </div>
-      ) : null}
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <NumField
+            label="Подходы"
+            value={item.targetSets}
+            min={1}
+            max={20}
+            onChange={(v) => onChange({ targetSets: v ?? 1 })}
+          />
+          <RangeField
+            label="Повторения"
+            min={item.targetRepsMin}
+            max={item.targetRepsMax}
+            onMinChange={(v) => onChange({ targetRepsMin: v })}
+            onMaxChange={(v) => onChange({ targetRepsMax: v })}
+          />
+          <NumField
+            label="Вес (кг)"
+            value={item.targetWeightKg}
+            decimal
+            allowEmpty
+            onChange={(v) => onChange({ targetWeightKg: v })}
+          />
+          <NumField
+            label="Отдых (сек)"
+            value={item.targetRestSeconds}
+            min={15}
+            max={900}
+            onChange={(v) => onChange({ targetRestSeconds: v ?? 60 })}
+          />
+        </div>
+      )}
     </li>
   );
 }
 
-/** Тумблер миорепсов — тот же паттерн, что ShareProgramsToggle (role="switch",
- *  R-39/R-41), но локальный контролируемый: состояние живёт в BuilderItem. */
-function MyoToggle({
-  enabled,
-  onToggle,
-}: {
-  enabled: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      aria-label="Мио-репсы для этого упражнения"
-      onClick={onToggle}
-      className={cn(
-        "focus-visible:ring-ring relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none",
-        enabled ? "bg-primary" : "bg-muted",
-      )}
-    >
-      <span
-        className={cn(
-          "bg-background block size-5 rounded-full shadow transition-transform",
-          enabled ? "translate-x-6" : "translate-x-1",
-        )}
-      />
-    </button>
-  );
-}
 
 function NumField({
   label,

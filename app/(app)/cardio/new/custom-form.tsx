@@ -31,7 +31,7 @@ export function CustomPresetForm() {
         <div className="bg-primary/10 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
           <Settings2 className="size-5" />
         </div>
-        <div className="flex-1 space-y-3">
+        <div className="min-w-0 flex-1 space-y-3">
           <div>
             <h3 className="text-base font-semibold tracking-tight">Свой формат</h3>
             <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
@@ -39,7 +39,7 @@ export function CustomPresetForm() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Раундов" value={rounds} onChange={setRounds} min={1} max={60} name="rounds" />
             <Field label="Работа, сек" value={workSec} onChange={setWorkSec} min={5} max={600} name="workSec" />
             <Field label="Отдых, сек" value={restSec} onChange={setRestSec} min={0} max={600} name="restSec" />
@@ -49,7 +49,7 @@ export function CustomPresetForm() {
             <p className="text-muted-foreground tabular text-xs">
               Общее: {formatDuration(total)}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" className="min-h-11">
                 Начать
               </Button>
