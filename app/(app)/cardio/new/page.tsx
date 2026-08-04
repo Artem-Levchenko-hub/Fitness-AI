@@ -68,7 +68,7 @@ function PresetCard({
         <div className="bg-primary/10 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
           {icon}
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold tracking-tight">{m.nameRu}</h3>
           <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
             {m.subtitleRu}
@@ -76,7 +76,7 @@ function PresetCard({
           <p className="text-muted-foreground tabular mt-2 text-[10px] uppercase tracking-wide">
             Общее: {formatDuration(m.totalSec)}
           </p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button type="submit" className="min-h-11">
               Начать
             </Button>
@@ -108,35 +108,39 @@ function EmomCard() {
           <div className="bg-primary/10 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
             <Clock className="size-5" />
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold tracking-tight">{m.nameRu}</h3>
             <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
               {m.subtitleRu}
             </p>
-            <div className="mt-3 flex items-center gap-3">
-              <label
-                htmlFor="emomRounds"
-                className="text-muted-foreground text-[11px] uppercase tracking-wide"
-              >
-                Раундов
-              </label>
-              <NumberField
-                id="emomRounds"
-                name="emomRounds"
-                defaultValue="10"
-                className="tabular h-9 w-16 text-sm"
-              />
-              <Button type="submit" className="ml-auto min-h-11">
-                Начать
-              </Button>
-              <Button
-                type="submit"
-                formAction={saveCardioTemplateAction}
-                variant="outline"
-                className="min-h-11"
-              >
-                Сохранить как шаблон
-              </Button>
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center gap-3">
+                <label
+                  htmlFor="emomRounds"
+                  className="text-muted-foreground text-[11px] uppercase tracking-wide"
+                >
+                  Раундов
+                </label>
+                <NumberField
+                  id="emomRounds"
+                  name="emomRounds"
+                  defaultValue="10"
+                  className="tabular h-9 w-16 text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" className="min-h-11">
+                  Начать
+                </Button>
+                <Button
+                  type="submit"
+                  formAction={saveCardioTemplateAction}
+                  variant="outline"
+                  className="min-h-11"
+                >
+                  Сохранить как шаблон
+                </Button>
+              </div>
             </div>
           </div>
         </div>

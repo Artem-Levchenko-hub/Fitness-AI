@@ -41,12 +41,17 @@ test("mobile: exercises, Мио-репсы and quick activity fit the viewport",
 
   await page.goto(`/templates/${strengthTemplateId}`);
   await expect(page.getByText("Мио-репсы включены: 1")).toBeVisible();
-  await page
-    .getByRole("link", { name: "Настроить Мио-репсы для шаблона" })
-    .click();
+  await page.getByRole("link", { name: "Настроить Мио-репсы для шаблона" }).click();
   await expect(
-    page.getByRole("switch", { name: "Мио-репсы для этого упражнения" }),
-  ).toBeVisible();
+    page
+      .getByRole("group", { name: "Система подходов" })
+      .getByRole("button", { name: "Myo-reps" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expectNoPageOverflow(page);
+
+  await page.goto("/cardio/new");
+  await expect(page.getByRole("heading", { name: "Выбери формат", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Сохранить как шаблон" }).first()).toBeVisible();
   await expectNoPageOverflow(page);
 
   await page.goto("/dashboard");
