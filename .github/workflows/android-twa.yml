@@ -108,7 +108,13 @@ jobs:
           jarsigner -verify -verbose -certs "$AAB" 2>&1 | tee /tmp/aab-verify.log
           set -e
           grep -q "jar verified" /tmp/aab-verify.log
-          AAB_CERT_SHA256="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^SHA256: //p' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          # `keytool` likewise flags the self-signed chain. Its parsed SHA-256
+          # is still required to match both approved fingerprint sources.
+          set +e
+          AAB_CERT_OUTPUT="$(keytool -printcert -jarfile "$AAB" 2>&1)"
+          set -e
+          echo "$AAB_CERT_OUTPUT"
+          AAB_CERT_SHA256="$(echo "$AAB_CERT_OUTPUT" | sed -n 's/^SHA256: //p' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           test -n "$AAB_CERT_SHA256"
           test "$AAB_CERT_SHA256" = "$MANIFEST_SHA256"
           test "$AAB_CERT_SHA256" = "$ASSETLINKS_SHA256"
