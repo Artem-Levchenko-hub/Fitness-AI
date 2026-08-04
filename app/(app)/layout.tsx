@@ -18,7 +18,7 @@ export default async function AppLayout({
   const initialResumes = await getActiveResumes();
 
   return (
-    <div className="bg-background flex min-h-dvh flex-col">
+    <div className="bg-background flex min-h-dvh min-w-0 flex-col overflow-x-clip">
       <SessionRefreshSync />
       <OfflineBanner />
       <div className="flex-1 pb-36">{children}</div>

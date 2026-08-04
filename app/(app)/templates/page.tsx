@@ -151,6 +151,11 @@ function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
         {formatTemplateMeta(tpl)}
         {tpl.description ? ` · ${tpl.description}` : ""}
       </p>
+      {tpl.format === "strength" && (tpl.myoExerciseCount ?? 0) > 0 ? (
+        <span className="text-primary mt-1 inline-flex text-[10px] font-medium">
+          Myo-reps · {tpl.myoExerciseCount}
+        </span>
+      ) : null}
       {tpl.adapted ? (
         // Тренер подогнал шаблон под факт последней тренировки (R-41 — не только
         // цвет: иконка + текст).

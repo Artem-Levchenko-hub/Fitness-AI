@@ -30,7 +30,7 @@ export function PeriodPills() {
   }
 
   return (
-    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+    <div className="flex flex-wrap gap-1.5">
       {PERIODS.map((p) => {
         const active = current === p.v;
         return (

@@ -181,8 +181,12 @@ export function QuickActivityCard({
       ) : null}
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl">
-          <div className="mx-auto w-full max-w-md pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] w-full max-w-full overflow-x-clip overflow-y-auto rounded-t-2xl px-4 pt-4"
+          data-testid="quick-activity-sheet"
+        >
+          <div className="mx-auto min-w-0 w-full max-w-md pb-[max(env(safe-area-inset-bottom),0.5rem)]">
             <SheetHeader className="px-0">
               <SheetTitle>Доп. активность</SheetTitle>
               <SheetDescription>
@@ -217,7 +221,7 @@ export function QuickActivityCard({
                 <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
                   {mode === "total" ? "Повторов всего" : "Повторов в подходе"}
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="grid grid-cols-[3rem_3rem_minmax(4rem,1fr)_3rem_3rem] items-center gap-2 sm:grid-cols-[3.5rem_3.5rem_minmax(5rem,1fr)_3.5rem_3.5rem]">
                   <StepBtn onClick={() => bumpReps(-5)} label="−5" />
                   <StepBtn
                     onClick={() => bumpReps(-1)}
@@ -227,7 +231,7 @@ export function QuickActivityCard({
                   <NumberField
                     value={repsText}
                     onChange={setRepsText}
-                    className="tabular h-14 flex-1 text-center text-2xl font-semibold"
+                    className="tabular h-12 min-w-0 text-center text-2xl font-semibold sm:h-14"
                     aria-label="Повторы"
                     data-testid="quick-activity-reps"
                   />
@@ -259,7 +263,7 @@ export function QuickActivityCard({
                     type="button"
                     variant="outline"
                     size="xl"
-                    className="flex-1"
+                    className="min-w-0 flex-1 px-3 sm:px-6"
                     disabled={pending}
                     onClick={() => save(true)}
                     data-testid="quick-activity-save-more"
@@ -270,7 +274,7 @@ export function QuickActivityCard({
                 <Button
                   type="button"
                   size="xl"
-                  className="flex-1"
+                  className="min-w-0 flex-1 px-3 sm:px-6"
                   disabled={pending}
                   onClick={() => save(false)}
                   data-testid="quick-activity-save"
@@ -367,7 +371,7 @@ function StepBtn({
       type="button"
       onClick={onClick}
       aria-label={ariaLabel ?? label}
-      className="border-border bg-background hover:bg-accent tabular flex size-14 shrink-0 items-center justify-center rounded-xl border text-base font-semibold"
+      className="border-border bg-background hover:bg-accent tabular flex size-12 shrink-0 items-center justify-center rounded-xl border text-base font-semibold sm:size-14"
     >
       {icon ?? label}
     </button>
