@@ -12,6 +12,8 @@ export type TemplateListSource = {
   name: string;
   description: string | null;
   exerciseCount: number;
+  /** Есть только у силовых: число упражнений с myo-reps. */
+  myoExerciseCount?: number;
   updatedAt: Date;
   /** Авторство — для бейджа «Тренер» (авто-«следующая тренировка»). Опционально:
    *  у круговых/кардио источника нет → трактуем как ручной. */

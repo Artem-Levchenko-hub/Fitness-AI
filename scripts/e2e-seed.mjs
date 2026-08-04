@@ -446,7 +446,8 @@ try {
 
     // H12.2 — силовой шаблон: одна детерминированная строка workout_templates
     // + одно упражнение. /create показывает раскрытый список «Силовая» с этой
-    // строкой (1 упражнение); тап ведёт на экран старта /templates/<id>.
+    // строкой (1 упражнение с Myo-reps); тап ведёт на экран старта
+    // /templates/<id>. Так e2e проверяет, что Myo не исчезает из списка.
     // Идемпотентно: снос по маркеру (cascade → template_exercises).
     await sql`
       delete from workout_templates where user_id = ${verifyId} and name = ${STRENGTH_TEMPLATE_MARKER}`;
@@ -457,8 +458,9 @@ try {
     await sql`
       insert into template_exercises (id, template_id, exercise_id, position,
                                       target_sets, target_reps_min, target_reps_max,
-                                      target_rest_seconds)
-      values (${randomUUID()}, ${strengthTemplateId}, ${exerciseId}, 0, 3, 8, 12, 120)`;
+                                       target_rest_seconds, myo_reps,
+                                       myo_mini_sets, myo_mini_reps, myo_mini_rest_seconds)
+       values (${randomUUID()}, ${strengthTemplateId}, ${exerciseId}, 0, 3, 8, 12, 120, true, 3, 4, 30)`;
 
     // H16.2 — тренировка В ОЖИДАНИИ разбора: завершённая силовая БЕЗ
     // ai_analyses + pending ai_job → /workouts/<id>/trainer рендерит

@@ -8,6 +8,7 @@ import {
   isNotNull,
   isNull,
   or,
+  sql,
 } from "drizzle-orm";
 
 import { db } from "@/db/client";
@@ -21,6 +22,8 @@ export type TemplateListItem = {
   name: string;
   description: string | null;
   exerciseCount: number;
+  /** Число упражнений с включённым myo-reps — для метки в списках шаблонов. */
+  myoExerciseCount: number;
   updatedAt: Date;
   /** Авторство шаблона — для бейджа «Тренер» (H-T1). */
   source: TemplateSource;
@@ -83,6 +86,8 @@ export async function listTemplates(
       source: schema.workoutTemplates.source,
       lastAdaptedWorkoutId: schema.workoutTemplates.lastAdaptedWorkoutId,
       exerciseCount: count(schema.templateExercises.id),
+      myoExerciseCount:
+        sql<number>`coalesce(sum(case when ${schema.templateExercises.myoReps} then 1 else 0 end), 0)::int`,
     })
     .from(schema.workoutTemplates)
     .leftJoin(

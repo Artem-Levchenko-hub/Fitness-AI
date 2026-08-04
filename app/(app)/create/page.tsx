@@ -158,6 +158,11 @@ function StrengthStartCard({ templates }: { templates: TemplateListItem[] }) {
                     <p className="text-muted-foreground mt-0.5 text-xs">
                       {formatExerciseCount(t.exerciseCount)}
                     </p>
+                    {t.myoExerciseCount > 0 ? (
+                      <span className="text-primary mt-1 inline-flex text-[10px] font-medium">
+                        Myo-reps · {t.myoExerciseCount}
+                      </span>
+                    ) : null}
                     {t.adapted || t.source === "trainer" ? (
                       <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
                         <Wand2 className="size-3" aria-hidden="true" />
