@@ -100,7 +100,13 @@ jobs:
           VERSION_CODE="$(jq -r '.appVersionCode' twa-manifest.json)"
           echo "$BADGING" | grep "package: name='app.leadgenerator.fitness' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'"
           echo "$BADGING" | grep "targetSdkVersion:'36'"
-          jarsigner -verify -verbose -certs "$AAB" | tee /tmp/aab-verify.log
+          # AAB is signed with our self-signed release certificate. `jarsigner`
+          # returns a warning status for its untrusted chain, even after a valid
+          # signature verification. Check the verified result and certificate
+          # fingerprint below instead of rejecting that expected warning.
+          set +e
+          jarsigner -verify -verbose -certs "$AAB" 2>&1 | tee /tmp/aab-verify.log
+          set -e
           grep -q "jar verified" /tmp/aab-verify.log
           AAB_CERT_SHA256="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^SHA256: //p' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           test -n "$AAB_CERT_SHA256"
