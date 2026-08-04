@@ -11,26 +11,26 @@ import {
 } from "./app-update";
 
 const release: AppReleaseInfo = {
-  version: "1.2.1",
+  version: "1.2.2",
   downloadUrl: "https://example.com/app.apk",
   releaseUrl: "https://example.com/release",
 };
 
 describe("app update versions", () => {
   it("сравнивает major, minor и patch", () => {
-    expect(compareVersions("1.2.0", "1.2.1")).toBe(-1);
-    expect(compareVersions("1.2.1", "1.2.1")).toBe(0);
+    expect(compareVersions("1.2.1", "1.2.2")).toBe(-1);
+    expect(compareVersions("1.2.2", "1.2.2")).toBe(0);
     expect(compareVersions("2.0.0", "1.9.9")).toBe(1);
   });
 
   it("отбрасывает неоднозначные версии", () => {
     expect(parseVersion("1.02.0")).toBeNull();
-    expect(compareVersions("latest", "1.2.1")).toBeNull();
+    expect(compareVersions("latest", "1.2.2")).toBeNull();
   });
 
   it("возвращает релиз только для устаревшего клиента", () => {
     expect(getAvailableUpdate("1.1.0", release)).toEqual(release);
-    expect(getAvailableUpdate("1.2.1", release)).toBeNull();
+    expect(getAvailableUpdate("1.2.2", release)).toBeNull();
     expect(getAvailableUpdate("1.3.0", release)).toBeNull();
   });
 });
@@ -38,16 +38,16 @@ describe("app update versions", () => {
 describe("android client marker", () => {
   it("читает версию из TWA startUrl", () => {
     expect(
-      readAndroidClientVersion("?client=android&appVersion=1.2.1"),
-    ).toBe("1.2.1");
+      readAndroidClientVersion("?client=android&appVersion=1.2.2"),
+    ).toBe("1.2.2");
   });
 
   it("читает версию из callbackUrl после редиректа на вход", () => {
     const callbackUrl = encodeURIComponent(
-      "/dashboard?client=android&appVersion=1.2.1",
+      "/dashboard?client=android&appVersion=1.2.2",
     );
     expect(readAndroidClientVersion(`?callbackUrl=${callbackUrl}`)).toBe(
-      "1.2.1",
+      "1.2.2",
     );
   });
 
@@ -57,7 +57,7 @@ describe("android client marker", () => {
         "?callbackUrl=https%3A%2F%2Fevil.example%2F%3Fclient%3Dandroid%26appVersion%3D9.0.0",
       ),
     ).toBeNull();
-    expect(readAndroidClientVersion("?client=web&appVersion=1.2.1")).toBeNull();
+    expect(readAndroidClientVersion("?client=web&appVersion=1.2.2")).toBeNull();
   });
 });
 
@@ -76,5 +76,5 @@ it("синхронизирует Android release, TWA-маркер и versionCod
   expect(twa.appVersion).toBe(twa.appVersionName);
   expect(startUrl.searchParams.get("client")).toBe("android");
   expect(startUrl.searchParams.get("appVersion")).toBe(twa.appVersionName);
-  expect(twa.appVersionCode).toBe(6);
+  expect(twa.appVersionCode).toBe(7);
 });
