@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
+import { getAppOrigin } from "@/lib/app-origin";
 import { authConfig, REFRESH_COOKIE_NAME } from "@/lib/auth/config";
 
 const PROTECTED_PREFIXES = [
@@ -75,12 +76,12 @@ export default auth((req) => {
   if (isProtected && !req.auth) {
     const returnPath = `${pathname}${req.nextUrl.search}`;
     if (req.cookies.has(REFRESH_COOKIE_NAME)) {
-      const restoreUrl = new URL("/api/auth/restore", req.url);
+      const restoreUrl = new URL("/api/auth/restore", getAppOrigin());
       restoreUrl.searchParams.set("next", returnPath);
       return withCsp(NextResponse.redirect(restoreUrl), csp);
     }
 
-    const loginUrl = new URL("/login", req.url);
+    const loginUrl = new URL("/login", getAppOrigin());
     loginUrl.searchParams.set("callbackUrl", returnPath);
     return withCsp(NextResponse.redirect(loginUrl), csp);
   }

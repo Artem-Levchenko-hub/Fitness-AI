@@ -6,6 +6,7 @@ import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+import { getAppOrigin } from "@/lib/app-origin";
 import {
   REFRESH_COOKIE_NAME,
   REFRESH_MAX_AGE_SECONDS,
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
     return res;
   }
 
-  const response = NextResponse.redirect(new URL(next, req.url));
+  const response = NextResponse.redirect(new URL(next, getAppOrigin()));
   setSessionCookie(response, sessionToken);
   setRefreshCookie(response, refresh.token);
   return response;
@@ -113,7 +114,7 @@ function sanitizeNext(raw: string | null): string {
 }
 
 function redirectToLogin(req: Request, next: string) {
-  const url = new URL("/login", req.url);
+  const url = new URL("/login", getAppOrigin());
   if (next && next !== "/dashboard") url.searchParams.set("callbackUrl", next);
   return NextResponse.redirect(url);
 }
