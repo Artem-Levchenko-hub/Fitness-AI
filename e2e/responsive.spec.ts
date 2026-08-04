@@ -18,7 +18,7 @@ test.beforeAll(() => {
   }
 });
 
-test("mobile: exercises, Myo-reps and quick activity fit the viewport", async ({
+test("mobile: exercises, Мио-репсы and quick activity fit the viewport", async ({
   page,
 }) => {
   await page.goto("/exercises");
@@ -36,7 +36,17 @@ test("mobile: exercises, Myo-reps and quick activity fit the viewport", async ({
   const myoTemplate = page.locator(
     `a[href="/templates/${strengthTemplateId}"]`,
   );
-  await expect(myoTemplate).toContainText("Myo-reps · 1");
+  await expect(myoTemplate).toContainText("Мио-репсы · 1");
+  await expectNoPageOverflow(page);
+
+  await page.goto(`/templates/${strengthTemplateId}`);
+  await expect(page.getByText("Мио-репсы включены: 1")).toBeVisible();
+  await page
+    .getByRole("link", { name: "Настроить Мио-репсы для шаблона" })
+    .click();
+  await expect(
+    page.getByRole("switch", { name: "Мио-репсы для этого упражнения" }),
+  ).toBeVisible();
   await expectNoPageOverflow(page);
 
   await page.goto("/dashboard");

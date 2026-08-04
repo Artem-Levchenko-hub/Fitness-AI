@@ -1,4 +1,4 @@
-import { ChevronLeft, Pencil, Wand2 } from "lucide-react";
+import { ChevronLeft, Pencil, Wand2, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -27,6 +27,7 @@ export default async function TemplateDetailPage({ params }: Props) {
 
   const lastAnalysis = await getLastTemplateAnalysis(user.id, id);
   const lastFocus = lastAnalysis ? extractPastAdvice(lastAnalysis).focus : null;
+  const myoExerciseCount = tpl.items.filter((item) => item.myoReps).length;
 
   // Подпись «обновлён тренером · <дата>». adaptedAt может быть null у шаблонов,
   // адаптированных ДО миграции 0023 (старый путь не писал дату) — тогда без даты.
@@ -75,6 +76,30 @@ export default async function TemplateDetailPage({ params }: Props) {
 
       <StartWorkoutButton templateId={tpl.id} />
 
+      <div className="border-border bg-muted/40 mt-4 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3">
+        <div>
+          <p className="inline-flex items-center gap-1.5 text-sm font-medium">
+            <Zap className="text-primary size-4" aria-hidden="true" />
+            {myoExerciseCount > 0
+              ? `Мио-репсы включены: ${myoExerciseCount}`
+              : "Мио-репсы не настроены"}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            {myoExerciseCount > 0
+              ? "Проверьте параметры перед стартом."
+              : "Включите их для нужных упражнений в шаблоне."}
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link
+            href={`/templates/${tpl.id}/edit`}
+            aria-label="Настроить Мио-репсы для шаблона"
+          >
+            {myoExerciseCount > 0 ? "Изменить" : "Настроить"}
+          </Link>
+        </Button>
+      </div>
+
       <ol className="space-y-2">
         {tpl.items.map((item, idx) => (
           <li
@@ -91,7 +116,7 @@ export default async function TemplateDetailPage({ params }: Props) {
               <div className="text-muted-foreground tabular mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
                 {item.myoReps ? (
                   <span className="text-primary font-medium">
-                    миорепсы: {item.targetRepsMin}–{item.targetRepsMax} +{" "}
+                    Мио-репсы: {item.targetRepsMin}–{item.targetRepsMax} +{" "}
                     {item.myoMiniSets}×30% от активации (отдых{" "}
                     {item.myoMiniRestSeconds}с)
                   </span>
