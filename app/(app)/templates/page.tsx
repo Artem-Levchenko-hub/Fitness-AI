@@ -6,6 +6,7 @@ import {
   Play,
   Plus,
   Wand2,
+  Zap,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -22,6 +23,7 @@ import {
 import { listCardioTemplates } from "@/lib/repos/cardio-templates.repo";
 import { listCircuitTemplates } from "@/lib/repos/circuit-templates.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
+import { cn } from "@/lib/utils";
 import { startCardioFromTemplateAction } from "@/server/actions/cardio-templates";
 import { startCircuitFromTemplateAction } from "@/server/actions/circuit-templates";
 import { deleteTemplateFromListAction } from "@/server/actions/templates";
@@ -151,10 +153,8 @@ function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
         {formatTemplateMeta(tpl)}
         {tpl.description ? ` · ${tpl.description}` : ""}
       </p>
-      {tpl.format === "strength" && (tpl.myoExerciseCount ?? 0) > 0 ? (
-        <span className="text-primary mt-1 inline-flex text-[10px] font-medium">
-          Myo-reps · {tpl.myoExerciseCount}
-        </span>
+      {tpl.format === "strength" ? (
+        <TemplateMyoStatus count={tpl.myoExerciseCount ?? 0} />
       ) : null}
       {tpl.adapted ? (
         // Тренер подогнал шаблон под факт последней тренировки (R-41 — не только
@@ -165,6 +165,20 @@ function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
         </span>
       ) : null}
     </div>
+  );
+}
+
+function TemplateMyoStatus({ count }: { count: number }) {
+  return (
+    <span
+      className={cn(
+        "mt-1 inline-flex items-center gap-1 text-[10px] font-medium",
+        count > 0 ? "text-primary" : "text-muted-foreground",
+      )}
+    >
+      <Zap className="size-3" aria-hidden="true" />
+      {count > 0 ? `Мио-репсы · ${count}` : "Мио-репсы не настроены"}
+    </span>
   );
 }
 

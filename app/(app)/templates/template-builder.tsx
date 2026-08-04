@@ -194,10 +194,13 @@ export function TemplateBuilder({
       </div>
 
       <div>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3">
           <h2 className="text-sm font-semibold tracking-tight">
             Упражнения ({items.length})
           </h2>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Для каждого упражнения можно включить Мио-репсы.
+          </p>
         </div>
 
         {items.length === 0 ? (
@@ -336,6 +339,49 @@ function SortableItem({
         </Button>
       </div>
 
+      <div
+        className={cn(
+          "mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5",
+          item.myoReps
+            ? "border-primary/30 bg-primary/5"
+            : "border-border bg-muted/30",
+        )}
+      >
+        <div className="min-w-0">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            <Zap
+              className={cn(
+                "size-4",
+                item.myoReps ? "text-primary" : "text-muted-foreground",
+              )}
+              aria-hidden="true"
+            />
+            Мио-репсы
+          </span>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            {item.myoReps
+              ? "Активационный подход и мини-сеты"
+              : "Включите для этого упражнения"}
+          </p>
+        </div>
+        <MyoToggle
+          enabled={item.myoReps}
+          onToggle={() => {
+            const next = !item.myoReps;
+            // Включили протокол при дефолтном диапазоне 8–12 — подсказываем
+            // активационные 12–20 (почти до отказа). Свой диапазон не трогаем.
+            const bumpReps =
+              next && item.targetRepsMin === 8 && item.targetRepsMax === 12
+                ? {
+                    targetRepsMin: MYO_ACTIVATION_MIN,
+                    targetRepsMax: MYO_ACTIVATION_MAX,
+                  }
+                : {};
+            onChange({ myoReps: next, ...bumpReps });
+          }}
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <NumField
           label="Подходы"
@@ -367,63 +413,33 @@ function SortableItem({
         />
       </div>
 
-      <div className="border-border mt-3 border-t pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-xs font-medium">
-            <Zap
-              className={cn(
-                "size-3.5",
-                item.myoReps ? "text-primary" : "text-muted-foreground",
-              )}
-              aria-hidden="true"
+      {item.myoReps ? (
+        <div className="border-primary/20 mt-3 border-t pt-3">
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <NumField
+              label="Мини-сеты"
+              value={item.myoMiniSets}
+              min={1}
+              max={10}
+              onChange={(v) => onChange({ myoMiniSets: v ?? 3 })}
             />
-            Миорепсы
-          </span>
-          <MyoToggle
-            enabled={item.myoReps}
-            onToggle={() => {
-              const next = !item.myoReps;
-              // Включили протокол при дефолтном диапазоне 8–12 — подсказываем
-              // активационные 12–20 (почти до отказа). Свой диапазон не трогаем.
-              const bumpReps =
-                next && item.targetRepsMin === 8 && item.targetRepsMax === 12
-                  ? {
-                      targetRepsMin: MYO_ACTIVATION_MIN,
-                      targetRepsMax: MYO_ACTIVATION_MAX,
-                    }
-                  : {};
-              onChange({ myoReps: next, ...bumpReps });
-            }}
-          />
+            <NumField
+              label="Отдых мини"
+              value={item.myoMiniRestSeconds}
+              min={5}
+              max={60}
+              onChange={(v) => onChange({ myoMiniRestSeconds: v ?? 30 })}
+            />
+          </div>
+          <p className="text-muted-foreground/80 mt-2 text-[11px] leading-relaxed">
+            1 активационный подход ({item.targetRepsMin}–{item.targetRepsMax}{" "}
+            повт. почти до отказа) + {item.myoMiniSets} мини по 30% от
+            активации с отдыхом {item.myoMiniRestSeconds} с.
+            Поле «Подходы» здесь не участвует.
+          </p>
+          <MyoRepsInfo />
         </div>
-        {item.myoReps ? (
-          <>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <NumField
-                label="Мини-сеты"
-                value={item.myoMiniSets}
-                min={1}
-                max={10}
-                onChange={(v) => onChange({ myoMiniSets: v ?? 3 })}
-              />
-              <NumField
-                label="Отдых мини"
-                value={item.myoMiniRestSeconds}
-                min={5}
-                max={60}
-                onChange={(v) => onChange({ myoMiniRestSeconds: v ?? 30 })}
-              />
-            </div>
-            <p className="text-muted-foreground/80 mt-2 text-[11px] leading-relaxed">
-              1 активационный подход ({item.targetRepsMin}–{item.targetRepsMax}{" "}
-              повт. почти до отказа) + {item.myoMiniSets} мини по 30% от
-              активации с отдыхом {item.myoMiniRestSeconds} с.
-              Поле «Подходы» здесь не участвует.
-            </p>
-            <MyoRepsInfo />
-          </>
-        ) : null}
-      </div>
+      ) : null}
     </li>
   );
 }
@@ -442,7 +458,7 @@ function MyoToggle({
       type="button"
       role="switch"
       aria-checked={enabled}
-      aria-label="Миорепсы для этого упражнения"
+      aria-label="Мио-репсы для этого упражнения"
       onClick={onToggle}
       className={cn(
         "focus-visible:ring-ring relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none",
