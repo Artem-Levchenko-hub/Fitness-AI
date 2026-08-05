@@ -16,6 +16,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { QuickDaySummary } from "@/lib/domain/quick-activity/summary";
+import { myoMiniRepsFromActivation } from "@/lib/domain/workouts/myo";
 import type { RecentQuickExercise } from "@/lib/repos/quick-activity.repo";
 import {
   deleteQuickActivityAction,
@@ -63,7 +64,6 @@ export function QuickActivityCard({
   const [mode, setMode] = useState<"sets" | "myo_reps" | "total">("sets");
   const [repsText, setRepsText] = useState("10");
   const [myoMiniSetsText, setMyoMiniSetsText] = useState("3");
-  const [myoMiniRepsText, setMyoMiniRepsText] = useState("5");
   const [weightText, setWeightText] = useState("");
 
   const exerciseName =
@@ -75,7 +75,6 @@ export function QuickActivityCard({
       setMode(prefill.mode);
       setRepsText(String(prefill.reps));
       setMyoMiniSetsText(String(prefill.myoMiniSets ?? 3));
-      setMyoMiniRepsText(String(prefill.myoMiniReps ?? 5));
       setWeightText(prefill.weightKg == null ? "" : String(prefill.weightKg));
     } else if (!exerciseId && recent[0]) {
       // Пустой старт: префилл последним использованным упражнением — режим и
@@ -84,7 +83,6 @@ export function QuickActivityCard({
       setMode(recent[0].mode);
       setRepsText(String(recent[0].reps));
       setMyoMiniSetsText(String(recent[0].myoMiniSets ?? 3));
-      setMyoMiniRepsText(String(recent[0].myoMiniReps ?? 5));
       setWeightText(
         recent[0].weightKg == null ? "" : String(recent[0].weightKg),
       );
@@ -103,10 +101,7 @@ export function QuickActivityCard({
       10,
       Math.max(1, parseInt(myoMiniSetsText || "3", 10) || 3),
     );
-    const myoMiniReps = Math.min(
-      30,
-      Math.max(1, parseInt(myoMiniRepsText || "5", 10) || 5),
-    );
+    const myoMiniReps = myoMiniRepsFromActivation(reps);
     if (!exerciseId) {
       toast.error("Выберите упражнение");
       return;
@@ -295,19 +290,11 @@ export function QuickActivityCard({
                       placeholder="3"
                     />
                   </label>
-                  <label className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-                    Повторов в мини
-                    <NumberField
-                      value={myoMiniRepsText}
-                      onChange={setMyoMiniRepsText}
-                      className="text-foreground tabular mt-1 h-11 text-sm normal-case tracking-normal"
-                      aria-label="Повторы в мини-сете"
-                      placeholder="5"
-                    />
-                  </label>
+                  <p className="bg-muted/50 text-muted-foreground rounded-lg px-3 py-2 text-xs leading-relaxed">
+                    Повторы в мини: <span className="text-foreground tabular font-semibold">{myoMiniRepsFromActivation(parseInt(repsText || "0", 10) || 1)}</span> (30% активации)
+                  </p>
                   <p className="text-muted-foreground col-span-2 text-xs">
-                    Мини-сеты: {myoMiniSetsText || 3} × {myoMiniRepsText || 5}.
-                    Всего это считается как рабочие подходы.
+                    Мини-сеты: {myoMiniSetsText || 3} × {myoMiniRepsFromActivation(parseInt(repsText || "0", 10) || 1)}. Вес не меняется; пауза между ними — до 30 с.
                   </p>
                 </div>
               ) : null}
@@ -374,7 +361,8 @@ export function QuickActivityCard({
                           onClick={() => remove(e.id)}
                           disabled={pending}
                           aria-label="Удалить запись"
-                          className="text-muted-foreground hover:text-destructive flex size-9 shrink-0 items-center justify-center rounded-md"
+                          data-testid={`quick-activity-delete-${e.id}`}
+                          className="text-muted-foreground hover:text-destructive flex size-11 shrink-0 items-center justify-center rounded-md"
                         >
                           <Trash2 className="size-4" />
                         </button>

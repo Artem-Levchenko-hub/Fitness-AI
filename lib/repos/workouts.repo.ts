@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -126,6 +126,17 @@ export async function startWorkoutFromTemplate(
           exerciseId: it.exerciseId,
           position: it.position,
           notes: it.notes,
+          // Снимок назначения на СТАРТ: следующие правки шаблона тренером
+          // относятся к следующей сессии и не меняют уже открытую тренировку.
+          targetSets: it.targetSets,
+          targetRepsMin: it.targetRepsMin,
+          targetRepsMax: it.targetRepsMax,
+          targetWeightKg: it.targetWeightKg,
+          targetRestSeconds: it.targetRestSeconds,
+          myoReps: it.myoReps,
+          myoMiniSets: it.myoMiniSets,
+          myoMiniReps: it.myoMiniReps,
+          myoMiniRestSeconds: Math.min(30, it.myoMiniRestSeconds),
         })),
       );
     }
@@ -158,6 +169,15 @@ export async function getActiveWorkoutForUser(
       exerciseNameRu: schema.exercises.nameRu,
       exerciseNameEn: schema.exercises.nameEn,
       exerciseSlug: schema.exercises.slug,
+      targetSets: schema.workoutExercises.targetSets,
+      targetRepsMin: schema.workoutExercises.targetRepsMin,
+      targetRepsMax: schema.workoutExercises.targetRepsMax,
+      targetWeightKg: schema.workoutExercises.targetWeightKg,
+      targetRestSeconds: schema.workoutExercises.targetRestSeconds,
+      myoReps: schema.workoutExercises.myoReps,
+      myoMiniSets: schema.workoutExercises.myoMiniSets,
+      myoMiniReps: schema.workoutExercises.myoMiniReps,
+      myoMiniRestSeconds: schema.workoutExercises.myoMiniRestSeconds,
     })
     .from(schema.workoutExercises)
     .innerJoin(
@@ -223,17 +243,25 @@ export async function getActiveWorkoutForUser(
 
   const exercises: ActiveWorkoutExercise[] = exerciseRows.map((r) => {
     const t = templateTargets.get(r.exerciseId);
+    // targetSets — маркер полного snapshot: вес может быть честным null,
+    // поэтому им нельзя определять legacy-сессию.
+    const snapshot = r.targetSets != null;
     return {
       ...r,
-      targetSets: t?.targetSets ?? 3,
-      targetRepsMin: t?.targetRepsMin ?? 8,
-      targetRepsMax: t?.targetRepsMax ?? 12,
-      targetWeightKg: t?.targetWeightKg ?? null,
-      targetRestSeconds: t?.targetRestSeconds ?? 120,
-      myoReps: t?.myoReps ?? false,
-      myoMiniSets: t?.myoMiniSets ?? 3,
-      myoMiniReps: t?.myoMiniReps ?? 5,
-      myoMiniRestSeconds: t?.myoMiniRestSeconds ?? 30,
+      targetSets: snapshot ? r.targetSets! : (t?.targetSets ?? 3),
+      targetRepsMin: snapshot ? r.targetRepsMin! : (t?.targetRepsMin ?? 8),
+      targetRepsMax: snapshot ? r.targetRepsMax! : (t?.targetRepsMax ?? 12),
+      targetWeightKg: snapshot ? r.targetWeightKg : (t?.targetWeightKg ?? null),
+      targetRestSeconds: snapshot
+        ? r.targetRestSeconds!
+        : (t?.targetRestSeconds ?? 120),
+      myoReps: snapshot ? r.myoReps! : (t?.myoReps ?? false),
+      myoMiniSets: snapshot ? r.myoMiniSets! : (t?.myoMiniSets ?? 3),
+      myoMiniReps: snapshot ? r.myoMiniReps! : (t?.myoMiniReps ?? 5),
+      myoMiniRestSeconds: Math.min(
+        30,
+        snapshot ? r.myoMiniRestSeconds! : (t?.myoMiniRestSeconds ?? 20),
+      ),
       sets: setsByWe.get(r.id) ?? [],
     };
   });
@@ -322,7 +350,13 @@ export async function deleteSet(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [chk] = await tx
-      .select({ workoutId: schema.workoutExercises.workoutId })
+      .select({
+        workoutId: schema.workoutExercises.workoutId,
+        workoutExerciseId: schema.workoutExercises.id,
+        setIndex: schema.workoutSets.setIndex,
+        snapshotMyoReps: schema.workoutExercises.myoReps,
+        templateMyoReps: schema.templateExercises.myoReps,
+      })
       .from(schema.workoutSets)
       .innerJoin(
         schema.workoutExercises,
@@ -331,6 +365,13 @@ export async function deleteSet(
       .innerJoin(
         schema.workouts,
         eq(schema.workouts.id, schema.workoutExercises.workoutId),
+      )
+      .leftJoin(
+        schema.templateExercises,
+        and(
+          eq(schema.templateExercises.templateId, schema.workouts.templateId),
+          eq(schema.templateExercises.exerciseId, schema.workoutExercises.exerciseId),
+        ),
       )
       .where(
         and(
@@ -341,6 +382,27 @@ export async function deleteSet(
       )
       .limit(1);
     if (!chk) throw new Error("Set not yours or not in this workout");
+
+    // Протокол Myo зависит от единственного активационного подхода. Нельзя
+    // удалить его или середину кластера через старую вкладку/прямой action:
+    // сначала удаляется последний мини-сет, затем предыдущий. Snapshot —
+    // источник для новых сессий, template — безопасный fallback для legacy.
+    const isMyo = chk.snapshotMyoReps ?? chk.templateMyoReps ?? false;
+    if (isMyo) {
+      const [laterSet] = await tx
+        .select({ id: schema.workoutSets.id })
+        .from(schema.workoutSets)
+        .where(
+          and(
+            eq(schema.workoutSets.workoutExerciseId, chk.workoutExerciseId),
+            gt(schema.workoutSets.setIndex, chk.setIndex),
+          ),
+        )
+        .limit(1);
+      if (laterSet) {
+        throw new Error("В Myo-reps можно удалить только последний подход");
+      }
+    }
 
     await tx.delete(schema.workoutSets).where(eq(schema.workoutSets.id, setId));
   });

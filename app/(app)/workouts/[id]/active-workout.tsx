@@ -384,10 +384,17 @@ function ExerciseCard({
             {exercise.exerciseNameRu}
           </h3>
           <p className="text-muted-foreground tabular mt-0.5 text-xs">
-            <span>
-              {totalDone}/{planned} ·{" "}
-              {exercise.targetRepsMin}–{exercise.targetRepsMax} повт.
-            </span>
+            {exercise.myoReps ? (
+              <span>
+                {totalDone}/{planned} · Myo: {exercise.targetRepsMin}–
+                {exercise.targetRepsMax} + {exercise.myoMiniSets}×30%
+              </span>
+            ) : (
+              <span>
+                {totalDone}/{planned} · {exercise.targetRepsMin}–
+                {exercise.targetRepsMax} повт.
+              </span>
+            )}
             {exercise.targetWeightKg ? (
               <span> · цель {exercise.targetWeightKg} кг</span>
             ) : null}
@@ -423,19 +430,25 @@ function ExerciseCard({
                       </span>
                     ) : null}
                   </span>
-                  <form action={deleteSetAction}>
-                    <input type="hidden" name="workoutId" value={workoutId} />
-                    <input type="hidden" name="setId" value={s.id} />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Удалить подход"
-                      className="text-muted-foreground hover:text-destructive size-8"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </form>
+                  {/* У Myo можно удалить только последний подтверждённый сет:
+                      иначе удалённая активация сделала бы первый мини-сет
+                      новой «активацией» и исказила бы 30%-цель. */}
+                  {(!exercise.myoReps ||
+                    (pending.length === 0 && s.id === lastSet?.id)) ? (
+                    <form action={deleteSetAction}>
+                      <input type="hidden" name="workoutId" value={workoutId} />
+                      <input type="hidden" name="setId" value={s.id} />
+                      <Button
+                        type="submit"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Удалить подход"
+                        className="text-muted-foreground hover:text-destructive size-8"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </form>
+                  ) : null}
                 </li>
               ))}
               {/* H15.3b-2 — офлайн-подходы, ещё не синхронизированные. Отличимы
@@ -488,6 +501,18 @@ function ExerciseCard({
                   в точке решения. Нет цели → ничего (R-37). */}
               {goal ? <GoalTrackBar view={goal} /> : null}
 
+              {exercise.myoReps ? (
+                <p className="border-primary/20 bg-primary/5 text-primary rounded-lg border px-3 py-2 text-xs leading-relaxed">
+                  <span className="font-semibold">План тренера:</span>{" "}
+                  активация {exercise.targetRepsMin}–{exercise.targetRepsMax} повт.
+                  {exercise.targetWeightKg != null
+                    ? ` · ${exercise.targetWeightKg} кг`
+                    : ""}
+                  ; затем {exercise.myoMiniSets} мини-сета по 30% от факта,
+                  пауза до {Math.min(30, exercise.myoMiniRestSeconds)} с.
+                </p>
+              ) : null}
+
               {lastCompletedAt ? (
                 <RestTimer
                   targetSeconds={nextRestSeconds}
@@ -516,11 +541,15 @@ function ExerciseCard({
                 defaultWeightKg={
                   lastPendingSet?.weightKg ??
                   lastSet?.weightKg ??
-                  previous?.prefillWeightKg ??
                   exercise.targetWeightKg ??
+                  previous?.prefillWeightKg ??
                   null
                 }
-                defaultRepsMax={nextReps.max}
+                defaultRepsMax={
+                  exercise.myoReps && totalDone === 0
+                    ? nextReps.min
+                    : nextReps.max
+                }
                 restStartedAt={lastCompletedAt}
                 onOfflineRecord={onOfflineRecord}
               />

@@ -18,7 +18,7 @@ function item(overrides: Record<string, unknown> = {}) {
 }
 
 describe("templateInputSchema Myo-reps", () => {
-  it("uses the 3 mini / 30 second defaults", () => {
+  it("uses the 3 mini / 20 second defaults", () => {
     const parsed = templateInputSchema.parse({
       name: "Myo day",
       items: [item({ myoReps: true })],
@@ -27,7 +27,7 @@ describe("templateInputSchema Myo-reps", () => {
     expect(parsed.items[0]).toMatchObject({
       myoReps: true,
       myoMiniSets: 3,
-      myoMiniRestSeconds: 30,
+      myoMiniRestSeconds: 20,
     });
   });
 

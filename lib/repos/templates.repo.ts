@@ -219,7 +219,7 @@ export async function revertTemplateAdaptation(
           myoReps: it.myoReps ?? false,
           myoMiniSets: it.myoMiniSets ?? 3,
           myoMiniReps: it.myoMiniReps ?? 5,
-          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 30,
+          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 20,
           notes: it.notes,
         })),
       );
@@ -294,7 +294,7 @@ export async function createTemplate(
           myoReps: it.myoReps ?? false,
           myoMiniSets: it.myoMiniSets ?? 3,
           myoMiniReps: it.myoMiniReps ?? 5,
-          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 30,
+          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 20,
           notes: it.notes ?? null,
         })),
       );
@@ -351,7 +351,7 @@ export async function updateTemplate(
           myoReps: it.myoReps ?? false,
           myoMiniSets: it.myoMiniSets ?? 3,
           myoMiniReps: it.myoMiniReps ?? 5,
-          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 30,
+          myoMiniRestSeconds: it.myoMiniRestSeconds ?? 20,
           notes: it.notes ?? null,
         })),
       );

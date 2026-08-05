@@ -15,7 +15,7 @@ const templateItemSchema = z.object({
   myoReps: z.coerce.boolean().default(false),
   myoMiniSets: z.coerce.number().int().min(1).max(10).default(3),
   myoMiniReps: z.coerce.number().int().min(1).max(10).default(5),
-  myoMiniRestSeconds: z.coerce.number().int().min(5).max(60).default(30),
+  myoMiniRestSeconds: z.coerce.number().int().min(5).max(30).default(20),
   notes: z
     .string()
     .max(500)

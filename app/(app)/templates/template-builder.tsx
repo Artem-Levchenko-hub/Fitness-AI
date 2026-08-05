@@ -77,10 +77,10 @@ const DEFAULT_ITEM: Omit<BuilderItem, "uid" | "exerciseId"> = {
   targetWeightKg: null,
   targetRestSeconds: 120,
   myoReps: false,
-  // Протокол владельца: 3 мини-сета по 30% повторов активации, отдых 30 с.
+  // Протокол владельца: 3 мини-сета по 30% повторов активации, отдых 20 с.
   myoMiniSets: 3,
   myoMiniReps: 5,
-  myoMiniRestSeconds: 30,
+  myoMiniRestSeconds: 20,
   notes: "",
 };
 
@@ -510,14 +510,14 @@ function SortableItem({
               label="Отдых мини"
               value={item.myoMiniRestSeconds}
               min={5}
-              max={60}
-              onChange={(v) => onChange({ myoMiniRestSeconds: v ?? 30 })}
+              max={30}
+              onChange={(v) => onChange({ myoMiniRestSeconds: v ?? 20 })}
             />
           </div>
           <p className="text-muted-foreground/80 mt-2 text-[11px] leading-relaxed">
             1 активационный подход ({item.targetRepsMin}–{item.targetRepsMax}{" "}
             повт. почти до отказа) + {item.myoMiniSets} мини по 30% от
-            активации с отдыхом {item.myoMiniRestSeconds} с.
+            активации с отдыхом {item.myoMiniRestSeconds} с (максимум 30 с).
             Поле «Подходы» здесь не участвует.
           </p>
           <MyoRepsInfo />

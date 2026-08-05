@@ -44,6 +44,10 @@ describe("restBeforeNextSet", () => {
     expect(restBeforeNextSet(120, ON, 3)).toBe(15);
   });
 
+  it("никогда не разрешает паузу миорепса дольше 30 секунд", () => {
+    expect(restBeforeNextSet(120, { ...ON, myoMiniRestSeconds: 60 }, 1)).toBe(30);
+  });
+
   it("обычный режим — всегда целевой", () => {
     expect(restBeforeNextSet(120, OFF, 2)).toBe(120);
   });

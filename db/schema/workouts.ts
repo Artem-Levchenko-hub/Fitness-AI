@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  boolean,
   doublePrecision,
   index,
   integer,
@@ -71,6 +72,21 @@ export const workoutExercises = pgTable(
       .references(() => exercises.id, { onDelete: "restrict" }),
     position: integer("position").notNull(),
     notes: text("notes"),
+    /**
+     * Снимок назначения тренера на момент старта. Шаблон может безопасно
+     * обновиться после другой тренировки: уже начатая сессия от этого не
+     * меняет ни вес, ни повторы, ни Myo-протокол. NULL — legacy-сессия,
+     * для которой repo временно читает цели из шаблона.
+     */
+    targetSets: integer("target_sets"),
+    targetRepsMin: integer("target_reps_min"),
+    targetRepsMax: integer("target_reps_max"),
+    targetWeightKg: doublePrecision("target_weight_kg"),
+    targetRestSeconds: integer("target_rest_seconds"),
+    myoReps: boolean("myo_reps"),
+    myoMiniSets: integer("myo_mini_sets"),
+    myoMiniReps: integer("myo_mini_reps"),
+    myoMiniRestSeconds: integer("myo_mini_rest_seconds"),
   },
   (t) => [
     index("workout_exercises_workout_idx").on(t.workoutId, t.position),
