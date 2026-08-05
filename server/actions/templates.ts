@@ -51,6 +51,16 @@ function parsePayload(formData: FormData) {
   return { ok: true as const, data: parsed.data };
 }
 
+type TemplateInput = z.infer<typeof templateInputSchema>;
+
+/** Серверный гейт для самостоятельного Myo-reps конструктора. */
+function forceMyoTemplate(data: TemplateInput): TemplateInput {
+  return {
+    ...data,
+    items: data.items.map((item) => ({ ...item, myoReps: true })),
+  };
+}
+
 export async function createTemplateAction(
   _prev: TemplateActionState,
   formData: FormData,
@@ -65,6 +75,21 @@ export async function createTemplateAction(
   redirect(`/templates/${id}`);
 }
 
+export async function createMyoTemplateAction(
+  _prev: TemplateActionState,
+  formData: FormData,
+): Promise<TemplateActionState> {
+  const user = await requireUser();
+  const parsed = parsePayload(formData);
+  if (!parsed.ok) return { status: "error", message: parsed.error };
+
+  const { id } = await createTemplate(user.id, forceMyoTemplate(parsed.data));
+  revalidatePath("/templates");
+  revalidatePath("/dashboard");
+  revalidatePath("/create");
+  redirect(`/templates/${id}`);
+}
+
 export async function updateTemplateAction(
   templateId: string,
   _prev: TemplateActionState,
@@ -76,6 +101,22 @@ export async function updateTemplateAction(
 
   await updateTemplate(user.id, templateId, parsed.data);
   revalidatePath("/templates");
+  revalidatePath(`/templates/${templateId}`);
+  redirect(`/templates/${templateId}`);
+}
+
+export async function updateMyoTemplateAction(
+  templateId: string,
+  _prev: TemplateActionState,
+  formData: FormData,
+): Promise<TemplateActionState> {
+  const user = await requireUser();
+  const parsed = parsePayload(formData);
+  if (!parsed.ok) return { status: "error", message: parsed.error };
+
+  await updateTemplate(user.id, templateId, forceMyoTemplate(parsed.data));
+  revalidatePath("/templates");
+  revalidatePath("/create");
   revalidatePath(`/templates/${templateId}`);
   redirect(`/templates/${templateId}`);
 }

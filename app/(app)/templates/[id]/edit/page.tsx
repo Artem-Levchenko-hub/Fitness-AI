@@ -7,16 +7,24 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { listExercises } from "@/lib/repos/exercises.repo";
 import { getTemplateWithItems } from "@/lib/repos/templates.repo";
-import { updateTemplateAction } from "@/server/actions/templates";
+import {
+  updateMyoTemplateAction,
+  updateTemplateAction,
+} from "@/server/actions/templates";
 
 import { TemplateBuilder, type BuilderItem } from "../../template-builder";
 
 export const metadata: Metadata = { title: "Редактировать шаблон" };
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ scheme?: string | string[] }>;
+};
 
-export default async function EditTemplatePage({ params }: Props) {
+export default async function EditTemplatePage({ params, searchParams }: Props) {
   const { id } = await params;
+  const scheme = (await searchParams)?.scheme;
+  const myoOnly = scheme === "myo_reps";
   const user = await requireUser();
 
   const [tpl, exercises] = await Promise.all([
@@ -47,7 +55,10 @@ export default async function EditTemplatePage({ params }: Props) {
     notes: it.notes ?? "",
   }));
 
-  const action = updateTemplateAction.bind(null, id);
+  const action = (myoOnly ? updateMyoTemplateAction : updateTemplateAction).bind(
+    null,
+    id,
+  );
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -60,7 +71,7 @@ export default async function EditTemplatePage({ params }: Props) {
 
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          Редактировать шаблон
+          {myoOnly ? "Редактировать Myo-reps шаблон" : "Редактировать шаблон"}
         </h1>
       </header>
 
@@ -71,6 +82,8 @@ export default async function EditTemplatePage({ params }: Props) {
           description: tpl.description ?? "",
           items: initialItems,
         }}
+        initialDefaultMyoReps={myoOnly}
+        myoOnly={myoOnly}
         action={action}
         submitLabel="Сохранить"
       />

@@ -5,7 +5,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
 import { listExercises } from "@/lib/repos/exercises.repo";
-import { createTemplateAction } from "@/server/actions/templates";
+import {
+  createMyoTemplateAction,
+  createTemplateAction,
+} from "@/server/actions/templates";
 
 import { TemplateBuilder } from "../template-builder";
 
@@ -18,7 +21,7 @@ type Props = {
 export default async function NewTemplatePage({ searchParams }: Props) {
   const user = await requireUser();
   const scheme = (await searchParams)?.scheme;
-  const initialDefaultMyoReps = scheme === "myo_reps";
+  const myoOnly = scheme === "myo_reps";
   const exercises = await listExercises(user.id);
   const pickerData = exercises.map((e) => ({
     id: e.id,
@@ -30,28 +33,30 @@ export default async function NewTemplatePage({ searchParams }: Props) {
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
-        <Link href="/templates">
+        <Link href={myoOnly ? "/create" : "/templates"}>
           <ChevronLeft className="size-4" />
-          Шаблоны
+          {myoOnly ? "Создание тренировки" : "Шаблоны"}
         </Link>
       </Button>
 
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          Новый шаблон
+          {myoOnly ? "Новый Myo-reps шаблон" : "Новый шаблон"}
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Соберите план тренировки. Перетаскивайте упражнения, чтобы поменять
-          порядок.
+          {myoOnly
+            ? "Только активационные подходы и короткие мини-сеты. Классический формат недоступен."
+            : "Соберите план тренировки. Перетаскивайте упражнения, чтобы поменять порядок."}
         </p>
       </header>
 
       <TemplateBuilder
         exercises={pickerData}
-        initialDefaultMyoReps={initialDefaultMyoReps}
-        action={createTemplateAction}
+        initialDefaultMyoReps={myoOnly}
+        myoOnly={myoOnly}
+        action={myoOnly ? createMyoTemplateAction : createTemplateAction}
         submitLabel={
-          initialDefaultMyoReps
+          myoOnly
             ? "Создать Myo-reps шаблон"
             : "Создать шаблон"
         }

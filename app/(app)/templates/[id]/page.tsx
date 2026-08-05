@@ -28,6 +28,10 @@ export default async function TemplateDetailPage({ params }: Props) {
   const lastAnalysis = await getLastTemplateAnalysis(user.id, id);
   const lastFocus = lastAnalysis ? extractPastAdvice(lastAnalysis).focus : null;
   const myoExerciseCount = tpl.items.filter((item) => item.myoReps).length;
+  const pureMyo = tpl.items.length > 0 && myoExerciseCount === tpl.items.length;
+  const editHref = pureMyo
+    ? `/templates/${tpl.id}/edit?scheme=myo_reps`
+    : `/templates/${tpl.id}/edit`;
 
   // Подпись «обновлён тренером · <дата>». adaptedAt может быть null у шаблонов,
   // адаптированных ДО миграции 0023 (старый путь не писал дату) — тогда без даты.
@@ -92,7 +96,7 @@ export default async function TemplateDetailPage({ params }: Props) {
         </div>
         <Button asChild variant="outline" size="sm">
           <Link
-            href={`/templates/${tpl.id}/edit`}
+            href={editHref}
             aria-label="Настроить Мио-репсы для шаблона"
           >
             {myoExerciseCount > 0 ? "Изменить" : "Настроить"}
@@ -144,7 +148,7 @@ export default async function TemplateDetailPage({ params }: Props) {
 
       <div className="mt-6 flex gap-2">
         <Button asChild variant="outline" className="flex-1">
-          <Link href={`/templates/${tpl.id}/edit`}>
+          <Link href={editHref}>
             <Pencil className="size-4" />
             Редактировать
           </Link>

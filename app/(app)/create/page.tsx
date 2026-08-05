@@ -48,8 +48,13 @@ export default async function CreateWorkoutPage() {
     listCircuitTemplates(user.id),
     listCardioTemplates(user.id),
   ]);
-  const strengthSorted = sortTemplatesForFlow(strength);
-  const myoTemplates = strengthSorted.filter((t) => t.myoExerciseCount > 0);
+  const sortedTemplates = sortTemplatesForFlow(strength);
+  const myoTemplates = sortedTemplates.filter(
+    (t) => t.exerciseCount > 0 && t.myoExerciseCount === t.exerciseCount,
+  );
+  const strengthSorted = sortedTemplates.filter(
+    (t) => t.exerciseCount === 0 || t.myoExerciseCount !== t.exerciseCount,
+  );
   const circuitRows = buildCircuitTemplateRows(circuit);
   const cardioRows = buildCardioTemplateRows(cardio);
 
@@ -112,9 +117,9 @@ export default async function CreateWorkoutPage() {
   );
 }
 
-/** Myo-reps — отдельный формат наравне с силовой, круговой и кардио. Показывает
- *  только шаблоны, где включён хотя бы один миорепс-протокол, но использует тот
- *  же UX: старт, свайп-удаление и создание нового шаблона. */
+/** Myo-reps — самостоятельный формат наравне с силовой, круговой и кардио.
+ *  Внутри показываются только чистые Myo-reps-шаблоны: они не дублируются в
+ *  карточке силовой. */
 function MyoStartCard({ templates }: { templates: TemplateListItem[] }) {
   return (
     <div className="bg-card border-border rounded-2xl border p-5">
@@ -124,7 +129,7 @@ function MyoStartCard({ templates }: { templates: TemplateListItem[] }) {
         </div>
         <div className="flex-1">
           <p className="text-muted-foreground text-[10px] font-medium tracking-[0.18em] uppercase">
-            Силовая · отдельный формат
+            Myo-reps
           </p>
           <h2 className="mt-0.5 text-base font-semibold tracking-tight">
             Твои шаблоны
@@ -132,7 +137,7 @@ function MyoStartCard({ templates }: { templates: TemplateListItem[] }) {
           <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
             {templates.length > 0
               ? "Тап — начать. Свайп влево — удалить."
-              : "Собери первый шаблон с активацией и короткими мини-сетами."}
+              : "Собери первый чистый Myo-reps шаблон с активацией и короткими мини-сетами."}
           </p>
         </div>
       </div>

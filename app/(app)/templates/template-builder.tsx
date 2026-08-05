@@ -61,6 +61,8 @@ type Props = {
     items: BuilderItem[];
   };
   initialDefaultMyoReps?: boolean;
+  /** Жёсткий режим Myo-reps: классический формат недоступен в этом билдере. */
+  myoOnly?: boolean;
   action: (
     prev: TemplateActionState,
     formData: FormData,
@@ -91,6 +93,7 @@ export function TemplateBuilder({
   exercises,
   initial,
   initialDefaultMyoReps = false,
+  myoOnly = false,
   action,
   submitLabel = "Сохранить шаблон",
 }: Props) {
@@ -101,7 +104,8 @@ export function TemplateBuilder({
   );
   const [defaultMyoReps, setDefaultMyoReps] = useState(
     () =>
-      initial?.items.some((item) => item.myoReps) ?? initialDefaultMyoReps,
+      myoOnly ||
+      (initial?.items.some((item) => item.myoReps) ?? initialDefaultMyoReps),
   );
 
   const [state, formAction, pending] = useActionState<
@@ -128,7 +132,7 @@ export function TemplateBuilder({
   }
 
   function addItem() {
-    const myoDefaults = defaultMyoReps
+    const myoDefaults = myoOnly || defaultMyoReps
       ? {
           myoReps: true,
           targetRepsMin: MYO_ACTIVATION_MIN,
@@ -171,7 +175,7 @@ export function TemplateBuilder({
           targetRepsMax: i.targetRepsMax,
           targetWeightKg: i.targetWeightKg ?? "",
           targetRestSeconds: i.targetRestSeconds,
-          myoReps: i.myoReps,
+          myoReps: myoOnly || i.myoReps,
           myoMiniSets: i.myoMiniSets,
           myoMiniReps: i.myoMiniReps,
           myoMiniRestSeconds: i.myoMiniRestSeconds,
@@ -222,50 +226,66 @@ export function TemplateBuilder({
           </p>
         </div>
 
-        <div className="bg-card border-border mb-4 rounded-2xl border p-4">
-          <p className="text-muted-foreground text-[10px] font-medium tracking-[0.18em] uppercase">
-            Режим новых упражнений
-          </p>
-          <div
-            role="group"
-            aria-label="Режим новых упражнений"
-            className="bg-muted/50 mt-3 grid grid-cols-2 gap-1 rounded-xl p-1"
-          >
-            <button
-              type="button"
-              aria-pressed={!defaultMyoReps}
-              onClick={() => setDefaultMyoReps(false)}
-              className={cn(
-                "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
-                !defaultMyoReps
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Классические
-            </button>
-            <button
-              type="button"
-              aria-pressed={defaultMyoReps}
-              onClick={() => setDefaultMyoReps(true)}
-              className={cn(
-                "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
-                defaultMyoReps
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <Zap className="size-4" aria-hidden="true" />
-                Myo-reps
-              </span>
-            </button>
+        {myoOnly ? (
+          <div className="border-primary/20 bg-primary/5 mb-4 rounded-2xl border p-4">
+            <p className="text-primary text-[10px] font-medium tracking-[0.18em] uppercase">
+              Формат шаблона
+            </p>
+            <p className="mt-1 inline-flex items-center gap-1.5 text-base font-semibold">
+              <Zap className="text-primary size-4" aria-hidden="true" />
+              Только Myo-reps
+            </p>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              Все упражнения будут созданы как активационный подход + мини-сеты.
+              Переключение на классические подходы отключено.
+            </p>
           </div>
-          <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
-            Myo-reps: один активационный подход и короткие мини-сеты с тем же
-            весом. Настройка сохраняется в каждом упражнении шаблона.
-          </p>
-        </div>
+        ) : (
+          <div className="bg-card border-border mb-4 rounded-2xl border p-4">
+            <p className="text-muted-foreground text-[10px] font-medium tracking-[0.18em] uppercase">
+              Режим новых упражнений
+            </p>
+            <div
+              role="group"
+              aria-label="Режим новых упражнений"
+              className="bg-muted/50 mt-3 grid grid-cols-2 gap-1 rounded-xl p-1"
+            >
+              <button
+                type="button"
+                aria-pressed={!defaultMyoReps}
+                onClick={() => setDefaultMyoReps(false)}
+                className={cn(
+                  "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
+                  !defaultMyoReps
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Классические
+              </button>
+              <button
+                type="button"
+                aria-pressed={defaultMyoReps}
+                onClick={() => setDefaultMyoReps(true)}
+                className={cn(
+                  "min-h-11 rounded-lg px-3 text-sm font-medium transition-colors",
+                  defaultMyoReps
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Zap className="size-4" aria-hidden="true" />
+                  Myo-reps
+                </span>
+              </button>
+            </div>
+            <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+              Myo-reps: один активационный подход и короткие мини-сеты с тем же
+              весом. Настройка сохраняется в каждом упражнении шаблона.
+            </p>
+          </div>
+        )}
 
         {items.length === 0 ? (
           <div className="bg-card border-border text-muted-foreground rounded-2xl border border-dashed p-6 text-center text-sm">
@@ -289,6 +309,7 @@ export function TemplateBuilder({
                     item={item}
                     index={idx}
                     exercises={exercises}
+                    myoOnly={myoOnly}
                     onChange={(patch) => updateItem(item.uid, patch)}
                     onRemove={() => removeItem(item.uid)}
                   />
@@ -343,12 +364,14 @@ function SortableItem({
   item,
   index,
   exercises,
+  myoOnly,
   onChange,
   onRemove,
 }: {
   item: BuilderItem;
   index: number;
   exercises: ReadonlyArray<PickerExercise>;
+  myoOnly: boolean;
   onChange: (patch: Partial<BuilderItem>) => void;
   onRemove: () => void;
 }) {
@@ -363,6 +386,7 @@ function SortableItem({
   };
 
   function setMyoReps(enabled: boolean) {
+    if (myoOnly) return;
     const bumpReps =
       enabled && item.targetRepsMin === 8 && item.targetRepsMax === 12
         ? {
@@ -372,6 +396,8 @@ function SortableItem({
         : {};
     onChange({ myoReps: enabled, ...bumpReps });
   }
+
+  const myoEnabled = myoOnly || item.myoReps;
 
   return (
     <li
@@ -414,43 +440,45 @@ function SortableItem({
         </Button>
       </div>
 
-      <div
-        role="group"
-        aria-label="Система подходов"
-        className="bg-muted/50 mb-3 grid grid-cols-2 gap-1 rounded-xl p-1"
-      >
-        <button
-          type="button"
-          aria-pressed={!item.myoReps}
-          onClick={() => setMyoReps(false)}
-          className={cn(
-            "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
-            !item.myoReps
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
+      {!myoOnly ? (
+        <div
+          role="group"
+          aria-label="Система подходов"
+          className="bg-muted/50 mb-3 grid grid-cols-2 gap-1 rounded-xl p-1"
         >
-          Классические
-        </button>
-        <button
-          type="button"
-          aria-pressed={item.myoReps}
-          onClick={() => setMyoReps(true)}
-          className={cn(
-            "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
-            item.myoReps
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <Zap className="size-3.5" aria-hidden="true" />
-            Myo-reps
-          </span>
-        </button>
-      </div>
+          <button
+            type="button"
+            aria-pressed={!item.myoReps}
+            onClick={() => setMyoReps(false)}
+            className={cn(
+              "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
+              !item.myoReps
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Классические
+          </button>
+          <button
+            type="button"
+            aria-pressed={item.myoReps}
+            onClick={() => setMyoReps(true)}
+            className={cn(
+              "min-h-10 rounded-lg px-3 text-xs font-medium transition-colors",
+              item.myoReps
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Zap className="size-3.5" aria-hidden="true" />
+              Myo-reps
+            </span>
+          </button>
+        </div>
+      ) : null}
 
-      {item.myoReps ? (
+      {myoEnabled ? (
         <div className="border-primary/20 bg-primary/5 rounded-xl border p-3">
           <p className="text-primary mb-3 inline-flex items-center gap-1.5 text-xs font-semibold">
             <Zap className="size-3.5" aria-hidden="true" />
