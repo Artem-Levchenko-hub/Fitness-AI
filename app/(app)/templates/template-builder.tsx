@@ -60,6 +60,7 @@ type Props = {
     description: string;
     items: BuilderItem[];
   };
+  initialDefaultMyoReps?: boolean;
   action: (
     prev: TemplateActionState,
     formData: FormData,
@@ -89,6 +90,7 @@ const MYO_ACTIVATION_MAX = 20;
 export function TemplateBuilder({
   exercises,
   initial,
+  initialDefaultMyoReps = false,
   action,
   submitLabel = "Сохранить шаблон",
 }: Props) {
@@ -98,7 +100,8 @@ export function TemplateBuilder({
     initial?.items ?? [],
   );
   const [defaultMyoReps, setDefaultMyoReps] = useState(
-    () => initial?.items.some((item) => item.myoReps) ?? false,
+    () =>
+      initial?.items.some((item) => item.myoReps) ?? initialDefaultMyoReps,
   );
 
   const [state, formAction, pending] = useActionState<

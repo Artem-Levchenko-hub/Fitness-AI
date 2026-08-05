@@ -11,8 +11,14 @@ import { TemplateBuilder } from "../template-builder";
 
 export const metadata: Metadata = { title: "Новый шаблон" };
 
-export default async function NewTemplatePage() {
+type Props = {
+  searchParams?: Promise<{ scheme?: string | string[] }>;
+};
+
+export default async function NewTemplatePage({ searchParams }: Props) {
   const user = await requireUser();
+  const scheme = (await searchParams)?.scheme;
+  const initialDefaultMyoReps = scheme === "myo_reps";
   const exercises = await listExercises(user.id);
   const pickerData = exercises.map((e) => ({
     id: e.id,
@@ -42,8 +48,13 @@ export default async function NewTemplatePage() {
 
       <TemplateBuilder
         exercises={pickerData}
+        initialDefaultMyoReps={initialDefaultMyoReps}
         action={createTemplateAction}
-        submitLabel="Создать шаблон"
+        submitLabel={
+          initialDefaultMyoReps
+            ? "Создать Myo-reps шаблон"
+            : "Создать шаблон"
+        }
       />
     </main>
   );

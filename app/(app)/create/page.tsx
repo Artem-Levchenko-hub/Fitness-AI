@@ -49,6 +49,7 @@ export default async function CreateWorkoutPage() {
     listCardioTemplates(user.id),
   ]);
   const strengthSorted = sortTemplatesForFlow(strength);
+  const myoTemplates = strengthSorted.filter((t) => t.myoExerciseCount > 0);
   const circuitRows = buildCircuitTemplateRows(circuit);
   const cardioRows = buildCardioTemplateRows(cardio);
 
@@ -66,16 +67,16 @@ export default async function CreateWorkoutPage() {
           Новая тренировка
         </p>
         <h1 className="font-serif mt-1 text-3xl font-normal tracking-tight md:text-4xl">
-          Начать силовую
+          Начать тренировку
         </h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          Выбери шаблон и в зал — обновлённые тренером сверху. Круговая и кардио —
-          ниже.
+          Выбери формат и шаблон — обновлённые тренером силовые сверху.
         </p>
       </header>
 
       <section className="space-y-3">
         <StrengthStartCard templates={strengthSorted} />
+        <MyoStartCard templates={myoTemplates} />
 
         {circuitRows.length > 0 ? (
           <FormatTemplateCard
@@ -108,6 +109,94 @@ export default async function CreateWorkoutPage() {
         )}
       </section>
     </main>
+  );
+}
+
+/** Myo-reps — отдельный формат наравне с силовой, круговой и кардио. Показывает
+ *  только шаблоны, где включён хотя бы один миорепс-протокол, но использует тот
+ *  же UX: старт, свайп-удаление и создание нового шаблона. */
+function MyoStartCard({ templates }: { templates: TemplateListItem[] }) {
+  return (
+    <div className="bg-card border-border rounded-2xl border p-5">
+      <div className="flex items-start gap-4">
+        <div className="bg-primary/10 text-primary mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full">
+          <Zap className="size-5" aria-hidden="true" />
+        </div>
+        <div className="flex-1">
+          <p className="text-muted-foreground text-[10px] font-medium tracking-[0.18em] uppercase">
+            Силовая · отдельный формат
+          </p>
+          <h2 className="mt-0.5 text-base font-semibold tracking-tight">
+            Твои шаблоны
+          </h2>
+          <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+            {templates.length > 0
+              ? "Тап — начать. Свайп влево — удалить."
+              : "Собери первый шаблон с активацией и короткими мини-сетами."}
+          </p>
+        </div>
+      </div>
+
+      {templates.length > 0 ? (
+        <ul className="border-border mt-4 space-y-2 border-t pt-4">
+          {templates.map((t) => (
+            <li key={t.id}>
+              <SwipeToDelete
+                action={deleteTemplateFromListAction}
+                hidden={{ templateId: t.id }}
+                title="Удалить шаблон?"
+                description={`«${t.name}» удалится безвозвратно. Выполненные по нему тренировки останутся в истории.`}
+                deleteAriaLabel={`Удалить Myo-reps шаблон «${t.name}»`}
+              >
+                <Link
+                  href={`/templates/${t.id}`}
+                  className="bg-background hover:bg-accent border-border flex min-h-[56px] items-center justify-between gap-3 rounded-xl border p-4 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{t.name}</p>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      {formatExerciseCount(t.exerciseCount)}
+                    </p>
+                    <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+                      <Zap className="size-3" aria-hidden="true" />
+                      Мио-репсы · {t.myoExerciseCount}
+                    </span>
+                    {t.adapted || t.source === "trainer" ? (
+                      <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+                        <Wand2 className="size-3" aria-hidden="true" />
+                        обновлён тренером
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="text-primary flex shrink-0 items-center gap-1 text-xs font-medium">
+                    <Play className="size-4 fill-current" aria-hidden="true" />
+                    Начать
+                  </span>
+                </Link>
+              </SwipeToDelete>
+            </li>
+          ))}
+          <li>
+            <Link
+              href="/templates/new?scheme=myo_reps"
+              className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex min-h-[56px] items-center justify-center gap-2 rounded-xl border border-dashed p-4 text-sm font-medium transition-colors"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Создать новый шаблон
+            </Link>
+          </li>
+        </ul>
+      ) : (
+        <div className="border-border mt-4 border-t pt-4">
+          <Button asChild size="lg" className="min-h-[56px] w-full">
+            <Link href="/templates/new?scheme=myo_reps">
+              <Plus className="size-4" />
+              Собрать первый шаблон
+            </Link>
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 
