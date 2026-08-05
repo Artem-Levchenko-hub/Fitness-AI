@@ -18,10 +18,11 @@ import { exercises } from "./exercises";
  *  формат живёт в своей таблице и МЕРЖИТСЯ в статистику/нагрев аватара/
  *  недельный AI-разбор третьим источником (см. stats.repo).
  *
- *  Одна строка = один подход (mode='sets') ИЛИ одна суммарная запись
- *  (mode='total', reps = суммарные повторы). weightKg — добавка (подтягивания
- *  с весом); NULL = без веса/bodyweight → тоннаж 0, но подход и повторы
- *  считаются (как в круговых). */
+ *  Одна строка = один подход (mode='sets'), один Myo-кластер (mode='myo_reps')
+ *  или одна суммарная запись (mode='total', reps = суммарные повторы).
+ *  Для Myo `reps` — активация, а myoMiniSets/myoMiniReps — короткие мини-сеты.
+ *  weightKg — добавка (подтягивания с весом); NULL = без веса/bodyweight →
+ *  тоннаж 0, но подходы и повторы считаются (как в круговых). */
 export const quickActivities = pgTable(
   "quick_activities",
   {
@@ -36,6 +37,8 @@ export const quickActivities = pgTable(
       .references(() => exercises.id, { onDelete: "restrict" }),
     mode: quickActivityMode("mode").notNull().default("sets"),
     reps: integer("reps").notNull(),
+    myoMiniSets: integer("myo_mini_sets"),
+    myoMiniReps: integer("myo_mini_reps"),
     weightKg: doublePrecision("weight_kg"),
     performedAt: timestamp("performed_at", { mode: "date", withTimezone: true })
       .notNull()

@@ -8,4 +8,5 @@
  *  public/models/muscles.glb и поставить здесь "/models/muscles.glb". Раскраска,
  *  тап и вращение уже работают — больше менять ничего не нужно.
  *  См. public/models/README.md. */
-export const MUSCLE_MODEL_URL: string | null = "/models/muscles.glb";
+// Версия в URL позволяет безопасно менять glb, не ломая immutable-кэш.
+export const MUSCLE_MODEL_URL: string | null = "/models/muscles.glb?v=1";

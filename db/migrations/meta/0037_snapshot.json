@@ -5473,6 +5473,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "myo_mini_sets": {
+          "name": "myo_mini_sets",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "myo_mini_reps": {
+          "name": "myo_mini_reps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "weight_kg": {
           "name": "weight_kg",
           "type": "double precision",
@@ -5742,6 +5754,7 @@
       "schema": "public",
       "values": [
         "sets",
+        "myo_reps",
         "total"
       ]
     },

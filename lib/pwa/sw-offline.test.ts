@@ -182,14 +182,14 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     // версионные кэши прошлого деплоя + текущие (имена держит сам sw.js)
     await caches.open("static-v1");
     await caches.open("runtime-v1");
-    await caches.open("static-v6");
+    await caches.open("static-v7");
     const evt = makeEvent("/activate");
     listeners.activate(evt);
     await new Promise((r) => setTimeout(r, 0));
     const remaining = await caches.keys();
     expect(remaining).not.toContain("static-v1");
     expect(remaining).not.toContain("runtime-v1");
-    expect(remaining).toContain("static-v6");
+    expect(remaining).toContain("static-v7");
     expect(claim).toHaveBeenCalled();
   });
 
@@ -293,6 +293,28 @@ describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
     // не переживёт валидный логин (баг iOS PWA)
     const cached = await env.caches.match(navReq);
     expect(cached).toBeUndefined();
+  });
+
+  it("GLB-модель → cache-first после первого открытия профиля", async () => {
+    let online = true;
+    const env = loadSw(() => {
+      if (!online) return Promise.reject(new Error("offline"));
+      return Promise.resolve(new FakeResponse("MUSCLE_MODEL"));
+    });
+    const modelReq = {
+      method: "GET",
+      url: "https://fitnesss.online/models/muscles.glb?v=1",
+      mode: "cors",
+    };
+
+    const first = makeEvent(modelReq);
+    env.listeners.fetch(first);
+    expect((await first.responded)?.body).toBe("MUSCLE_MODEL");
+
+    online = false;
+    const second = makeEvent(modelReq);
+    env.listeners.fetch(second);
+    expect((await second.responded)?.body).toBe("MUSCLE_MODEL");
   });
 
   it("API-запрос → network-only, обработчик не перехватывает (никогда не кэшируется)", async () => {

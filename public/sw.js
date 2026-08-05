@@ -1,11 +1,11 @@
 /// <reference lib="webworker" />
 
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = ["/offline.html"];
 
-const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|otf|ico|svg|png|jpg|gif|webp)$/;
+const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|otf|ico|svg|png|jpg|gif|webp|glb)$/;
 const NEXT_STATIC = /\/_next\/static\//;
 const API_ROUTES = /\/(api|_next\/data)\//;
 

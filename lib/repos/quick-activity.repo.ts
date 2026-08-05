@@ -11,8 +11,10 @@ import type { QuickActivity } from "@/db/schema";
 
 export type LogQuickActivityInput = {
   exerciseId: string;
-  mode: "sets" | "total";
+  mode: "sets" | "myo_reps" | "total";
   reps: number;
+  myoMiniSets?: number;
+  myoMiniReps?: number;
   weightKg: number | null;
 };
 
@@ -49,8 +51,10 @@ export type QuickActivityEntry = {
   id: string;
   exerciseId: string;
   exerciseName: string;
-  mode: "sets" | "total";
+  mode: "sets" | "myo_reps" | "total";
   reps: number;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
   weightKg: number | null;
   performedAt: Date;
 };
@@ -70,6 +74,8 @@ export async function listQuickActivityForDay(
       exerciseName: schema.exercises.nameRu,
       mode: schema.quickActivities.mode,
       reps: schema.quickActivities.reps,
+      myoMiniSets: schema.quickActivities.myoMiniSets,
+      myoMiniReps: schema.quickActivities.myoMiniReps,
       weightKg: schema.quickActivities.weightKg,
       performedAt: schema.quickActivities.performedAt,
     })
@@ -93,9 +99,11 @@ export type RecentQuickExercise = {
   exerciseName: string;
   /** Последний использованный режим — префилл шита (эспандер помнит «тотал»,
    *  подтягивания — «подходами»). */
-  mode: "sets" | "total";
+  mode: "sets" | "myo_reps" | "total";
   /** Последние повторы — префилл степпера. */
   reps: number;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
   weightKg: number | null;
 };
 
@@ -112,6 +120,8 @@ export async function listRecentQuickExercises(
       exerciseName: schema.exercises.nameRu,
       mode: schema.quickActivities.mode,
       reps: schema.quickActivities.reps,
+      myoMiniSets: schema.quickActivities.myoMiniSets,
+      myoMiniReps: schema.quickActivities.myoMiniReps,
       weightKg: schema.quickActivities.weightKg,
     })
     .from(schema.quickActivities)

@@ -31,6 +31,8 @@ export async function QuickActivityTile({
       exerciseName: e.exerciseName,
       mode: e.mode,
       reps: e.reps,
+      myoMiniSets: e.myoMiniSets,
+      myoMiniReps: e.myoMiniReps,
     })),
   );
 
@@ -42,6 +44,8 @@ export async function QuickActivityTile({
         exerciseName: e.exerciseName,
         mode: e.mode,
         reps: e.reps,
+        myoMiniSets: e.myoMiniSets,
+        myoMiniReps: e.myoMiniReps,
         weightKg: e.weightKg,
       }))}
       recent={recent}

@@ -26,15 +26,19 @@ import { cn } from "@/lib/utils";
 type TodayEntry = {
   id: string;
   exerciseName: string;
-  mode: "sets" | "total";
+  mode: "sets" | "myo_reps" | "total";
   reps: number;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
   weightKg: number | null;
 };
 
 type Prefill = {
   exerciseId: string;
-  mode: "sets" | "total";
+  mode: "sets" | "myo_reps" | "total";
   reps: number;
+  myoMiniSets: number | null;
+  myoMiniReps: number | null;
   weightKg: number | null;
 };
 
@@ -56,8 +60,10 @@ export function QuickActivityCard({
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [exerciseId, setExerciseId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"sets" | "total">("sets");
+  const [mode, setMode] = useState<"sets" | "myo_reps" | "total">("sets");
   const [repsText, setRepsText] = useState("10");
+  const [myoMiniSetsText, setMyoMiniSetsText] = useState("3");
+  const [myoMiniRepsText, setMyoMiniRepsText] = useState("5");
   const [weightText, setWeightText] = useState("");
 
   const exerciseName =
@@ -68,6 +74,8 @@ export function QuickActivityCard({
       setExerciseId(prefill.exerciseId);
       setMode(prefill.mode);
       setRepsText(String(prefill.reps));
+      setMyoMiniSetsText(String(prefill.myoMiniSets ?? 3));
+      setMyoMiniRepsText(String(prefill.myoMiniReps ?? 5));
       setWeightText(prefill.weightKg == null ? "" : String(prefill.weightKg));
     } else if (!exerciseId && recent[0]) {
       // Пустой старт: префилл последним использованным упражнением — режим и
@@ -75,6 +83,8 @@ export function QuickActivityCard({
       setExerciseId(recent[0].exerciseId);
       setMode(recent[0].mode);
       setRepsText(String(recent[0].reps));
+      setMyoMiniSetsText(String(recent[0].myoMiniSets ?? 3));
+      setMyoMiniRepsText(String(recent[0].myoMiniReps ?? 5));
       setWeightText(
         recent[0].weightKg == null ? "" : String(recent[0].weightKg),
       );
@@ -89,6 +99,14 @@ export function QuickActivityCard({
 
   const save = (keepOpen: boolean) => {
     const reps = parseInt(repsText || "0", 10) || 0;
+    const myoMiniSets = Math.min(
+      10,
+      Math.max(1, parseInt(myoMiniSetsText || "3", 10) || 3),
+    );
+    const myoMiniReps = Math.min(
+      30,
+      Math.max(1, parseInt(myoMiniRepsText || "5", 10) || 5),
+    );
     if (!exerciseId) {
       toast.error("Выберите упражнение");
       return;
@@ -104,11 +122,18 @@ export function QuickActivityCard({
         exerciseId,
         mode,
         reps,
+        myoMiniSets,
+        myoMiniReps,
         weightKg: weightRaw != null && Number.isFinite(weightRaw) ? weightRaw : null,
       });
       if (res.status === "success") {
         toast.success(
-          `${exerciseName ?? "Записано"}: ${reps}${mode === "total" ? " (тотал)" : ""}`,
+          `${exerciseName ?? "Записано"}: ${formatQuickEntry({
+            mode,
+            reps,
+            myoMiniSets,
+            myoMiniReps,
+          })}`,
         );
         if (!keepOpen) setOpen(false);
         router.refresh();
@@ -168,13 +193,17 @@ export function QuickActivityCard({
                   exerciseId: r.exerciseId,
                   mode: r.mode,
                   reps: r.reps,
+                  myoMiniSets: r.myoMiniSets,
+                  myoMiniReps: r.myoMiniReps,
                   weightKg: r.weightKg,
                 })
               }
               className="border-border bg-background text-foreground hover:bg-accent inline-flex h-11 items-center gap-1.5 rounded-full border px-4 text-sm font-medium"
-            >
+              >
               {r.exerciseName}
-              <span className="text-muted-foreground tabular">· {r.reps}</span>
+              <span className="text-muted-foreground tabular">
+                · {formatQuickEntry(r)}
+              </span>
             </button>
           ))}
         </div>
@@ -202,12 +231,18 @@ export function QuickActivityCard({
                 onChange={(id) => setExerciseId(id)}
               />
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <ModeButton
                   active={mode === "sets"}
                   onClick={() => setMode("sets")}
                   title="Подходами"
                   hint="подход = запись"
+                />
+                <ModeButton
+                  active={mode === "myo_reps"}
+                  onClick={() => setMode("myo_reps")}
+                  title="Myo-reps"
+                  hint="кластер = 4 подхода"
                 />
                 <ModeButton
                   active={mode === "total"}
@@ -219,7 +254,11 @@ export function QuickActivityCard({
 
               <div>
                 <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
-                  {mode === "total" ? "Повторов всего" : "Повторов в подходе"}
+                  {mode === "total"
+                    ? "Повторов всего"
+                    : mode === "myo_reps"
+                      ? "Активация, повторов"
+                      : "Повторов в подходе"}
                 </p>
                 <div className="grid grid-cols-[3rem_3rem_minmax(4rem,1fr)_3rem_3rem] items-center gap-2 sm:grid-cols-[3.5rem_3.5rem_minmax(5rem,1fr)_3.5rem_3.5rem]">
                   <StepBtn onClick={() => bumpReps(-5)} label="−5" />
@@ -243,6 +282,35 @@ export function QuickActivityCard({
                   <StepBtn onClick={() => bumpReps(5)} label="+5" />
                 </div>
               </div>
+
+              {mode === "myo_reps" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+                    Мини-сетов
+                    <NumberField
+                      value={myoMiniSetsText}
+                      onChange={setMyoMiniSetsText}
+                      className="text-foreground tabular mt-1 h-11 text-sm normal-case tracking-normal"
+                      aria-label="Мини-сеты"
+                      placeholder="3"
+                    />
+                  </label>
+                  <label className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+                    Повторов в мини
+                    <NumberField
+                      value={myoMiniRepsText}
+                      onChange={setMyoMiniRepsText}
+                      className="text-foreground tabular mt-1 h-11 text-sm normal-case tracking-normal"
+                      aria-label="Повторы в мини-сете"
+                      placeholder="5"
+                    />
+                  </label>
+                  <p className="text-muted-foreground col-span-2 text-xs">
+                    Мини-сеты: {myoMiniSetsText || 3} × {myoMiniRepsText || 5}.
+                    Всего это считается как рабочие подходы.
+                  </p>
+                </div>
+              ) : null}
 
               <div>
                 <p className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
@@ -297,8 +365,7 @@ export function QuickActivityCard({
                         <span className="min-w-0 truncate text-sm">
                           {e.exerciseName}
                           <span className="text-muted-foreground tabular ml-1.5">
-                            {e.reps}
-                            {e.mode === "total" ? " (тотал)" : ""}
+                            {formatQuickEntry(e)}
                             {e.weightKg != null ? ` · +${e.weightKg} кг` : ""}
                           </span>
                         </span>
@@ -324,6 +391,19 @@ export function QuickActivityCard({
   );
 }
 
+function formatQuickEntry(entry: {
+  mode: "sets" | "myo_reps" | "total";
+  reps: number;
+  myoMiniSets?: number | null;
+  myoMiniReps?: number | null;
+}): string {
+  if (entry.mode === "total") return `${entry.reps} (тотал)`;
+  if (entry.mode === "myo_reps") {
+    return `${entry.reps}+${entry.myoMiniSets ?? 3}×${entry.myoMiniReps ?? 5}`;
+  }
+  return String(entry.reps);
+}
+
 function ModeButton({
   active,
   onClick,
@@ -341,7 +421,7 @@ function ModeButton({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex h-14 flex-col items-center justify-center rounded-xl border text-sm font-medium",
+        "flex min-h-14 flex-col items-center justify-center rounded-xl border px-1 text-xs font-medium",
         active
           ? "border-primary bg-primary/10 text-foreground"
           : "border-border bg-background text-muted-foreground",

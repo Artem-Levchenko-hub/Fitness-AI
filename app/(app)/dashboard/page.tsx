@@ -10,9 +10,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { Button } from "@/components/ui/button";
-import { DashboardAvatarTile } from "@/components/dashboard/DashboardAvatarTile";
 import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
 import { FriendsActivityPreview } from "@/components/dashboard/FriendsActivityPreview";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
@@ -35,11 +33,7 @@ import { getUserProfile } from "@/lib/repos/body.repo";
 import { listFriendsActivity } from "@/lib/repos/friends.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
-import {
-  dailyVolume,
-  muscleHeatProfile,
-  workoutFrequency,
-} from "@/lib/repos/stats.repo";
+import { dailyVolume, workoutFrequency } from "@/lib/repos/stats.repo";
 import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "Главная" };
@@ -58,7 +52,6 @@ export default async function DashboardPage() {
     recent,
     recentCardio,
     recentCircuits,
-    heat,
     daily,
     frequency,
     friendsActivity,
@@ -66,7 +59,6 @@ export default async function DashboardPage() {
     listRecentWorkouts(user.id, 30),
     listRecentCardio(user.id, 10),
     listCircuits(user.id, 10),
-    muscleHeatProfile(user.id, now),
     // Те же источники, что рисуют графики /stats (силовые working-подходы,
     // бакет по TZ) → tile-превью совпадает со /stats (гейт H4.1). "30d"
     // покрывает текущую + прошлую ISO-неделю.
@@ -83,10 +75,6 @@ export default async function DashboardPage() {
 
   // Снимок «эта неделя» для tile-входа /stats (H4.1): 7 дней + тоннаж + дельта.
   const weekStrip = buildWeekStrip(daily, frequency, weekStartIso);
-
-  // Мини-аватар витрины (H9.2): тот же heat-источник, что красит 3D на /profile;
-  // здесь нужен только цвет/уровень/подходы по группам (без records/forgotten).
-  const avatarData = buildAvatarData(heat, now);
 
   const completed = recent.filter((w) => w.status === "completed");
   // `last` = последняя СИЛОВАЯ — нужна для AI-тренера (анализирует силовые).
@@ -153,12 +141,6 @@ export default async function DashboardPage() {
             <FriendsActivityPreview activity={topFriendActivity} />
           ) : null}
         </DashboardNavTile>
-      </section>
-
-      {/* H9.2: мини-аватар-витрина — текущий heat-силуэт, тап → полный 3D на
-          /profile. Крючок столпа 2 на главной, а не за вкладкой профиля. */}
-      <section className="mt-3">
-        <DashboardAvatarTile data={avatarData} />
       </section>
 
       {/* Доп. активность — быстрый лог подхода/тотала между делом без создания

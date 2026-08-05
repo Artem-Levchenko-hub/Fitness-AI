@@ -3,14 +3,17 @@
  *
  *  Формат detail:
  *  - подходы (mode='sets') — повторы в хронологии через «+»: «12+10+8»;
+ *  - Myo-reps — активация и мини-сеты: «12+3×5»;
  *  - тотал — одно число суммой: «100»;
  *  - смешанное (редко) — общий хронологический список через «+».
  */
 
 export type QuickDayEntry = {
   exerciseName: string;
-  mode: "sets" | "total";
+  mode: "sets" | "myo_reps" | "total";
   reps: number;
+  myoMiniSets?: number | null;
+  myoMiniReps?: number | null;
 };
 
 export type QuickDaySummary = {
@@ -35,11 +38,25 @@ export function summarizeQuickDay(entries: QuickDayEntry[]): QuickDaySummary[] {
   const out: QuickDaySummary[] = [];
   for (const [exerciseName, list] of groups) {
     const chrono = [...list].reverse();
-    const totalReps = chrono.reduce((s, e) => s + e.reps, 0);
+    const totalReps = chrono.reduce(
+      (s, e) =>
+        s +
+        e.reps +
+        (e.mode === "myo_reps"
+          ? (e.myoMiniSets ?? 3) * (e.myoMiniReps ?? 5)
+          : 0),
+      0,
+    );
     const isSingleTotal = chrono.length === 1 && chrono[0]!.mode === "total";
     const detail = isSingleTotal
       ? String(totalReps)
-      : chrono.map((e) => e.reps).join("+");
+      : chrono
+          .map((e) =>
+            e.mode === "myo_reps"
+              ? `${e.reps}+${e.myoMiniSets ?? 3}×${e.myoMiniReps ?? 5}`
+              : String(e.reps),
+          )
+          .join("+");
     out.push({ exerciseName, detail, totalReps, entries: chrono.length });
   }
   return out;

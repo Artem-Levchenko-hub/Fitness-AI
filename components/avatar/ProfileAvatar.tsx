@@ -75,6 +75,14 @@ export function ProfileAvatar({
 
   return (
     <div className="space-y-3">
+      {MUSCLE_MODEL_URL ? (
+        <link
+          rel="preload"
+          href={MUSCLE_MODEL_URL}
+          as="fetch"
+          crossOrigin="anonymous"
+        />
+      ) : null}
       <div className="bg-card/40 border-border relative aspect-[3/4] w-full overflow-hidden rounded-3xl border">
         {webgl ? (
           <AvatarCanvas data={data} selected={selected} onSelect={onSelect} />

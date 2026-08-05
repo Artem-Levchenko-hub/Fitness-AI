@@ -50,6 +50,23 @@ import { addDaysIso, isoWeekStartIso } from "@/lib/datetime/iso-week";
 export { rangeToFromDate };
 export type { StatsRange };
 
+/** Эффективные показатели быстрой записи. Myo-кластер = активация + мини-сеты:
+ *  он участвует в статистике как полноценные рабочие подходы, а не как одна
+ *  облегчённая запись. Старые строки и неполные записи используют 3×5. */
+const quickEffectiveSets = sql<number>`CASE
+  WHEN ${schema.quickActivities.mode} = 'myo_reps'
+    THEN 1 + COALESCE(${schema.quickActivities.myoMiniSets}, 3)
+  ELSE 1
+END`;
+
+const quickEffectiveReps = sql<number>`CASE
+  WHEN ${schema.quickActivities.mode} = 'myo_reps'
+    THEN ${schema.quickActivities.reps}
+      + COALESCE(${schema.quickActivities.myoMiniSets}, 3)
+      * COALESCE(${schema.quickActivities.myoMiniReps}, 5)
+  ELSE ${schema.quickActivities.reps}
+END`;
+
 export type DailyVolumePoint = {
   date: string; // YYYY-MM-DD в timezone юзера
   volume: number;
@@ -172,9 +189,9 @@ async function quickVolumeBuckets(
   const rows = await db
     .select({
       key: keyExpr,
-      volume: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
-      sets: sql<number>`COUNT(${schema.quickActivities.id})`,
-      reps: sql<number>`COALESCE(SUM(${schema.quickActivities.reps}), 0)`,
+      volume: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * (${quickEffectiveReps})), 0)`,
+      sets: sql<number>`COALESCE(SUM(${quickEffectiveSets}), 0)`,
+      reps: sql<number>`COALESCE(SUM(${quickEffectiveReps}), 0)`,
     })
     .from(schema.quickActivities)
     .where(
@@ -340,7 +357,7 @@ async function muscleVolumeRows(
     .select({
       muscle: schema.exerciseMuscleGroups.muscleGroupKey,
       role: schema.exerciseMuscleGroups.role,
-      volume: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+      volume: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * (${quickEffectiveReps})), 0)`,
     })
     .from(schema.quickActivities)
     .innerJoin(
@@ -466,7 +483,7 @@ export async function muscleWeeklyVolume(
         muscle: schema.exerciseMuscleGroups.muscleGroupKey,
         role: schema.exerciseMuscleGroups.role,
         weight: schema.quickActivities.weightKg,
-        reps: schema.quickActivities.reps,
+        reps: quickEffectiveReps,
         at: schema.quickActivities.performedAt,
       })
       .from(schema.quickActivities)
@@ -795,9 +812,9 @@ async function quickEffortTotals(
 ): Promise<ActivityTotals> {
   const [agg] = await db
     .select({
-      sets: sql<number>`COUNT(${schema.quickActivities.id})`,
-      reps: sql<number>`COALESCE(SUM(${schema.quickActivities.reps}), 0)`,
-      tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+      sets: sql<number>`COALESCE(SUM(${quickEffectiveSets}), 0)`,
+      reps: sql<number>`COALESCE(SUM(${quickEffectiveReps}), 0)`,
+      tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * (${quickEffectiveReps})), 0)`,
     })
     .from(schema.quickActivities)
     .where(
@@ -954,7 +971,7 @@ async function activityTonnage(
       ),
     db
       .select({
-        tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+        tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * (${quickEffectiveReps})), 0)`,
       })
       .from(schema.quickActivities)
       .where(
@@ -1121,6 +1138,8 @@ type HeatRow = {
   role: "primary" | "secondary";
   weight: number | null;
   reps: number | null;
+  /** Эффективные подходы в записи (Myo-кластер = активация + мини-сеты). */
+  setCount: number;
   exerciseId: string;
   exName: string;
   at: Date;
@@ -1225,17 +1244,16 @@ export async function muscleHeatProfile(
       ),
     );
 
-  // Доп. активность: каждая запись = один «подход» своего упражнения (mode=
-  // 'sets' — буквально подход; mode='total' — одна суммарная запись, считаем
-  // одним эффективным подходом: лёгкая внетренировочная нагрузка без инфляции
-  // нагрева). Вес/повторы — для тоннажа, где вес указан.
+  // Доп. активность: sets/total = один эффективный подход, Myo-reps = активация
+  // плюс мини-сеты. Вес/повторы — для тоннажа, где вес указан.
   const quickHeatRows = await db
     .select({
       entryId: schema.quickActivities.id,
       muscle: schema.exerciseMuscleGroups.muscleGroupKey,
       role: schema.exerciseMuscleGroups.role,
       weight: schema.quickActivities.weightKg,
-      reps: schema.quickActivities.reps,
+      reps: quickEffectiveReps,
+      setCount: quickEffectiveSets,
       exerciseId: schema.quickActivities.exerciseId,
       exName: schema.exercises.nameRu,
       at: schema.quickActivities.performedAt,
@@ -1260,13 +1278,13 @@ export async function muscleHeatProfile(
     );
 
   const rows: HeatRow[] = [
-    ...strengthRows.map((r) => ({ ...r, sourceId: `s:${r.setId}` })),
-    ...circuitRows.map((r) => ({ ...r, sourceId: `c:${r.logId}` })),
+    ...strengthRows.map((r) => ({ ...r, setCount: 1, sourceId: `s:${r.setId}` })),
+    ...circuitRows.map((r) => ({ ...r, setCount: 1, sourceId: `c:${r.logId}` })),
     ...quickHeatRows.map((r) => ({ ...r, sourceId: `q:${r.entryId}` })),
   ];
 
   type Acc = {
-    /** sourceId → максимальный role-вес (primary вытесняет secondary). */
+    /** sourceId → максимальный взвешенный effective-set вклад. */
     setWeights: Map<string, number>;
     volume: number;
     lastTrainedAt: Date | null;
@@ -1285,7 +1303,10 @@ export async function muscleHeatProfile(
   for (const r of rows) {
     const w = r.role === "primary" ? 1 : 0.5;
     const acc = ensure(r.muscle);
-    if ((acc.setWeights.get(r.sourceId) ?? 0) < w) acc.setWeights.set(r.sourceId, w);
+    const weightedSets = w * r.setCount;
+    if ((acc.setWeights.get(r.sourceId) ?? 0) < weightedSets) {
+      acc.setWeights.set(r.sourceId, weightedSets);
+    }
     if (r.weight != null && r.reps != null) {
       const vol = r.weight * r.reps * w;
       acc.volume += vol;
@@ -1317,7 +1338,7 @@ export async function muscleHeatProfile(
     return {
       muscleKey: key,
       weeklySets,
-      sets: a.setWeights.size,
+      sets: Math.round([...a.setWeights.values()].reduce((s, n) => s + n, 0)),
       volume7d: a.volume,
       lastTrainedAt: a.lastTrainedAt,
       top3,
@@ -1832,8 +1853,8 @@ export async function weeklyReviewData(
       name: schema.exercises.nameRu,
       mode: schema.quickActivities.mode,
       entries: sql<number>`COUNT(${schema.quickActivities.id})`,
-      reps: sql<number>`COALESCE(SUM(${schema.quickActivities.reps}), 0)`,
-      tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * ${schema.quickActivities.reps}), 0)`,
+      reps: sql<number>`COALESCE(SUM(${quickEffectiveReps}), 0)`,
+      tonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * (${quickEffectiveReps})), 0)`,
     })
     .from(schema.quickActivities)
     .innerJoin(

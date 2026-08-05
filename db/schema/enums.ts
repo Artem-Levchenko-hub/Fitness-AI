@@ -82,6 +82,7 @@ export const pushKind = pgEnum("push_kind", [
  *  повторы одним числом (кистевой эспандер: 100). */
 export const quickActivityMode = pgEnum("quick_activity_mode", [
   "sets",
+  "myo_reps",
   "total",
 ]);
 

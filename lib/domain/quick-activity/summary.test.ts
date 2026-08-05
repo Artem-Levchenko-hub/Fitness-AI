@@ -4,9 +4,17 @@ import { summarizeQuickDay, type QuickDayEntry } from "./summary";
 
 const e = (
   exerciseName: string,
-  mode: "sets" | "total",
+  mode: "sets" | "myo_reps" | "total",
   reps: number,
-): QuickDayEntry => ({ exerciseName, mode, reps });
+  myoMiniSets?: number,
+  myoMiniReps?: number,
+): QuickDayEntry => ({
+  exerciseName,
+  mode,
+  reps,
+  myoMiniSets,
+  myoMiniReps,
+});
 
 describe("summarizeQuickDay", () => {
   it("пустой день → пустая сводка", () => {
@@ -52,5 +60,16 @@ describe("summarizeQuickDay", () => {
       e("Эспандер кистевой", "total", 100),
     ]);
     expect(out[0]).toMatchObject({ detail: "100+50", totalReps: 150 });
+  });
+
+  it("Myo-кластер показывает активацию и считает мини-сеты в повторах", () => {
+    const out = summarizeQuickDay([
+      e("Подтягивания", "myo_reps", 10, 3, 5),
+    ]);
+    expect(out[0]).toMatchObject({
+      detail: "10+3×5",
+      totalReps: 25,
+      entries: 1,
+    });
   });
 });
