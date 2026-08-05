@@ -9,6 +9,8 @@ import {
   type NextTemplateItem,
   type WorkoutExerciseInput,
 } from "@/lib/domain/templates/next-template";
+import { myoMiniRepsFromActivation } from "@/lib/domain/workouts/myo";
+import type { TrainingReadiness } from "@/lib/domain/trainer/recovery-readiness";
 
 export type AdaptItem = {
   exerciseId: string;
@@ -18,6 +20,10 @@ export type AdaptItem = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  myoReps?: boolean;
+  myoMiniSets?: number;
+  myoMiniReps?: number;
+  myoMiniRestSeconds?: number;
   notes?: string | null;
 };
 
@@ -81,6 +87,41 @@ export type InPlaceAdaptation = {
   swap: { fromExerciseId: string; toExerciseId: string } | null;
 };
 
+function adaptMyoItem(
+  current: AdaptItem,
+  performed: WorkoutExerciseInput | undefined,
+  holdProgression: boolean,
+): AdaptItem {
+  const activation = performed?.sets.find((set) => set.setType === "working");
+  if (!activation) return current;
+
+  const activationWeight = activation.weightKg ?? current.targetWeightKg;
+  const min = current.targetRepsMin;
+  const max = current.targetRepsMax;
+  let targetWeightKg = activationWeight;
+
+  // При caution сохраняем прежнюю нагрузку: дневники восстановления никогда не
+  // становятся поводом автоматически давить вес/повторы вверх или вниз.
+  if (!holdProgression && activationWeight != null) {
+    if (activation.reps >= max) targetWeightKg = activationWeight + 2.5;
+    else if (activation.reps < min) {
+      const reduced = activationWeight - 2.5;
+      targetWeightKg = reduced > 0 ? reduced : null;
+    }
+  }
+
+  return {
+    ...current,
+    // Myo — один активационный плюс мини-сеты: никогда не превращаем мини-сеты
+    // в число обычных рабочих подходов после завершения тренировки.
+    targetSets: 1,
+    targetWeightKg,
+    myoMiniSets: Math.max(1, current.myoMiniSets ?? 3),
+    myoMiniReps: myoMiniRepsFromActivation(activation.reps),
+    myoMiniRestSeconds: Math.min(30, Math.max(5, current.myoMiniRestSeconds ?? 20)),
+  };
+}
+
 /** Строит адаптацию шаблона-дня НА МЕСТЕ по завершённой тренировке:
  *  1) прогрессия по факту (buildNextTemplateItems) накладывается на текущие цели;
  *  2) не более ОДНОГО свапа упражнения — первого по позиции, для которого
@@ -92,9 +133,26 @@ export function buildInPlaceAdaptation(
   current: AdaptItem[],
   performed: WorkoutExerciseInput[],
   substitutes: Record<string, string> = {},
+  options: { readiness?: TrainingReadiness } = {},
 ): InPlaceAdaptation {
-  const next = buildNextTemplateItems(performed);
-  const merged = mergeProgressionIntoItems(current, next);
+  const holdProgression = options.readiness === "caution";
+  const normalExerciseIds = new Set(
+    current.filter((item) => !item.myoReps).map((item) => item.exerciseId),
+  );
+  const next = holdProgression
+    ? []
+    : buildNextTemplateItems(
+        performed.filter((item) => normalExerciseIds.has(item.exerciseId)),
+      );
+  const standardMerged = mergeProgressionIntoItems(current, next);
+  const performedByExerciseId = new Map(
+    performed.map((item) => [item.exerciseId, item]),
+  );
+  const merged = standardMerged.map((item) =>
+    item.myoReps
+      ? adaptMyoItem(item, performedByExerciseId.get(item.exerciseId), holdProgression)
+      : item,
+  );
 
   let swap: InPlaceAdaptation["swap"] = null;
   const items = merged.map((it) => {
@@ -108,6 +166,10 @@ export function buildInPlaceAdaptation(
       targetWeightKg: null,
       targetRepsMin: SWAP_REPS_MIN,
       targetRepsMax: SWAP_REPS_MAX,
+      myoReps: false,
+      myoMiniSets: 3,
+      myoMiniReps: 5,
+      myoMiniRestSeconds: 20,
       notes: null,
     };
   });

@@ -20,6 +20,7 @@ import {
 } from "@/lib/repos/workouts.repo";
 import { getOrCreateNextWorkoutTemplate } from "@/lib/repos/plan-from-history.repo";
 import { adaptTemplateAfterWorkout } from "@/lib/repos/training-programs.repo";
+import { getTrainingReadiness } from "@/lib/repos/recovery.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
 import { parseClientWorkoutId } from "@/lib/domain/workouts/client-workout-id";
@@ -200,10 +201,12 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
         sets: e.sets,
       }));
 
+      const readiness = await getTrainingReadiness(user.id);
       const adaptation = await adaptTemplateAfterWorkout(
         user.id,
         workoutId,
         performed,
+        readiness,
       );
       if (adaptation) {
         revalidatePath("/programs");

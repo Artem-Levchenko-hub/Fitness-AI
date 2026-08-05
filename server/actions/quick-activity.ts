@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
+import { myoMiniRepsFromActivation } from "@/lib/domain/workouts/myo";
 import {
   deleteQuickActivity,
   logQuickActivity,
@@ -23,6 +24,8 @@ const logSchema = z.object({
     .union([z.coerce.number().min(0).max(500), z.null()])
     .transform((v) => (v === 0 ? null : v)),
 });
+
+const deleteSchema = z.object({ id: z.string().uuid() });
 
 export type QuickActivityActionState =
   | { status: "success"; message: string }
@@ -47,7 +50,15 @@ export async function logQuickActivityAction(input: {
     };
   }
   try {
-    await logQuickActivity(user.id, parsed.data);
+    await logQuickActivity(user.id, {
+      ...parsed.data,
+      // Правило 30% — серверное. Старый клиент или подменённый запрос не
+      // смогут сохранить произвольное число мини-повторов.
+      myoMiniReps:
+        parsed.data.mode === "myo_reps"
+          ? myoMiniRepsFromActivation(parsed.data.reps)
+          : parsed.data.myoMiniReps,
+    });
     for (const p of AFFECTED_PATHS) revalidatePath(p);
     return { status: "success", message: "Записано" };
   } catch {
@@ -59,9 +70,10 @@ export async function deleteQuickActivityAction(
   id: string,
 ): Promise<QuickActivityActionState> {
   const user = await requireUser();
-  if (!id) return { status: "error", message: "Нет id записи" };
+  const parsed = deleteSchema.safeParse({ id });
+  if (!parsed.success) return { status: "error", message: "Некорректная запись" };
   try {
-    const existed = await deleteQuickActivity(user.id, id);
+    const existed = await deleteQuickActivity(user.id, parsed.data.id);
     if (existed) for (const p of AFFECTED_PATHS) revalidatePath(p);
     return { status: "success", message: "Удалено" };
   } catch {

@@ -126,7 +126,8 @@ export const templateExercises = pgTable(
     myoMiniSets: integer("myo_mini_sets").notNull().default(3),
     /** Legacy fallback, если фактические повторы активации недоступны. */
     myoMiniReps: integer("myo_mini_reps").notNull().default(5),
-    myoMiniRestSeconds: integer("myo_mini_rest_seconds").notNull().default(30),
+    /** Короткая пауза Myo: product safety limit — не более 30 секунд. */
+    myoMiniRestSeconds: integer("myo_mini_rest_seconds").notNull().default(20),
     notes: text("notes"),
   },
   (t) => [

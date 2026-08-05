@@ -16,6 +16,7 @@ import type {
 } from "@/lib/domain/programs/program-review";
 import type { ProgramReviewSnapshot } from "@/db/schema";
 import type { WorkoutExerciseInput } from "@/lib/domain/templates/next-template";
+import type { TrainingReadiness } from "@/lib/domain/trainer/recovery-readiness";
 import {
   detectStagnation,
   E1RM_STAGNATION_EPSILON_KG,
@@ -508,6 +509,10 @@ async function getTemplateAdaptItems(templateId: string): Promise<AdaptItem[]> {
       targetRepsMax: schema.templateExercises.targetRepsMax,
       targetWeightKg: schema.templateExercises.targetWeightKg,
       targetRestSeconds: schema.templateExercises.targetRestSeconds,
+      myoReps: schema.templateExercises.myoReps,
+      myoMiniSets: schema.templateExercises.myoMiniSets,
+      myoMiniReps: schema.templateExercises.myoMiniReps,
+      myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
       notes: schema.templateExercises.notes,
     })
     .from(schema.templateExercises)
@@ -568,22 +573,6 @@ export async function adaptTemplateInPlace(
         .orderBy(asc(schema.templateExercises.position));
     }
 
-    // Миорепс-протокол — настройка атлета, тренерская адаптация правит только
-    // вес/повторы/отдых: переносим мио по exerciseId через delete+reinsert.
-    // Заменённое упражнение (substitute) стартует без мио (протокол привязан
-    // к выбору движения). Домен AdaptItem про мио не знает (R-02).
-    const myoRows = await tx
-      .select({
-        exerciseId: schema.templateExercises.exerciseId,
-        myoReps: schema.templateExercises.myoReps,
-        myoMiniSets: schema.templateExercises.myoMiniSets,
-        myoMiniReps: schema.templateExercises.myoMiniReps,
-        myoMiniRestSeconds: schema.templateExercises.myoMiniRestSeconds,
-      })
-      .from(schema.templateExercises)
-      .where(eq(schema.templateExercises.templateId, templateId));
-    const myoByExercise = new Map(myoRows.map((m) => [m.exerciseId, m]));
-
     await tx
       .delete(schema.templateExercises)
       .where(eq(schema.templateExercises.templateId, templateId));
@@ -591,7 +580,6 @@ export async function adaptTemplateInPlace(
     if (items.length > 0) {
       await tx.insert(schema.templateExercises).values(
         items.map((it, i) => {
-          const myo = myoByExercise.get(it.exerciseId);
           return {
             templateId,
             exerciseId: it.exerciseId,
@@ -601,10 +589,10 @@ export async function adaptTemplateInPlace(
             targetRepsMax: it.targetRepsMax,
             targetWeightKg: it.targetWeightKg,
             targetRestSeconds: it.targetRestSeconds,
-            myoReps: myo?.myoReps ?? false,
-            myoMiniSets: myo?.myoMiniSets ?? 3,
-            myoMiniReps: myo?.myoMiniReps ?? 5,
-            myoMiniRestSeconds: myo?.myoMiniRestSeconds ?? 30,
+            myoReps: it.myoReps ?? false,
+            myoMiniSets: it.myoMiniSets ?? 3,
+            myoMiniReps: it.myoMiniReps ?? 5,
+            myoMiniRestSeconds: Math.min(30, it.myoMiniRestSeconds ?? 20),
             notes: it.notes ?? null,
           };
         }),
@@ -746,6 +734,7 @@ export async function adaptTemplateAfterWorkout(
   userId: string,
   workoutId: string,
   performed: WorkoutExerciseInput[],
+  readiness?: TrainingReadiness,
 ): Promise<TemplateAdaptationResult | null> {
   const binding = await getTemplateBindingForWorkout(userId, workoutId);
   if (!binding) return null; // ad-hoc без шаблона → адаптировать нечего
@@ -771,7 +760,9 @@ export async function adaptTemplateAfterWorkout(
     }
   }
 
-  const { items, swap } = buildInPlaceAdaptation(current, performed, substitutes);
+  const { items, swap } = buildInPlaceAdaptation(current, performed, substitutes, {
+    readiness,
+  });
   await adaptTemplateInPlace(userId, binding.templateId, items, workoutId);
 
   return { adapted: true, swap };

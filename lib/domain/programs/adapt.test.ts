@@ -178,4 +178,54 @@ describe("buildInPlaceAdaptation", () => {
     expect(out.items[0].targetWeightKg).toBe(52.5);
     expect(out.items[0].targetWeightKg).not.toBe(original[0].targetWeightKg);
   });
+
+  it("keeps Myo protocol intact and derives mini reps from the activation set", () => {
+    const out = buildInPlaceAdaptation(
+      [
+        cur("leg-extension", 0, {
+          targetSets: 1,
+          targetRepsMin: 12,
+          targetRepsMax: 20,
+          targetWeightKg: 40,
+          myoReps: true,
+          myoMiniSets: 3,
+          myoMiniReps: 5,
+          myoMiniRestSeconds: 30,
+        }),
+      ],
+      [
+        ex("leg-extension", [
+          { weightKg: 40, reps: 14 },
+          { weightKg: 40, reps: 4 },
+          { weightKg: 40, reps: 4 },
+          { weightKg: 40, reps: 4 },
+        ]),
+      ],
+    );
+
+    expect(out.items[0]).toMatchObject({
+      targetSets: 1,
+      targetRepsMin: 12,
+      targetRepsMax: 20,
+      targetWeightKg: 40,
+      myoReps: true,
+      myoMiniSets: 3,
+      myoMiniReps: 4,
+      myoMiniRestSeconds: 30,
+    });
+  });
+
+  it("does not advance a plan when fresh recovery data is cautionary", () => {
+    const out = buildInPlaceAdaptation(
+      [cur("bench", 0, { targetWeightKg: 50 })],
+      [ex("bench", [{ weightKg: 50, reps: 12 }])],
+      {},
+      { readiness: "caution" },
+    );
+    expect(out.items[0]).toMatchObject({
+      targetWeightKg: 50,
+      targetRepsMin: 8,
+      targetRepsMax: 12,
+    });
+  });
 });

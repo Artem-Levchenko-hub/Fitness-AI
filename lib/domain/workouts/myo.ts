@@ -7,6 +7,8 @@
  *  меньшими повторами никогда не перебьёт активационный по weight×reps). */
 
 export const MYO_MINI_REPS_PERCENT = 30;
+export const MYO_MINI_REST_MAX_SECONDS = 30;
+export const MYO_MINI_REST_DEFAULT_SECONDS = 20;
 
 export type MyoProtocol = {
   myoReps: boolean;
@@ -50,7 +52,12 @@ export function restBeforeNextSet(
   p: MyoProtocol,
   doneCount: number,
 ): number {
-  if (p.myoReps && doneCount >= 1) return p.myoMiniRestSeconds;
+  if (p.myoReps && doneCount >= 1) {
+    return Math.min(
+      MYO_MINI_REST_MAX_SECONDS,
+      Math.max(5, p.myoMiniRestSeconds),
+    );
+  }
   return targetRestSeconds;
 }
 

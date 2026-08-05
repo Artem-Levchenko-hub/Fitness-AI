@@ -338,7 +338,7 @@ export async function applyRefinedTemplateAction(
         myoReps: prev?.myoReps ?? false,
         myoMiniSets: prev?.myoMiniSets ?? 3,
         myoMiniReps: prev?.myoMiniReps ?? 5,
-        myoMiniRestSeconds: prev?.myoMiniRestSeconds ?? 30,
+        myoMiniRestSeconds: prev?.myoMiniRestSeconds ?? 20,
         notes: it.note,
       };
     }),

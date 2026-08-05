@@ -51,7 +51,7 @@ export default async function EditTemplatePage({ params, searchParams }: Props) 
     myoReps: it.myoReps ?? false,
     myoMiniSets: it.myoMiniSets ?? 3,
     myoMiniReps: it.myoMiniReps ?? 5,
-    myoMiniRestSeconds: it.myoMiniRestSeconds ?? 30,
+    myoMiniRestSeconds: Math.min(30, it.myoMiniRestSeconds ?? 20),
     notes: it.notes ?? "",
   }));
 
