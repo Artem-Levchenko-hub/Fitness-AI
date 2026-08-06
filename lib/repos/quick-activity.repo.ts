@@ -95,6 +95,8 @@ export async function listQuickActivityForDay(
 }
 
 export type RecentQuickExercise = {
+  /** ID последней записи — нужен для удаления из быстрого чипа. */
+  id: string;
   exerciseId: string;
   exerciseName: string;
   /** Последний использованный режим — префилл шита (эспандер помнит «тотал»,
@@ -116,6 +118,7 @@ export async function listRecentQuickExercises(
 ): Promise<RecentQuickExercise[]> {
   const rows = await db
     .select({
+      id: schema.quickActivities.id,
       exerciseId: schema.quickActivities.exerciseId,
       exerciseName: schema.exercises.nameRu,
       mode: schema.quickActivities.mode,

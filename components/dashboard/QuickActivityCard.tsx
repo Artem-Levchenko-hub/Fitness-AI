@@ -138,7 +138,16 @@ export function QuickActivityCard({
     });
   };
 
-  const remove = (id: string) => {
+  const remove = (id: string, exerciseName?: string) => {
+    if (
+      !window.confirm(
+        exerciseName
+          ? `Удалить последнюю запись «${exerciseName}»?`
+          : "Удалить запись?",
+      )
+    ) {
+      return;
+    }
     startTransition(async () => {
       const res = await deleteQuickActivityAction(id);
       if (res.status === "success") router.refresh();
@@ -180,26 +189,40 @@ export function QuickActivityCard({
       {recent.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {recent.map((r) => (
-            <button
+            <div
               key={r.exerciseId}
-              type="button"
-              onClick={() =>
-                openWith({
-                  exerciseId: r.exerciseId,
-                  mode: r.mode,
-                  reps: r.reps,
-                  myoMiniSets: r.myoMiniSets,
-                  myoMiniReps: r.myoMiniReps,
-                  weightKg: r.weightKg,
-                })
-              }
-              className="border-border bg-background text-foreground hover:bg-accent inline-flex h-11 items-center gap-1.5 rounded-full border px-4 text-sm font-medium"
+              className="border-border bg-background inline-flex h-11 overflow-hidden rounded-full border"
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  openWith({
+                    exerciseId: r.exerciseId,
+                    mode: r.mode,
+                    reps: r.reps,
+                    myoMiniSets: r.myoMiniSets,
+                    myoMiniReps: r.myoMiniReps,
+                    weightKg: r.weightKg,
+                  })
+                }
+                className="text-foreground hover:bg-accent inline-flex min-w-0 items-center gap-1.5 px-4 text-sm font-medium"
               >
-              {r.exerciseName}
-              <span className="text-muted-foreground tabular">
-                · {formatQuickEntry(r)}
-              </span>
-            </button>
+                {r.exerciseName}
+                <span className="text-muted-foreground tabular">
+                  · {formatQuickEntry(r)}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => remove(r.id, r.exerciseName)}
+                disabled={pending}
+                aria-label={`Удалить последнюю запись: ${r.exerciseName}`}
+                title="Удалить последнюю запись"
+                className="border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex w-10 shrink-0 items-center justify-center border-l"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
           ))}
         </div>
       ) : null}
@@ -358,7 +381,7 @@ export function QuickActivityCard({
                         </span>
                         <button
                           type="button"
-                          onClick={() => remove(e.id)}
+                          onClick={() => remove(e.id, e.exerciseName)}
                           disabled={pending}
                           aria-label="Удалить запись"
                           data-testid={`quick-activity-delete-${e.id}`}
