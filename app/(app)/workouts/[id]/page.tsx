@@ -22,9 +22,9 @@ import { resolvePastAdviceHref } from "@/lib/ai/past-advice-link";
 import { requireUser } from "@/lib/auth/require-user";
 import { bestEstimatedOneRepMax, totalVolume } from "@/lib/domain";
 import {
-  buildNextTemplateItems,
-  templateItemsFromWorkout,
-} from "@/lib/domain/templates/next-template";
+  buildNextWorkoutPlan,
+  type NextWorkoutPlan,
+} from "@/lib/repos/plan-from-history.repo";
 import {
   summarizePreviousSession,
   type PreviousSessionSummary,
@@ -69,11 +69,15 @@ export default async function WorkoutPage({ params }: Props) {
     const pastAdviceHref = resolvePastAdviceHref(
       await getPreviousAnalysisRef(user.id, "strength", { workoutId: id }),
     );
+    // «Следующая тренировка» — прогрессия каждого упражнения с fallback на
+    // историю (даже пустая сессия даёт план). Считаем в async-компоненте.
+    const nextWorkout = await buildNextWorkoutPlan(user.id, id);
     return (
       <CompletedView
         workout={workout}
         analysis={analysis}
         pastAdviceHref={pastAdviceHref}
+        nextWorkout={nextWorkout}
       />
     );
   }
@@ -149,10 +153,12 @@ function CompletedView({
   workout,
   analysis,
   pastAdviceHref,
+  nextWorkout,
 }: {
   workout: ActiveWorkout;
   analysis: Awaited<ReturnType<typeof getAiAnalysisForWorkout>>;
   pastAdviceHref: string | null;
+  nextWorkout: NextWorkoutPlan | null;
 }) {
   const totalSets = workout.exercises.reduce(
     (sum, e) => sum + e.sets.length,
@@ -188,22 +194,11 @@ function CompletedView({
       })
     : null;
 
-  // «Следующая тренировка» — прогрессия по факту этой сессии (тот же расчёт,
-  // что тренер применяет к шаблону): веса/повторы подняты. Если прогрессировать
-  // нечего (например, все подходы разминочные) — fallback на точную копию, чтобы
-  // кнопка «начать снова» была ВСЕГДА, когда есть хоть один подход. Чистые
-  // доменные вызовы (R-7) прямо в server-компоненте.
-  const performed = workout.exercises.map((e) => ({
-    exerciseId: e.exerciseId,
-    sets: e.sets,
-  }));
-  const progressed = buildNextTemplateItems(performed);
-  const nextItems =
-    progressed.length > 0 ? progressed : templateItemsFromWorkout(performed);
-  const nextIsProgressed = progressed.length > 0;
-  const nameById = new Map(
-    workout.exercises.map((e) => [e.exerciseId, e.exerciseNameRu]),
-  );
+  // «Следующая тренировка» посчитана в server-компоненте (buildNextWorkoutPlan):
+  // прогрессия каждого упражнения с fallback на историю — план есть даже по
+  // пустой сессии.
+  const nextItems = nextWorkout?.items ?? [];
+  const nextIsProgressed = nextWorkout?.progressed ?? false;
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -271,13 +266,13 @@ function CompletedView({
               : "Начни новую тренировку с теми же упражнениями — цели уже проставлены."}
           </p>
           <ul className="mb-4 space-y-1.5">
-            {nextItems.map((it) => (
+            {nextItems.map((it, i) => (
               <li
-                key={it.exerciseId}
+                key={`${it.exerciseId}-${i}`}
                 className="flex items-center justify-between gap-3 text-sm"
               >
                 <span className="min-w-0 flex-1 truncate font-medium">
-                  {nameById.get(it.exerciseId) ?? "Упражнение"}
+                  {it.nameRu}
                 </span>
                 <span className="text-muted-foreground tabular shrink-0 text-xs">
                   {it.targetSets}×{it.targetRepsMin}–{it.targetRepsMax}

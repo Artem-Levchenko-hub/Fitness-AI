@@ -85,6 +85,25 @@ describe("buildNextTemplateItems", () => {
     const out = buildNextTemplateItems([ex("curl", [{ weightKg: 10, reps: 12, setType: "warmup" }])]);
     expect(out).toEqual([]);
   });
+
+  it("preserves the Myo-reps protocol for the next workout", () => {
+    const out = buildNextTemplateItems([
+      {
+        ...ex("row", [{ weightKg: 62, reps: 12 }]),
+        myoReps: true,
+        myoMiniSets: 3,
+        myoMiniReps: 4,
+        myoMiniRestSeconds: 45,
+      },
+    ]);
+
+    expect(out[0]).toMatchObject({
+      myoReps: true,
+      myoMiniSets: 3,
+      myoMiniReps: 4,
+      myoMiniRestSeconds: 30,
+    });
+  });
 });
 
 describe("templateItemsFromWorkout (точная передача без прогрессии)", () => {
@@ -128,6 +147,25 @@ describe("templateItemsFromWorkout (точная передача без про�
       ex("row", [{ weightKg: 40, reps: 12 }, { weightKg: 55, reps: 6 }]),
     ]);
     expect(out[0]).toMatchObject({ targetWeightKg: 55, targetRepsMin: 6, targetRepsMax: 12 });
+  });
+
+  it("preserves Myo-reps when saving a completed workout as a template", () => {
+    const out = templateItemsFromWorkout([
+      {
+        ...ex("row", [{ weightKg: 62, reps: 12 }, { weightKg: 62, reps: 4 }]),
+        myoReps: true,
+        myoMiniSets: 3,
+        myoMiniReps: 4,
+        myoMiniRestSeconds: 20,
+      },
+    ]);
+
+    expect(out[0]).toMatchObject({
+      myoReps: true,
+      myoMiniSets: 3,
+      myoMiniReps: 4,
+      myoMiniRestSeconds: 20,
+    });
   });
 
   it("игнорирует разминочные и отбрасывает упражнения без рабочих", () => {

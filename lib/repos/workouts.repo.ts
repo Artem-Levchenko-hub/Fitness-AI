@@ -246,6 +246,9 @@ export async function getActiveWorkoutForUser(
     // targetSets — маркер полного snapshot: вес может быть честным null,
     // поэтому им нельзя определять legacy-сессию.
     const snapshot = r.targetSets != null;
+    // Myo-поля появились позже основных целей. У старых активных сессий
+    // targetSets уже может быть заполнен, а protocol snapshot — ещё NULL;
+    // в таком случае восстанавливаем только отсутствующий протокол из шаблона.
     return {
       ...r,
       targetSets: snapshot ? r.targetSets! : (t?.targetSets ?? 3),
@@ -255,12 +258,12 @@ export async function getActiveWorkoutForUser(
       targetRestSeconds: snapshot
         ? r.targetRestSeconds!
         : (t?.targetRestSeconds ?? 120),
-      myoReps: snapshot ? r.myoReps! : (t?.myoReps ?? false),
-      myoMiniSets: snapshot ? r.myoMiniSets! : (t?.myoMiniSets ?? 3),
-      myoMiniReps: snapshot ? r.myoMiniReps! : (t?.myoMiniReps ?? 5),
+      myoReps: r.myoReps ?? t?.myoReps ?? false,
+      myoMiniSets: r.myoMiniSets ?? t?.myoMiniSets ?? 3,
+      myoMiniReps: r.myoMiniReps ?? t?.myoMiniReps ?? 5,
       myoMiniRestSeconds: Math.min(
         30,
-        snapshot ? r.myoMiniRestSeconds! : (t?.myoMiniRestSeconds ?? 20),
+        r.myoMiniRestSeconds ?? t?.myoMiniRestSeconds ?? 20,
       ),
       sets: setsByWe.get(r.id) ?? [],
     };

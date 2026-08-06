@@ -20,6 +20,11 @@ export type WorkoutSetInput = {
 export type WorkoutExerciseInput = {
   exerciseId: string;
   sets: WorkoutSetInput[];
+  /** Preserve the protocol when a next template is built from a workout. */
+  myoReps?: boolean;
+  myoMiniSets?: number;
+  myoMiniReps?: number;
+  myoMiniRestSeconds?: number;
 };
 
 export type NextTemplateItem = {
@@ -29,7 +34,29 @@ export type NextTemplateItem = {
   targetRepsMax: number;
   targetWeightKg: number | null;
   targetRestSeconds: number;
+  myoReps?: boolean;
+  myoMiniSets?: number;
+  myoMiniReps?: number;
+  myoMiniRestSeconds?: number;
 };
+
+function withMyoProtocol(
+  item: NextTemplateItem,
+  ex: WorkoutExerciseInput,
+): NextTemplateItem {
+  if (!ex.myoReps) return item;
+
+  return {
+    ...item,
+    myoReps: true,
+    myoMiniSets: Math.max(1, ex.myoMiniSets ?? 3),
+    myoMiniReps: Math.max(1, ex.myoMiniReps ?? 5),
+    myoMiniRestSeconds: Math.min(
+      30,
+      Math.max(5, ex.myoMiniRestSeconds ?? 20),
+    ),
+  };
+}
 
 /** Прогрессия одного упражнения по его рабочим подходам. null — если рабочих
  *  подходов не было (упражнение в шаблон не попадает). */
@@ -43,14 +70,14 @@ function progressExercise(ex: WorkoutExerciseInput): NextTemplateItem | null {
   if (weighted.length === 0) {
     // Bodyweight: прогрессируем повторы, без потолка 12 (выносливость растёт выше).
     const topReps = Math.max(...working.map((s) => s.reps));
-    return {
+    return withMyoProtocol({
       exerciseId: ex.exerciseId,
       targetSets,
       targetRepsMin: topReps + 1,
       targetRepsMax: topReps + 3,
       targetWeightKg: null,
       targetRestSeconds: DEFAULT_REST_SECONDS,
-    };
+    }, ex);
   }
 
   const topWeight = Math.max(...weighted.map((s) => s.weightKg as number));
@@ -61,25 +88,25 @@ function progressExercise(ex: WorkoutExerciseInput): NextTemplateItem | null {
 
   if (topReps >= REP_CEILING) {
     // Достиг потолка повторов → +вес, повторы вниз к полу диапазона.
-    return {
+    return withMyoProtocol({
       exerciseId: ex.exerciseId,
       targetSets,
       targetRepsMin: REP_FLOOR,
       targetRepsMax: REP_CEILING,
       targetWeightKg: topWeight + WEIGHT_STEP_KG,
       targetRestSeconds: DEFAULT_REST_SECONDS,
-    };
+    }, ex);
   }
 
   // Ещё есть запас по повторам → тот же вес, цель — больше повторов.
-  return {
+  return withMyoProtocol({
     exerciseId: ex.exerciseId,
     targetSets,
     targetRepsMin: topReps + 1,
     targetRepsMax: Math.min(topReps + 3, REP_CEILING),
     targetWeightKg: topWeight,
     targetRestSeconds: DEFAULT_REST_SECONDS,
-  };
+  }, ex);
 }
 
 /** Строит элементы шаблона «следующей тренировки» из завершённой силовой:
@@ -111,14 +138,14 @@ function faithfulItem(ex: WorkoutExerciseInput): NextTemplateItem | null {
       ? Math.max(...weighted.map((s) => s.weightKg as number))
       : null;
 
-  return {
+  return withMyoProtocol({
     exerciseId: ex.exerciseId,
     targetSets: working.length,
     targetRepsMin: repsMin,
     targetRepsMax: repsMax,
     targetWeightKg: topWeight,
     targetRestSeconds: DEFAULT_REST_SECONDS,
-  };
+  }, ex);
 }
 
 /** Элементы шаблона из выполненной тренировки как есть (см. faithfulItem).

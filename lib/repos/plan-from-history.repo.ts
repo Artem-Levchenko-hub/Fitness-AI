@@ -7,7 +7,10 @@ import {
   templateItemsFromWorkout,
   type NextTemplateItem,
 } from "@/lib/domain/templates/next-template";
+import { exerciseSetHistory } from "@/lib/repos/stats.repo";
 import { getActiveWorkoutForUser } from "@/lib/repos/workouts.repo";
+
+const DEFAULT_REST_SECONDS = 120;
 
 /** «Собери план / шаблон прямо из истории тренировок». Атлет тренируется по
  *  факту (ad-hoc, без шаблонов) — но хочет превратить сделанное в повторяемый
@@ -25,7 +28,14 @@ async function itemsFromWorkout(
   const w = await getActiveWorkoutForUser(userId, workoutId);
   if (!w || w.status !== "completed") return null;
   const items = templateItemsFromWorkout(
-    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
+    w.exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      sets: e.sets,
+      myoReps: e.myoReps,
+      myoMiniSets: e.myoMiniSets,
+      myoMiniReps: e.myoMiniReps,
+      myoMiniRestSeconds: e.myoMiniRestSeconds,
+    })),
   );
   if (items.length === 0) return null;
   return { name: w.name, items };
@@ -46,6 +56,14 @@ function insertItems(
       targetRepsMax: it.targetRepsMax,
       targetWeightKg: it.targetWeightKg,
       targetRestSeconds: it.targetRestSeconds,
+      ...(it.myoReps
+        ? {
+            myoReps: true,
+            myoMiniSets: it.myoMiniSets,
+            myoMiniReps: it.myoMiniReps,
+            myoMiniRestSeconds: it.myoMiniRestSeconds,
+          }
+        : {}),
     })),
   );
 }
@@ -80,36 +98,113 @@ export type NextWorkoutPreviewItem = {
   targetRepsMin: number;
   targetRepsMax: number;
   targetWeightKg: number | null;
+  myoReps?: boolean;
+  myoMiniSets?: number;
+  myoMiniReps?: number;
+  myoMiniRestSeconds?: number;
 };
 
-/** Превью «следующей тренировки от тренера» из завершённой: прогрессия по факту
- *  (buildNextTemplateItems — добавляет вес/повторы) + имена упражнений для показа.
- *  Пусто, если тренировка не найдена/не завершена/без рабочих подходов. Это то,
- *  что атлет видит в истории ДО старта скорректированной тренировки. */
-export async function nextWorkoutPreview(
+export type NextWorkoutPlan = {
+  name: string;
+  /** true — хотя бы одно упражнение спрогрессировано из реальных подходов
+   *  (этой сессии или последней в истории); false — только дефолтные цели. */
+  progressed: boolean;
+  items: NextWorkoutPreviewItem[];
+};
+
+/** Прогрессия ОДНОГО упражнения с fallback на историю. Порядок источников:
+ *  1) рабочие подходы ЭТОЙ сессии → прогрессия (тренер поднял вес/повторы);
+ *  2) если в этой сессии подходов не было (частая «пустая» тренировка — упражнения
+ *     добавлены, подходы не записаны) → последняя РЕАЛЬНАЯ сессия этого упражнения
+ *     из истории → прогрессия от неё;
+ *  3) упражнение никогда не выполнялось → стартовые цели 3×8–12 без веса.
+ *  Так «следующая тренировка» меняется/прогрессирует ВСЕГДА, даже по пустой
+ *  сессии. fromReal=false только для случая 3 (голый дефолт). */
+async function nextItemForExercise(
+  userId: string,
+  exerciseId: string,
+  thisSession: {
+    sets: { weightKg: number | null; reps: number; setType: string }[];
+    myoReps: boolean;
+    myoMiniSets: number;
+    myoMiniReps: number;
+    myoMiniRestSeconds: number;
+  },
+): Promise<{ item: NextTemplateItem; fromReal: boolean }> {
+  const source = { exerciseId, ...thisSession };
+  const here = buildNextTemplateItems([source])[0];
+  if (here) return { item: here, fromReal: true };
+
+  // Пустая/частичная сессия — тянем последнее реальное выполнение из истории.
+  const history = await exerciseSetHistory(userId, exerciseId, 8);
+  for (const session of history) {
+    const it = buildNextTemplateItems([
+      { ...source, sets: session.sets },
+    ])[0];
+    if (it) return { item: it, fromReal: true };
+  }
+
+  return {
+    item: {
+      exerciseId,
+      targetSets: 3,
+      targetRepsMin: 8,
+      targetRepsMax: 12,
+      targetWeightKg: null,
+      targetRestSeconds: DEFAULT_REST_SECONDS,
+    },
+    fromReal: false,
+  };
+}
+
+/** Строит «следующую тренировку» по завершённой: прогрессия каждого упражнения
+ *  (см. nextItemForExercise — с fallback на историю и дефолты). Возвращает пункты
+ *  для показа + флаг, была ли хоть где-то реальная прогрессия. null — тренировка
+ *  не найдена/не завершена/без упражнений. R-7: getActiveWorkoutForUser гейтит. */
+export async function buildNextWorkoutPlan(
   userId: string,
   workoutId: string,
-): Promise<NextWorkoutPreviewItem[]> {
+): Promise<NextWorkoutPlan | null> {
   const w = await getActiveWorkoutForUser(userId, workoutId);
-  if (!w || w.status !== "completed") return [];
-  const nameById = new Map(w.exercises.map((e) => [e.exerciseId, e.exerciseNameRu]));
-  return buildNextTemplateItems(
-    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
-  ).map((it) => ({
-    exerciseId: it.exerciseId,
-    nameRu: nameById.get(it.exerciseId) ?? "Упражнение",
-    targetSets: it.targetSets,
-    targetRepsMin: it.targetRepsMin,
-    targetRepsMax: it.targetRepsMax,
-    targetWeightKg: it.targetWeightKg,
-  }));
+  if (!w || w.status !== "completed" || w.exercises.length === 0) return null;
+
+  const items: NextWorkoutPreviewItem[] = [];
+  let progressed = false;
+  for (const ex of w.exercises) {
+    const { item, fromReal } = await nextItemForExercise(
+      userId,
+      ex.exerciseId,
+      {
+        sets: ex.sets,
+        myoReps: ex.myoReps,
+        myoMiniSets: ex.myoMiniSets,
+        myoMiniReps: ex.myoMiniReps,
+        myoMiniRestSeconds: ex.myoMiniRestSeconds,
+      },
+    );
+    if (fromReal) progressed = true;
+    items.push({
+      exerciseId: item.exerciseId,
+      nameRu: ex.exerciseNameRu,
+      targetSets: item.targetSets,
+      targetRepsMin: item.targetRepsMin,
+      targetRepsMax: item.targetRepsMax,
+      targetWeightKg: item.targetWeightKg,
+      myoReps: item.myoReps,
+      myoMiniSets: item.myoMiniSets,
+      myoMiniReps: item.myoMiniReps,
+      myoMiniRestSeconds: item.myoMiniRestSeconds,
+    });
+  }
+  return { name: w.name, progressed, items };
 }
 
 /** Get-or-create шаблон «следующая тренировка от тренера» по завершённой:
- *  прогрессия по факту (buildNextTemplateItems). Идемпотентно по sourceWorkoutId
- *  (source='trainer') — повторные заходы переиспользуют один шаблон, а не плодят
- *  копии. Отсюда стартует «скорректированная тренировка» прямо из истории —
- *  работает и для ad-hoc (без исходного шаблона). null — нечего прогрессировать.
+ *  прогрессия каждого упражнения (buildNextWorkoutPlan — с fallback на историю).
+ *  Идемпотентно по sourceWorkoutId (source='trainer') — повторные заходы
+ *  переиспользуют один шаблон, а не плодят копии. Отсюда стартует
+ *  «скорректированная тренировка» прямо из истории — работает и для ad-hoc, и для
+ *  пустых сессий (тянет прогрессию из истории). null — тренировка без упражнений.
  *  R-7: getActiveWorkoutForUser гейтит по userId. */
 export async function getOrCreateNextWorkoutTemplate(
   userId: string,
@@ -129,19 +224,28 @@ export async function getOrCreateNextWorkoutTemplate(
     .limit(1);
   if (existing) return existing;
 
-  const w = await getActiveWorkoutForUser(userId, workoutId);
-  if (!w || w.status !== "completed") return null;
-  const items = buildNextTemplateItems(
-    w.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets })),
-  );
-  if (items.length === 0) return null;
+  const plan = await buildNextWorkoutPlan(userId, workoutId);
+  if (!plan || plan.items.length === 0) return null;
+
+  const items: NextTemplateItem[] = plan.items.map((it) => ({
+    exerciseId: it.exerciseId,
+    targetSets: it.targetSets,
+    targetRepsMin: it.targetRepsMin,
+    targetRepsMax: it.targetRepsMax,
+    targetWeightKg: it.targetWeightKg,
+    targetRestSeconds: DEFAULT_REST_SECONDS,
+    myoReps: it.myoReps,
+    myoMiniSets: it.myoMiniSets,
+    myoMiniReps: it.myoMiniReps,
+    myoMiniRestSeconds: it.myoMiniRestSeconds,
+  }));
 
   return db.transaction(async (tx) => {
     const id = crypto.randomUUID();
     await tx.insert(schema.workoutTemplates).values({
       id,
       userId,
-      name: w.name.slice(0, 80),
+      name: plan.name.slice(0, 80),
       source: "trainer",
       sourceWorkoutId: workoutId,
     });
