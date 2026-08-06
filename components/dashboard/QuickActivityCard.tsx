@@ -43,6 +43,8 @@ type Prefill = {
   weightKg: number | null;
 };
 
+const QUICK_REMOVE_ANIMATION_MS = 180;
+
 /** Карточка «Доп. активность»: сводка сегодня + чипы-повторы + bottom-sheet
  *  быстрой записи. Цель — 2 тапа на повтор привычного (чип → «Сохранить»).
  *  Критичные тапы ≥56px (h-14, R-41). */
@@ -60,6 +62,7 @@ export function QuickActivityCard({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const [exerciseId, setExerciseId] = useState<string | null>(null);
   const [mode, setMode] = useState<"sets" | "myo_reps" | "total">("sets");
   const [repsText, setRepsText] = useState("10");
@@ -148,10 +151,22 @@ export function QuickActivityCard({
     ) {
       return;
     }
+    setRemovingIds((current) => new Set(current).add(id));
     startTransition(async () => {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, QUICK_REMOVE_ANIMATION_MS),
+      );
       const res = await deleteQuickActivityAction(id);
-      if (res.status === "success") router.refresh();
-      else toast.error(res.message);
+      if (res.status === "success") {
+        router.refresh();
+      } else {
+        setRemovingIds((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+        toast.error(res.message);
+      }
     });
   };
 
@@ -191,7 +206,10 @@ export function QuickActivityCard({
           {recent.map((r) => (
             <div
               key={r.exerciseId}
-              className="border-border bg-background inline-flex h-11 overflow-hidden rounded-full border"
+              className={cn(
+                "border-border bg-background inline-flex h-11 overflow-hidden rounded-full border origin-left transition-all duration-200 ease-out",
+                removingIds.has(r.id) && "pointer-events-none scale-90 opacity-0",
+              )}
             >
               <button
                 type="button"
@@ -370,7 +388,11 @@ export function QuickActivityCard({
                     {todayEntries.map((e) => (
                       <li
                         key={e.id}
-                        className="border-border flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5"
+                        className={cn(
+                          "border-border flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 origin-top transition-all duration-200 ease-out",
+                          removingIds.has(e.id) &&
+                            "pointer-events-none max-h-0 scale-95 overflow-hidden border-transparent py-0 opacity-0",
+                        )}
                       >
                         <span className="min-w-0 truncate text-sm">
                           {e.exerciseName}
