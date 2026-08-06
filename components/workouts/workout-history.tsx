@@ -33,7 +33,7 @@ export function HistoryCard({ item }: { item: HistoryItem }) {
   return (
     <Link
       href={href}
-      className="bg-card hover:bg-accent/40 border-border block rounded-2xl border p-4 transition-colors"
+      className="interactive-surface bg-card hover:bg-accent/40 border-border hover:border-primary/25 focus-visible:ring-ring block rounded-2xl border p-4 focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -75,7 +75,7 @@ export function LastSessionMini({ item }: { item: HistoryItem }) {
   return (
     <Link
       href={href}
-      className="bg-card hover:bg-accent/40 border-border block rounded-2xl border p-4 transition-colors"
+      className="interactive-surface bg-card hover:bg-accent/40 border-border hover:border-primary/25 focus-visible:ring-ring block rounded-2xl border p-4 focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">

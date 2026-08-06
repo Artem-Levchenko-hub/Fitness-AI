@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -15,10 +15,12 @@ export function AnimatedCard({
   className?: string;
   delay?: number;
 }) {
+  const reduced = useReducedMotion() ?? false;
+
   return (
     <motion.section
-      initial={{ opacity: 0, y: 12 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduced ? false : { opacity: 0, y: 12 }}
+      whileInView={reduced ? undefined : { opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
       transition={{
         duration: 0.4,
@@ -51,17 +53,19 @@ export function AnimatedKpi({
   value: string;
   hint?: string;
 }) {
+  const reduced = useReducedMotion() ?? false;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={reduced ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
         duration: 0.35,
         ease: [0.22, 1, 0.36, 1],
         delay,
       }}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={reduced ? undefined : { y: -2 }}
+      whileTap={reduced ? undefined : { scale: 0.98 }}
       className="bg-card border-border cursor-default rounded-xl border p-4 transition-shadow hover:shadow-sm"
     >
       <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">

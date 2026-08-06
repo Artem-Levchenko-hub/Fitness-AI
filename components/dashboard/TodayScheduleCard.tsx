@@ -59,7 +59,7 @@ function resolvePreset(
 
 /** Общий вид строки (R-4 DRY — одинаков для <form>-кнопки и <Link>). ≥56px (R-41). */
 const ROW_CLASS =
-  "bg-card border-border hover:border-primary/40 flex min-h-[56px] w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors";
+  "interactive-surface bg-card border-border hover:border-primary/40 focus-visible:ring-ring flex min-h-[56px] w-full items-center gap-3 rounded-xl border p-4 text-left focus-visible:ring-2 focus-visible:outline-none";
 
 /** Внутренности строки: заголовок расписания + имя заготовки + CTA-стрелка. */
 function RowInner({
@@ -79,7 +79,10 @@ function RowInner({
       </div>
       <span className="text-primary inline-flex shrink-0 items-center gap-1 text-xs font-medium">
         {cta}
-        <ArrowRight className="size-3.5" aria-hidden="true" />
+        <ArrowRight
+          className="interactive-chevron size-3.5"
+          aria-hidden="true"
+        />
       </span>
     </>
   );

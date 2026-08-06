@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ export function FrequencyHeatmap({
   data: Point[];
   weeks?: number;
 }) {
+  const reduced = useReducedMotion() ?? false;
   const counts = new Map<string, number>();
   for (const p of data) counts.set(p.date, p.count);
 
@@ -64,13 +65,17 @@ export function FrequencyHeatmap({
             <motion.div
               key={c.date}
               title={`${c.date}: ${c.count} ${countLabel(c.count)}`}
-              initial={{ opacity: 0, scale: 0.6 }}
+              initial={reduced ? false : { opacity: 0, scale: 0.6 }}
               animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.4, zIndex: 10 }}
-              transition={{
-                opacity: { duration: 0.25, delay: i * 0.0015 },
-                scale: { type: "spring", stiffness: 400, damping: 28 },
-              }}
+              whileHover={reduced ? undefined : { scale: 1.4, zIndex: 10 }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : {
+                      opacity: { duration: 0.25, delay: i * 0.0015 },
+                      scale: { type: "spring", stiffness: 400, damping: 28 },
+                    }
+              }
               className={cn(
                 "size-3 rounded-[3px]",
                 c.count === 0 && "bg-muted",

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ const GRANULARITY = [
 ] as const;
 
 export function PeriodPills() {
+  const reduced = useReducedMotion() ?? false;
   const router = useRouter();
   const params = useSearchParams();
   const current = params.get("range") ?? "30d";
@@ -38,8 +39,12 @@ export function PeriodPills() {
             key={p.v}
             type="button"
             onClick={() => set(p.v)}
-            whileTap={{ scale: 0.94 }}
-            transition={{ type: "spring", stiffness: 500, damping: 28 }}
+            whileTap={reduced ? undefined : { scale: 0.94 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 500, damping: 28 }
+            }
             className={cn(
               "relative rounded-full border px-3.5 py-2 text-xs font-medium whitespace-nowrap transition-colors",
               active
@@ -51,7 +56,11 @@ export function PeriodPills() {
               <motion.span
                 layoutId="period-pill-bg"
                 className="bg-primary absolute inset-0 -z-0 rounded-full"
-                transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 380, damping: 32 }
+                }
               />
             ) : null}
             <span className="relative z-10">{p.label}</span>
@@ -63,6 +72,7 @@ export function PeriodPills() {
 }
 
 export function GranularityPills() {
+  const reduced = useReducedMotion() ?? false;
   const router = useRouter();
   const params = useSearchParams();
   const current = params.get("g") ?? "day";
@@ -82,8 +92,12 @@ export function GranularityPills() {
             key={p.v}
             type="button"
             onClick={() => set(p.v)}
-            whileTap={{ scale: 0.94 }}
-            transition={{ type: "spring", stiffness: 500, damping: 28 }}
+            whileTap={reduced ? undefined : { scale: 0.94 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 500, damping: 28 }
+            }
             className={cn(
               "relative rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
               active
@@ -95,7 +109,11 @@ export function GranularityPills() {
               <motion.span
                 layoutId="granularity-pill-bg"
                 className="bg-primary absolute inset-0 -z-0 rounded-full"
-                transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 380, damping: 32 }
+                }
               />
             ) : null}
             <span className="relative z-10">{p.label}</span>

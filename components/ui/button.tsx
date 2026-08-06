@@ -5,16 +5,16 @@ import { Slot } from "radix-ui"
 import { cn } from "@/lib/utils/index"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 transition-[color,background-color,box-shadow,transform] duration-150 active:scale-[0.97]",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.97] motion-reduce:active:scale-100",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_1px_0_0_rgba(0,0,0,0.04),0_2px_8px_-2px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_0_0_rgba(0,0,0,0.05),0_8px_20px_-4px_rgba(0,0,0,0.12)] hover:-translate-y-px",
+          "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_1px_0_0_rgba(0,0,0,0.04),0_2px_8px_-2px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_0_0_rgba(0,0,0,0.05),0_8px_20px_-4px_rgba(0,0,0,0.12)] hover:-translate-y-px motion-reduce:hover:translate-y-0",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 shadow-[0_1px_0_0_rgba(0,0,0,0.04),0_2px_8px_-2px_rgba(0,0,0,0.08)]",
         outline:
-          "border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 hover:-translate-y-px hover:shadow-sm",
+          "border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 hover:-translate-y-px hover:shadow-sm motion-reduce:hover:translate-y-0",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:

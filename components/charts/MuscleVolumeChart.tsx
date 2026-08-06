@@ -1,12 +1,14 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
 import { muscleLabel } from "@/components/app/MuscleBadges";
 
 type Point = { muscleKey: string; volume: number };
 
 export function MuscleVolumeBars({ data }: { data: Point[] }) {
+  const reduced = useReducedMotion() ?? false;
+
   if (data.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">Нет данных за период.</p>
@@ -20,8 +22,8 @@ export function MuscleVolumeBars({ data }: { data: Point[] }) {
         return (
           <motion.li
             key={d.muscleKey}
-            initial={{ opacity: 0, x: -8 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={reduced ? false : { opacity: 0, x: -8 }}
+            whileInView={reduced ? undefined : { opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{
               duration: 0.32,
@@ -41,12 +43,12 @@ export function MuscleVolumeBars({ data }: { data: Point[] }) {
             <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
               <motion.div
                 className="bg-primary h-full rounded-full"
-                initial={{ width: 0 }}
+                initial={reduced ? { width: `${pct}%` } : { width: 0 }}
                 whileInView={{ width: `${pct}%` }}
                 viewport={{ once: true }}
                 transition={{
-                  duration: 0.7,
-                  delay: 0.1 + i * 0.04,
+                  duration: reduced ? 0 : 0.7,
+                  delay: reduced ? 0 : 0.1 + i * 0.04,
                   ease: [0.22, 1, 0.36, 1],
                 }}
               />

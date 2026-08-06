@@ -24,13 +24,16 @@ export function DashboardNavTile({
   return (
     <Link
       href={href}
-      className="bg-card border-border hover:border-foreground/20 flex min-h-14 flex-col gap-2 rounded-2xl border p-4 transition-colors"
+      className="interactive-surface bg-card border-border hover:border-primary/30 focus-visible:ring-ring flex min-h-14 flex-col gap-2 rounded-2xl border p-4 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
     >
       <div className="flex items-center justify-between">
-        <div className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full">
+        <div className="interactive-icon bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full">
           <Icon className="size-5" aria-hidden="true" />
         </div>
-        <ChevronRight className="text-muted-foreground size-4" aria-hidden="true" />
+        <ChevronRight
+          className="interactive-chevron text-muted-foreground size-4"
+          aria-hidden="true"
+        />
       </div>
       <div>
         <p className="text-foreground text-sm font-semibold">{label}</p>

@@ -2,7 +2,7 @@
 
 import { Download, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 import { AppUpdateBanner } from "@/components/app/AppUpdateBanner";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ const DISMISS_KEY = "pwa-install-dismissed";
 const DISMISS_DAYS = 14;
 
 export function PwaProvider({ children }: { children: React.ReactNode }) {
+  const reduced = useReducedMotion() ?? false;
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [showBanner, setShowBanner] = useState(false);
@@ -72,10 +73,14 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       <AnimatePresence>
         {showBanner && installPrompt && !appUpdateVisible ? (
           <motion.div
-            initial={{ y: 100, opacity: 0 }}
+            initial={reduced ? false : { y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            exit={reduced ? { opacity: 0 } : { y: 100, opacity: 0 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { type: "spring", damping: 25, stiffness: 300 }
+            }
             className="fixed inset-x-0 bottom-20 z-50 mx-auto w-[calc(100%-2rem)] max-w-md md:bottom-6"
           >
             <div className="bg-card border-border flex items-center gap-3 rounded-2xl border p-4 shadow-lg">
