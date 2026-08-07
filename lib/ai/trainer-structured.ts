@@ -19,13 +19,13 @@ export type {
   TrainerResponse,
 } from "@/lib/ai/trainer-parse";
 
-/** Модель тренера = основная LLM (deepseek-v4-flash-thinking через VseGPT).
+/** Модель тренера = основная LLM (Qwen 3.7 Plus через AITUNNEL по умолчанию).
  *  Раньше тренер ходил в Gemini structured output (responseSchema); теперь
  *  единый openai-совместимый провайдер + JSON-инструкция + Zod-валидация. */
 export const TRAINER_MODEL: string = COACH_MODEL;
 
 /** Спецификация формы JSON — раньше её роль играл Gemini responseSchema.
- *  deepseek responseSchema не имеет, поэтому форму описываем в промпте. */
+ *  OpenAI-совместимый gateway responseSchema не имеет, поэтому форму описываем в промпте. */
 export const JSON_SHAPE_INSTRUCTION = `Верни ТОЛЬКО валидный JSON-объект, без markdown-обёртки и без \`\`\`, строго по схеме:
 {
   "overallScore": <целое 0..100>,
@@ -89,7 +89,7 @@ export async function generateTrainerResponse(
 }
 
 /** Trainer-специфичная проверка: тренер теперь на том же openai-совместимом
- *  провайдере, что и коуч (deepseek через VseGPT). */
+ *  провайдере, что и коуч (Qwen через AITUNNEL по умолчанию). */
 export function isStructuredTrainerConfigured(): boolean {
   return isAiConfigured();
 }

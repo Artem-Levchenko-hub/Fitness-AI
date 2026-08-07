@@ -7,10 +7,10 @@ import { env } from "@/lib/env";
 /**
  * Текущий приоритет:
  *  1. Gemini, если задан GEMINI_API_KEY  — бесплатные токены + 1M контекст.
- *  2. OpenAI-совместимый gateway (VseGPT / OpenRouter / ProxyAPI и т.п.).
+ *  2. OpenAI-совместимый gateway (AITUNNEL / OpenRouter / ProxyAPI и т.п.).
  *
  *  Provider можно зафиксировать через env AI_PROVIDER=gemini|openai
- *  (см. lib/env.ts). По умолчанию — gemini, если ключ есть.
+ *  (см. lib/env.ts). По умолчанию выбран openai-совместимый gateway.
  */
 
 type Provider = "gemini" | "openai";
@@ -57,8 +57,8 @@ function openaiClient() {
 export function aiClient(modelId: string): LanguageModel {
   const provider = resolveProvider();
   if (provider === "gemini") return geminiClient()(modelId);
-  // .chat() форсит /v1/chat/completions. Дефолт провайдера в этой версии
-  // @ai-sdk/openai → /v1/responses, который VseGPT не поддерживает.
+  // .chat() форсит /v1/chat/completions. Это поддерживается AITUNNEL и
+  // сохраняет совместимость с gateway, которые не реализуют /responses.
   if (provider === "openai") return openaiClient().chat(modelId);
   throw new Error(
     "AI provider not configured. Set GEMINI_API_KEY or AI_API_KEY.",
@@ -80,7 +80,7 @@ export function isAiConfigured(): boolean {
  *  (db/schema/knowledge.ts → vector(1536)). text-embedding-3-small = 1536. */
 export const EMBED_DIM = 1536;
 
-/** Embedding-модель для RAG. Только openai-совместимый провайдер (VseGPT) —
+/** Embedding-модель для RAG. Только openai-совместимый провайдер (AITUNNEL) —
  *  Gemini-эмбеддинги (768 dim) не совпадают со схемой (1536). */
 export function aiEmbeddingModel() {
   const provider = resolveProvider();

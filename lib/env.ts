@@ -16,22 +16,22 @@ export const env = createEnv({
     /** RFC 5322 формат: "Display Name <email@host>" или просто "email@host". */
     EMAIL_FROM: z.string().min(3),
 
-    /** Какой провайдер использовать. Если не задан — auto: Gemini, затем OpenAI-compat. */
-    AI_PROVIDER: z.enum(["gemini", "openai"]).optional(),
+    /** Основной провайдер тренера — OpenAI-совместимый gateway (Qwen/AITUNNEL). */
+    AI_PROVIDER: z.enum(["gemini", "openai"]).default("openai"),
 
-    /** OpenAI-compat AI gateway (VseGPT / OpenRouter / любой другой). */
+    /** OpenAI-совместимый AI gateway (AITUNNEL / OpenRouter / любой другой). */
     AI_API_KEY: z.string().min(1).optional(),
     AI_BASE_URL: z
       .string()
       .url()
-      .default("https://openrouter.ai/api/v1"),
-    AI_MODEL: z.string().min(1).default("deepseek/deepseek-chat"),
-    /** Embedding-модель для RAG (OpenAI-compat gateway). VseGPT:
-     *  emb-openai/text-embedding-3-small = 1536 dim (совпадает с knowledge schema). */
+      .default("https://api.aitunnel.ru/v1"),
+    AI_MODEL: z.string().min(1).default("qwen3.7-plus"),
+    /** Embedding-модель для RAG (OpenAI-совместимый gateway).
+     *  text-embedding-3-small = 1536 dim (совпадает с knowledge schema). */
     AI_EMBED_MODEL: z
       .string()
       .min(1)
-      .default("emb-openai/text-embedding-3-small"),
+      .default("text-embedding-3-small"),
     /** Опционально для OpenRouter — сайт-идентификатор для рейтинга. */
     AI_SITE_URL: z.string().url().optional(),
     AI_SITE_NAME: z.string().optional(),

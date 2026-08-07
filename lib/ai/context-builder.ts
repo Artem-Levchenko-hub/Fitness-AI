@@ -84,7 +84,7 @@ const MAX_HISTORY_WORKOUTS = 10;
 const CIRCUIT_HISTORY_DAYS = 60;
 const MAX_CIRCUIT_HISTORY = 10;
 
-/** Собирает markdown-контекст для DeepSeek: сегодняшняя тренировка + N
+/** Собирает markdown-контекст для основной модели тренера: сегодняшняя тренировка + N
  *  прошлых + relevant exercise_notes + workout_notes + cycle_note + 1RM
  *  trend по упражнениям этой тренировки. */
 export async function buildCoachContext(

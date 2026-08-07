@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 
-import { streamText } from "ai";
+import { stepCountIs, streamText } from "ai";
 import { z } from "zod";
 
-import { buildCoachContext } from "@/lib/ai/context-builder";
+import { buildTrainerContext } from "@/lib/ai/context-builder";
+import { createCoachTools } from "@/lib/ai/coach-tools";
 import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
 import { COACH_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
@@ -159,7 +160,9 @@ export async function POST(request: Request) {
 
   let athleteContext: string;
   try {
-    athleteContext = await buildCoachContext(user.id, parsed.workoutId);
+    athleteContext = (
+      await buildTrainerContext(user.id, parsed.workoutId, { kind: "on_demand" })
+    ).prompt;
   } catch {
     await failOperation("context_build_failed");
     return Response.json({ error: "context_unavailable" }, { status: 503 });
@@ -187,10 +190,13 @@ export async function POST(request: Request) {
   try {
     const result = streamText({
       model: aiClient(COACH_MODEL),
-      system: `${COACH_SYSTEM_PROMPT}\n\n---\n\n## Контекст из канона (загруженная литература)\n\n${canonContext}\n\n---\n\n## Контекст атлета\n\n${athleteContext}`,
+      system: `${COACH_SYSTEM_PROMPT}\n\n## Оркестрация и действия\n\nТы подключён к реальным данным приложения. Когда нужен ID шаблона, упражнения или активной тренировки — сначала используй соответствующий инструмент чтения. Изменяй шаблон, записывай подход, доп. активность или заметку только после явной просьбы атлета сделать это; совет сам по себе не является фактом и не должен записываться. После успешного действия кратко подтверди, что именно сохранено, с цифрами. Не выдумывай выполненные подходы, веса, повторы, сон или питание. Для Myo-reps сохраняй протокол как Myo-reps, а в анализе учитывай его как сопоставимый тренировочный объём, не смешивая активацию и мини-сеты в обычные подходы один к одному.\n\n---\n\n## Контекст из канона (загруженная литература)\n\n${canonContext}\n\n---\n\n## Контекст атлета\n\n${athleteContext}`,
       messages: parsed.messages,
+      tools: createCoachTools(user.id, parsed.workoutId),
+      stopWhen: stepCountIs(5),
       abortSignal: AbortSignal.timeout(45_000),
       temperature: 0.3,
+      maxOutputTokens: 4_096,
       onFinish: async ({ text }) => {
         if (usageId) await settleAiCapacity(usageId, true);
         if (!claim) return;

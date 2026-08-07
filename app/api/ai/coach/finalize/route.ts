@@ -8,7 +8,7 @@ import * as schema from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 
 import { requireUser } from "@/lib/auth/require-user";
-import { buildCoachContext } from "@/lib/ai/context-builder";
+import { buildTrainerContext } from "@/lib/ai/context-builder";
 import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
 import { FINALIZE_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
@@ -95,7 +95,9 @@ export async function POST(request: Request) {
   const usageId = capacity.usageId;
 
   try {
-    const context = await buildCoachContext(user.id, parsed.workoutId);
+    const context = (
+      await buildTrainerContext(user.id, parsed.workoutId, { kind: "on_demand" })
+    ).prompt;
     const transcript = parsed.messages
       .map((m) => `**${m.role}:** ${m.content}`)
       .join("\n\n");

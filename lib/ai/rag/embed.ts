@@ -4,7 +4,8 @@ import { aiEmbeddingModel } from "@/lib/ai/deepseek";
 
 const BATCH_SIZE = 64;
 
-/** Эмбеддит массив строк через VseGPT emb-openai/text-embedding-3-small
+/** Эмбеддит массив строк через OpenAI-совместимый gateway и
+ *  text-embedding-3-small
  *  (1536 dim). Батчит по 64 за раз. */
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
