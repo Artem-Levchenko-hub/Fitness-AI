@@ -142,3 +142,35 @@ export const aiBillingOperations = pgTable(
 );
 
 export type AiBillingOperation = typeof aiBillingOperations.$inferSelect;
+
+/** Monthly, user-initiated exchange of included AI allowances.
+ * One row per UTC month makes the irreversible 20 replies → 10 analyses
+ * conversion explicit, auditable and concurrency-safe. */
+export const aiQuotaExchanges = pgTable(
+  "ai_quota_exchanges",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    bucketStart: timestamp("bucket_start", {
+      mode: "date",
+      withTimezone: true,
+    }).notNull(),
+    coachRepliesSpent: integer("coach_replies_spent").notNull(),
+    postWorkoutAnalysesAdded: integer("post_workout_analyses_added").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ai_quota_exchanges_user_bucket_unq").on(
+      t.userId,
+      t.bucketStart,
+    ),
+  ],
+);
+
+export type AiQuotaExchange = typeof aiQuotaExchanges.$inferSelect;

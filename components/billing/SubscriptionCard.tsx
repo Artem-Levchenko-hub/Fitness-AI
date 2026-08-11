@@ -1,10 +1,20 @@
 "use client";
 
-import { Check, Loader2, RefreshCw, ShieldCheck, X } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Check,
+  Dumbbell,
+  Loader2,
+  MessageCircle,
+  RefreshCw,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import type { AiQuotaOverview } from "@/lib/billing/ai-quota-policy";
 import { formatRub } from "@/lib/billing/money";
 import { cn } from "@/lib/utils";
 
@@ -30,12 +40,14 @@ export function SubscriptionCard({
   enabled,
   recurringEnabled,
   mode,
+  initialQuotaOverview,
 }: {
   plans: readonly Plan[];
   subscription: SubscriptionView;
   enabled: boolean;
   recurringEnabled: boolean;
   mode: "test" | "live";
+  initialQuotaOverview: AiQuotaOverview | null;
 }) {
   const [selectedPlan, setSelectedPlan] = useState<Plan["code"]>(
     plans[0]?.code ?? "pro_monthly",
@@ -43,10 +55,12 @@ export function SubscriptionCard({
   const [accepted, setAccepted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quotaOverview, setQuotaOverview] = useState(initialQuotaOverview);
+  const [confirmingExchange, setConfirmingExchange] = useState(false);
   const idempotencyKeyRef = useRef<string | null>(null);
 
   const active =
-    subscription?.status === "active" &&
+    (subscription?.status === "active" || subscription?.status === "trialing") &&
     !!subscription.currentPeriodEnd &&
     new Date(subscription.currentPeriodEnd) > new Date();
   const selected = plans.find((plan) => plan.code === selectedPlan) ?? plans[0];
@@ -112,6 +126,33 @@ export function SubscriptionCard({
     }
   }
 
+  async function exchangeQuota() {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/billing/quota-exchange", {
+        method: "POST",
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        message?: string;
+        overview?: AiQuotaOverview;
+      } | null;
+      if (!response.ok || !body?.overview) {
+        setError(body?.message ?? body?.error ?? "Не удалось выполнить обмен");
+        setPending(false);
+        return;
+      }
+      setQuotaOverview(body.overview);
+      setConfirmingExchange(false);
+      setPending(false);
+    } catch {
+      setError("Ошибка соединения");
+      setPending(false);
+    }
+  }
+
   if (active && subscription) {
     return (
       <section className="bg-card border-border space-y-4 rounded-2xl border p-5 md:p-6">
@@ -137,6 +178,77 @@ export function SubscriptionCard({
             ? "После этой даты продление отключено."
             : "Следующий платёж пройдёт автоматически."}
         </p>
+
+        {quotaOverview ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <QuotaTile
+                icon={Dumbbell}
+                label="Разборы тренировок"
+                remaining={quotaOverview.remaining.postWorkoutAnalyses}
+                limit={quotaOverview.limits.postWorkoutAnalyses}
+              />
+              <QuotaTile
+                icon={MessageCircle}
+                label="Вопросы тренеру"
+                remaining={quotaOverview.remaining.coachReplies}
+                limit={quotaOverview.limits.coachReplies}
+              />
+            </div>
+
+            {quotaOverview.exchange.completed ? (
+              <p className="bg-primary/5 text-muted-foreground rounded-xl px-4 py-3 text-sm leading-relaxed">
+                Обмен выполнен: в этом месяце доступно 25 разборов и 40
+                вопросов тренеру.
+              </p>
+            ) : confirmingExchange ? (
+              <div className="border-border bg-muted/30 space-y-3 rounded-xl border p-4">
+                <p className="text-sm leading-relaxed">
+                  Обмен необратим до следующего месяца: лимит вопросов
+                  уменьшится с 60 до 40, лимит разборов вырастет с 15 до 25.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    className="sm:flex-1"
+                    disabled={pending}
+                    onClick={exchangeQuota}
+                  >
+                    {pending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <ArrowLeftRight className="size-4" />
+                    )}
+                    Подтвердить обмен
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={pending}
+                    onClick={() => setConfirmingExchange(false)}
+                  >
+                    Отмена
+                  </Button>
+                </div>
+              </div>
+            ) : quotaOverview.exchange.available ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setConfirmingExchange(true)}
+              >
+                <ArrowLeftRight className="size-4" />
+                Обменять 20 вопросов на 10 разборов
+              </Button>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Обмен недоступен: для него нужно сохранить 20 неиспользованных
+                вопросов.
+              </p>
+            )}
+          </div>
+        ) : null}
 
         {error ? <p className="text-destructive text-sm">{error}</p> : null}
 
@@ -303,5 +415,31 @@ export function SubscriptionCard({
         )}
       </Button>
     </section>
+  );
+}
+
+function QuotaTile({
+  icon: Icon,
+  label,
+  remaining,
+  limit,
+}: {
+  icon: typeof Dumbbell;
+  label: string;
+  remaining: number;
+  limit: number;
+}) {
+  return (
+    <div className="bg-muted/30 border-border/70 flex items-center gap-3 rounded-xl border p-3">
+      <div className="bg-background text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+        <Icon className="size-4" aria-hidden="true" />
+      </div>
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-muted-foreground text-xs tabular-nums">
+          Осталось {remaining} из {limit}
+        </p>
+      </div>
+    </div>
   );
 }

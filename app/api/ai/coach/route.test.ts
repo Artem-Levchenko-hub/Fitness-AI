@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   buildTrainerContext: vi.fn(),
   retrieveRelevant: vi.fn(),
   streamText: vi.fn(),
+  billingEnabled: false,
+  claimCoachBillingOperation: vi.fn(),
 }));
 
 vi.mock("ai", () => ({
@@ -39,10 +41,14 @@ vi.mock("@/lib/ai/rag/retrieve", () => ({
 vi.mock("@/lib/auth/require-user", () => ({
   requireUser: vi.fn().mockResolvedValue({ id: "user-1" }),
 }));
-vi.mock("@/lib/billing/flags", () => ({ isBillingEnabled: vi.fn(() => false) }));
-vi.mock("@/lib/billing/pricing", () => ({ aiCoachPriceKopecks: vi.fn(() => 0) }));
+vi.mock("@/lib/billing/flags", () => ({
+  isBillingEnabled: vi.fn(() => mocks.billingEnabled),
+}));
+vi.mock("@/lib/billing/pricing", () => ({
+  aiCoachPriceKopecks: vi.fn(() => 2_200),
+}));
 vi.mock("@/lib/repos/ai-billing.repo", () => ({
-  claimCoachBillingOperation: vi.fn(),
+  claimCoachBillingOperation: mocks.claimCoachBillingOperation,
   completeAiBillingOperation: vi.fn(),
   failAndRefundAiBillingOperation: vi.fn(),
 }));
@@ -66,8 +72,13 @@ const clientMessageId = "00000000-0000-4000-8000-000000000002";
 describe("POST /api/ai/coach", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.billingEnabled = false;
     mocks.requireOwnedWorkout.mockResolvedValue(true);
-    mocks.claimAiCapacity.mockResolvedValue({ kind: "allowed", usageId: "usage-1" });
+    mocks.claimAiCapacity.mockResolvedValue({
+      kind: "allowed",
+      usageId: "usage-1",
+      countsTowardQuota: true,
+    });
     mocks.listCoachMessages.mockResolvedValue([
       { id: clientMessageId, role: "user", content: "Вопрос" },
     ]);
@@ -123,6 +134,35 @@ describe("POST /api/ai/coach", () => {
     );
     expect(mocks.settleAiCapacity).toHaveBeenCalledWith("usage-1", true);
   });
+
+  it.each([
+    { countsTowardQuota: true, coverage: "subscription", priceKopecks: 0 },
+    { countsTowardQuota: false, coverage: "wallet", priceKopecks: 2_200 },
+  ])(
+    "uses atomic capacity coverage $coverage for billing",
+    async ({ countsTowardQuota, coverage, priceKopecks }) => {
+      mocks.billingEnabled = true;
+      mocks.claimAiCapacity.mockResolvedValue({
+        kind: "allowed",
+        usageId: "usage-1",
+        countsTowardQuota,
+      });
+      mocks.claimCoachBillingOperation.mockResolvedValue({
+        kind: "claimed",
+        attempt: 1,
+        billingReferenceId: "operation:1",
+        coverage,
+        priceKopecks,
+      });
+
+      const response = await POST(validRequest());
+
+      expect(response.status).toBe(200);
+      expect(mocks.claimCoachBillingOperation).toHaveBeenCalledWith(
+        expect.objectContaining({ coverage, priceKopecks }),
+      );
+    },
+  );
 });
 
 function validRequest() {

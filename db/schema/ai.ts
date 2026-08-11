@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -110,6 +111,7 @@ export const aiUsageLedger = pgTable(
     scopeKey: text("scope_key"),
     status: text("status", { enum: ["processing", "succeeded", "failed"] }).notNull().default("processing"),
     bucketStart: timestamp("bucket_start", { mode: "date", withTimezone: true }).notNull(),
+    countsTowardQuota: boolean("counts_toward_quota").notNull(),
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   },

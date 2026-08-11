@@ -8,7 +8,8 @@ export type BillingInterval = Readonly<{
 export type BillingPlanBenefit = Readonly<{
   code:
     | "post_workout_analyses"
-    | "coach_dialogs"
+    | "coach_questions"
+    | "quota_exchange"
     | "one_shot_ai_operations";
   label: string;
 }>;
@@ -16,8 +17,8 @@ export type BillingPlanBenefit = Readonly<{
 export type BillingPlanQuotas = Readonly<{
   resetInterval: BillingInterval;
   postWorkoutAnalyses: number;
-  coachDialogs: number;
-  trainerRepliesPerDialog: number;
+  coachReplies: number;
+  progressSummaries: number;
   oneShotAiOperations: number;
 }>;
 
@@ -34,11 +35,15 @@ export type BillingPlan = Readonly<{
 const PRO_BENEFITS = [
   {
     code: "post_workout_analyses",
-    label: "AI-разборы тренировок и недельного прогресса",
+    label: "15 AI-разборов завершённых тренировок в месяц",
   },
   {
-    code: "coach_dialogs",
-    label: "Диалоги с AI-тренером без списаний из рублёвого баланса",
+    code: "coach_questions",
+    label: "60 дополнительных вопросов AI-тренеру в месяц",
+  },
+  {
+    code: "quota_exchange",
+    label: "Обмен 20 вопросов на 10 дополнительных разборов",
   },
   {
     code: "one_shot_ai_operations",
@@ -48,9 +53,9 @@ const PRO_BENEFITS = [
 
 const PRO_MONTHLY_QUOTAS = {
   resetInterval: { unit: "month", count: 1 },
-  postWorkoutAnalyses: 20,
-  coachDialogs: 6,
-  trainerRepliesPerDialog: 3,
+  postWorkoutAnalyses: 15,
+  coachReplies: 60,
+  progressSummaries: 20,
   oneShotAiOperations: 10,
 } as const satisfies BillingPlanQuotas;
 

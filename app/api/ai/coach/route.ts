@@ -33,7 +33,6 @@ import {
   CoachMessageConflictError,
   listCoachMessages,
 } from "@/lib/repos/coach-conversations.repo";
-import { hasActiveProSubscription } from "@/lib/repos/subscriptions.repo";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -110,13 +109,13 @@ export async function POST(request: Request) {
   let claim: Extract<ClaimAiBillingOperation, { kind: "claimed" }> | undefined;
   let cachedResponseText: string | null = null;
   if (isBillingEnabled()) {
-    const hasSubscription = await hasActiveProSubscription(user.id);
-    const priceKopecks = hasSubscription ? 0 : aiCoachPriceKopecks();
+    const coveredBySubscription = capacity.countsTowardQuota;
+    const priceKopecks = coveredBySubscription ? 0 : aiCoachPriceKopecks();
     const result = await claimCoachBillingOperation({
       id: operationId,
       userId: user.id,
       workoutId: parsed.workoutId,
-      coverage: hasSubscription ? "subscription" : "wallet",
+      coverage: coveredBySubscription ? "subscription" : "wallet",
       priceKopecks,
     });
 
