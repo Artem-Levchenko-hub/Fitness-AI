@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { isAiConfigured } from "@/lib/ai/deepseek";
 import { requireUser } from "@/lib/auth/require-user";
 import { totalVolume } from "@/lib/domain";
+import { listCoachMessages } from "@/lib/repos/coach-conversations.repo";
 import { getActiveWorkoutForUser } from "@/lib/repos/workouts.repo";
 
 import { CoachChat } from "./coach-chat";
@@ -49,6 +50,9 @@ export default async function CoachPage({ params }: Props) {
     : null;
 
   const aiOn = isAiConfigured();
+  const initialMessages = aiOn
+    ? await listCoachMessages(user.id, workout.id)
+    : [];
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -106,7 +110,11 @@ export default async function CoachPage({ params }: Props) {
           Поговорить с коучем
         </h2>
         {aiOn ? (
-          <CoachChat workoutId={workout.id} workoutName={workout.name} />
+          <CoachChat
+            workoutId={workout.id}
+            workoutName={workout.name}
+            initialMessages={initialMessages}
+          />
         ) : (
           <AiOffNotice />
         )}

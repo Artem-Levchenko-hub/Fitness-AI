@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { myoMiniRepsFromActivation } from "@/lib/domain/workouts/myo";
+import { mergeCoachTemplateItems } from "@/lib/domain/templates/coach-template-update";
 import { getActiveWorkoutForUser, recordSet, saveWorkoutNote } from "@/lib/repos/workouts.repo";
 import { listExercises } from "@/lib/repos/exercises.repo";
 import { logQuickActivity } from "@/lib/repos/quick-activity.repo";
@@ -192,7 +193,7 @@ export function createCoachTools(userId: string, currentWorkoutId: string) {
 
     update_workout_template: tool({
       description:
-        "Изменить шаблон только после явной просьбы пользователя: добавить/убрать упражнение, изменить вес, подходы, повторы или Myo-протокол. Перед вызовом сначала прочитай шаблон; передавай полный новый список items. Не меняй шаблон, если пользователь только просит совет.",
+        "Изменить шаблон только после явной просьбы пользователя: добавить/убрать упражнение, изменить вес, подходы, повторы или Myo-протокол. Перед вызовом сначала прочитай шаблон; передавай полный новый список items. Не меняй шаблон, если пользователь только просит совет. Если упражнение уже использует Myo-reps, не отключай этот режим без прямой просьбы: после активационного подхода мини-сеты равны примерно 30% его фактических повторов, отдых между ними не больше 30 секунд.",
       inputSchema: templateUpdateSchema,
       execute: async (input) => {
         const parsed = templateUpdateSchema.parse(input);
@@ -202,15 +203,7 @@ export function createCoachTools(userId: string, currentWorkoutId: string) {
         const visibleExercises = await listExercises(userId);
         const visibleIds = new Set(visibleExercises.map((exercise) => exercise.id));
         const items = parsed.items
-          ? parsed.items.map((item) => ({
-              ...item,
-              targetWeightKg: item.targetWeightKg ?? null,
-              myoReps: item.myoReps ?? false,
-              myoMiniSets: item.myoMiniSets ?? 3,
-              myoMiniReps: item.myoMiniReps ?? 5,
-              myoMiniRestSeconds: Math.min(item.myoMiniRestSeconds ?? 20, 30),
-              notes: item.notes ?? null,
-            }))
+          ? mergeCoachTemplateItems(parsed.items, current.items)
           : current.items.map((item) => ({
               exerciseId: item.exerciseId,
               targetSets: item.targetSets,

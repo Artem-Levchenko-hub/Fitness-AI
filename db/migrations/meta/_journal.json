@@ -281,6 +281,13 @@
       "when": 1785956900000,
       "tag": "0039_myo_coach_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786474625551,
+      "tag": "0040_lonely_stardust",
+      "breakpoints": true
     }
   ]
 }
