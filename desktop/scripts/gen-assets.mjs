@@ -9,9 +9,13 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const src = (f) => path.join(root, 'assets-src', f);
 const out = (f) => path.join(root, 'build', f);
 
-async function svgToPng(svgPath, w, h) {
-  const buf = await readFile(svgPath);
+async function imageToPng(imagePath, w, h) {
+  const buf = await readFile(imagePath);
   return sharp(buf, { density: 384 }).resize(w, h, { fit: 'fill' }).png().toBuffer();
+}
+
+async function svgToPng(svgPath, w, h) {
+  return imageToPng(svgPath, w, h);
 }
 
 async function svgToBmp(svgPath, w, h, dest) {
@@ -25,7 +29,7 @@ await mkdir(out('.'), { recursive: true });
 
 // App icon -> multi-size .ico
 const icoSizes = [256, 128, 64, 48, 32, 16];
-const icoPngs = await Promise.all(icoSizes.map((s) => svgToPng(src('icon.svg'), s, s)));
+const icoPngs = await Promise.all(icoSizes.map((s) => imageToPng(src('icon.png'), s, s)));
 await writeFile(out('icon.ico'), await pngToIco(icoPngs));
 console.log('ico  icon.ico', icoSizes.join(','));
 

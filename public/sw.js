@@ -129,8 +129,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Fitness AI";
   const options = {
     body: payload.body || "",
-    icon: "/icons/icon.svg",
-    badge: "/icons/icon.svg",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
     tag: payload.tag || "fitness-ai",
     data: { url: payload.url || "/" },
     renotify: false,
