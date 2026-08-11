@@ -21,3 +21,4 @@ export * from "./schedule";
 export * from "./friends";
 export * from "./goals";
 export * from "./quick-activity";
+export * from "./strength-records";

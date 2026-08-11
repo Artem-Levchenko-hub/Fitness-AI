@@ -7,6 +7,7 @@ import {
   buildAvatarData,
   hasTrainingData,
 } from "@/components/avatar/build-avatar-data";
+import { ProfileTabs } from "@/components/profile/ProfileTabs";
 import { parseMuscleParam } from "@/lib/domain/avatar/muscle-param";
 import { requireUser } from "@/lib/auth/require-user";
 import { getLatestMeasurement, getUserProfile } from "@/lib/repos/body.repo";
@@ -84,6 +85,8 @@ export default async function ProfilePage({
           <Settings className="size-5" />
         </Link>
       </header>
+
+      <ProfileTabs active="profile" />
 
       {!hasData ? (
         <div className="border-border text-muted-foreground mb-4 rounded-2xl border border-dashed px-5 py-4 text-sm">
