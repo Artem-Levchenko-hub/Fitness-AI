@@ -1,17 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- Full bleed background for maskable safe zone -->
-  <rect width="512" height="512" fill="#3a6b4a"/>
-  <!-- Content scaled to 80% safe area (inner 410px centered) -->
-  <g transform="translate(256,256) scale(0.72)">
-    <!-- Bar -->
-    <rect x="-120" y="-10" width="240" height="20" rx="10" fill="#f6f4ef"/>
-    <!-- Left outer plate -->
-    <rect x="-150" y="-52" width="28" height="104" rx="8" fill="#f6f4ef"/>
-    <!-- Left inner plate -->
-    <rect x="-118" y="-40" width="22" height="80" rx="6" fill="#f6f4ef"/>
-    <!-- Right inner plate -->
-    <rect x="96" y="-40" width="22" height="80" rx="6" fill="#f6f4ef"/>
-    <!-- Right outer plate -->
-    <rect x="122" y="-52" width="28" height="104" rx="8" fill="#f6f4ef"/>
-  </g>
+  <rect width="512" height="512" fill="#3f654b"/>
+  <path d="M139 276 C207 250 305 250 373 276" stroke="#f8f4ef" stroke-width="24" stroke-linecap="round"/>
+  <rect x="92" y="198" width="38" height="156" rx="14" fill="#f8f4ef"/>
+  <rect x="132" y="218" width="32" height="116" rx="12" fill="#f8f4ef"/>
+  <rect x="348" y="218" width="32" height="116" rx="12" fill="#f8f4ef"/>
+  <rect x="382" y="198" width="38" height="156" rx="14" fill="#f8f4ef"/>
 </svg>
