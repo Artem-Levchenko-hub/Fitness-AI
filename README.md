@@ -27,7 +27,7 @@
     <img alt="PostgreSQL 15" src="https://img.shields.io/badge/PostgreSQL-15-416b57?logo=postgresql&logoColor=white">
     <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-d09543">
     <img alt="Tests" src="https://img.shields.io/badge/tests-1102_passed-3a6b4a?logo=vitest&logoColor=white">
-    <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest"><img alt="Скачать Vibe-trainer 1.2.4" src="https://img.shields.io/badge/скачать-v1.2.4-3a6b4a?logo=github&logoColor=white"></a>
+    <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/latest"><img alt="Скачать Vibe-trainer для Windows" src="https://img.shields.io/badge/Windows-v1.2.3-3a6b4a?logo=windows11&logoColor=white"></a>
   </p>
 </div>
 
@@ -126,14 +126,14 @@ flowchart LR
     <td width="50%" align="center" valign="top">
       <h3>🖥️ Vibe-trainer Desktop</h3>
       <p>Ноутбуки и компьютеры с Windows 10/11 · x64</p>
-      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.4/Vibe-trainer-Windows-x64-Setup-v1.2.4.exe">
+      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.3/Vibe-trainer-Windows-x64-Setup-v1.2.3.exe">
         <img alt="Скачать установщик для Windows" src="https://img.shields.io/badge/Скачать-.EXE-3a6b4a?style=for-the-badge&logo=windows11&logoColor=white">
       </a>
     </td>
     <td width="50%" align="center" valign="top">
       <h3>🤖 Vibe-trainer Mobile</h3>
       <p>Телефоны и планшеты с Android 6.0+</p>
-      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.4/Vibe-trainer-Android-v1.2.4.apk">
+      <a href="https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.5/Vibe-trainer-Android-v1.2.5.apk">
         <img alt="Скачать APK для Android" src="https://img.shields.io/badge/Скачать-.APK-3a6b4a?style=for-the-badge&logo=android&logoColor=white">
       </a>
     </td>
@@ -162,7 +162,7 @@ Android просит подтвердить обновление. При пуб�
 3. Нажимайте **«Далее» → «Установить» → «Готово»**. Vibe-trainer появится на
    рабочем столе и в меню «Пуск».
 
-Если у вас установлена версия 1.1.0 или старше, один раз установите 1.2.4
+Если у вас установлена версия 1.1.0 или старше, один раз установите 1.2.3
 вручную поверх неё. Следующие версии приложение найдёт само.
 
 Публикация нового Windows-установщика разрешена только после настройки
@@ -250,8 +250,8 @@ Next.js 16 + React 19 + TypeScript
 | AI-тренер | 10-сессионный анализ, jobs и контроль стоимости |
 | Статистика | Объём, PR, Myo-reps, мышцы и недельный обзор |
 | ЮKassa | Код готов к тестовому магазину, live закрыт флагами |
-| Windows | Electron/NSIS 1.2.4, автоматическая загрузка обновлений из GitHub Releases |
-| Android | Подписанный TWA 1.2.4, авто-проверка APK и AAB для Google Play |
+| Windows | Electron/NSIS 1.2.3, автоматическая загрузка обновлений из GitHub Releases |
+| Android | Подписанный TWA 1.2.5, авто-проверка APK и AAB для Google Play |
 
 ## Документация и помощь
 

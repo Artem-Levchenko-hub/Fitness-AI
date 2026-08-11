@@ -76,5 +76,5 @@ it("синхронизирует Android release, TWA-маркер и versionCod
   expect(twa.appVersion).toBe(twa.appVersionName);
   expect(startUrl.searchParams.get("client")).toBe("android");
   expect(startUrl.searchParams.get("appVersion")).toBe(twa.appVersionName);
-  expect(twa.appVersionCode).toBe(9);
+  expect(twa.appVersionCode).toBe(10);
 });
