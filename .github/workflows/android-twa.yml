@@ -114,7 +114,7 @@ jobs:
           AAB_CERT_OUTPUT="$(keytool -printcert -jarfile "$AAB" 2>&1)"
           set -e
           echo "$AAB_CERT_OUTPUT"
-          AAB_CERT_SHA256="$(echo "$AAB_CERT_OUTPUT" | sed -n 's/^SHA256: //p' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          AAB_CERT_SHA256="$(echo "$AAB_CERT_OUTPUT" | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           test -n "$AAB_CERT_SHA256"
           test "$AAB_CERT_SHA256" = "$MANIFEST_SHA256"
           test "$AAB_CERT_SHA256" = "$ASSETLINKS_SHA256"

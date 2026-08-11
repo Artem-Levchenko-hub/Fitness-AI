@@ -16,18 +16,18 @@ export interface AppUpdateManifest {
 export const APP_UPDATE_MANIFEST: AppUpdateManifest = {
   schemaVersion: 1,
   android: {
-    version: "1.2.4",
+    version: "1.2.5",
     downloadUrl:
-      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.4/Vibe-trainer-Android-v1.2.4.apk",
+      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.5/Vibe-trainer-Android-v1.2.5.apk",
     releaseUrl:
-      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/tag/v1.2.4",
+      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/tag/v1.2.5",
   },
   windows: {
-    version: "1.2.4",
+    version: "1.2.3",
     downloadUrl:
-      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.4/Vibe-trainer-Windows-x64-Setup-v1.2.4.exe",
+      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/download/v1.2.3/Vibe-trainer-Windows-x64-Setup-v1.2.3.exe",
     releaseUrl:
-      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/tag/v1.2.4",
+      "https://github.com/Artem-Levchenko-hub/Fitness-AI/releases/tag/v1.2.3",
   },
 };
 
