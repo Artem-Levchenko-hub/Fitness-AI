@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type ChatMessage = {
+  id: string;
   role: "user" | "assistant";
   content: string;
 };
@@ -16,11 +17,12 @@ type ChatMessage = {
 type Props = {
   workoutId: string;
   workoutName: string;
+  initialMessages: ChatMessage[];
 };
 
-export function CoachChat({ workoutId, workoutName }: Props) {
+export function CoachChat({ workoutId, workoutName, initialMessages }: Props) {
   const router = useRouter();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +39,10 @@ export function CoachChat({ workoutId, workoutName }: Props) {
     const trimmed = userText.trim();
     if (!trimmed || streaming) return;
 
+    const clientMessageId = crypto.randomUUID();
     const next: ChatMessage[] = [
       ...messages,
-      { role: "user", content: trimmed },
+      { id: clientMessageId, role: "user", content: trimmed },
     ];
     setMessages(next);
     setInput("");
@@ -47,13 +50,20 @@ export function CoachChat({ workoutId, workoutName }: Props) {
     setStreaming(true);
 
     // Push empty assistant placeholder which streams fill
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    setMessages((prev) => [
+      ...prev,
+      { id: `pending-${clientMessageId}`, role: "assistant", content: "" },
+    ]);
 
     try {
       const res = await fetch("/api/ai/coach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workoutId, messages: next }),
+        body: JSON.stringify({
+          workoutId,
+          clientMessageId,
+          message: trimmed,
+        }),
       });
 
       if (!res.ok) {
@@ -82,9 +92,30 @@ export function CoachChat({ workoutId, workoutName }: Props) {
         acc += chunk;
         setMessages((prev) => {
           const copy = [...prev];
-          copy[copy.length - 1] = { role: "assistant", content: acc };
+          copy[copy.length - 1] = {
+            id: `pending-${clientMessageId}`,
+            role: "assistant",
+            content: acc,
+          };
           return copy;
         });
+      }
+      const tail = decoder.decode();
+      if (tail) {
+        acc += tail;
+        setMessages((prev) => {
+          const copy = [...prev];
+          copy[copy.length - 1] = {
+            id: `pending-${clientMessageId}`,
+            role: "assistant",
+            content: acc,
+          };
+          return copy;
+        });
+      }
+      if (!acc.trim()) {
+        setError("Коуч не вернул ответ. Повторите отправку.");
+        setMessages((prev) => prev.slice(0, -1));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка соединения");
@@ -128,8 +159,8 @@ export function CoachChat({ workoutId, workoutName }: Props) {
         {isFirstMessage ? (
           <FirstMessageHint workoutName={workoutName} />
         ) : (
-          messages.map((m, i) => (
-            <Message key={i} role={m.role} content={m.content} />
+          messages.map((m) => (
+            <Message key={m.id} role={m.role} content={m.content} />
           ))
         )}
       </div>

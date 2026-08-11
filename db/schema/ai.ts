@@ -120,6 +120,34 @@ export const aiUsageLedger = pgTable(
   ],
 );
 
+/** Append-only history of the post-workout coach chat. The user message is
+ * written before generation and the assistant message in stream onFinish, so
+ * a refresh or lost client connection cannot erase a completed reply. */
+export const aiCoachMessages = pgTable(
+  "ai_coach_messages",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workoutId: text("workout_id")
+      .notNull()
+      .references(() => workouts.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("ai_coach_messages_conversation_idx").on(
+      t.userId,
+      t.workoutId,
+      t.createdAt,
+    ),
+  ],
+);
+
 export const aiAnalysesRelations = relations(aiAnalyses, ({ one }) => ({
   user: one(users, { fields: [aiAnalyses.userId], references: [users.id] }),
   workout: one(workouts, {
@@ -148,3 +176,5 @@ export type AiAnalysis = typeof aiAnalyses.$inferSelect;
 export type NewAiAnalysis = typeof aiAnalyses.$inferInsert;
 export type AiJob = typeof aiJobs.$inferSelect;
 export type NewAiJob = typeof aiJobs.$inferInsert;
+export type AiCoachMessage = typeof aiCoachMessages.$inferSelect;
+export type NewAiCoachMessage = typeof aiCoachMessages.$inferInsert;
