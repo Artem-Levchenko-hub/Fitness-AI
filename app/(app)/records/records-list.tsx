@@ -63,13 +63,13 @@ function RecordCard({
 
   return (
     <details className="group bg-card border-border overflow-hidden rounded-3xl border">
-      <summary className="focus-visible:ring-ring flex min-h-24 cursor-pointer list-none items-center gap-4 px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
-        <span className="bg-primary/10 text-primary flex size-12 shrink-0 items-center justify-center rounded-2xl">
+      <summary className="focus-visible:ring-ring flex min-h-24 cursor-pointer list-none items-center gap-3 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-inset md:gap-4 md:px-5 [&::-webkit-details-marker]:hidden">
+        <span className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl md:size-12">
           <Trophy className="size-5" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-base font-semibold">
-            {movement.title}
+          <span className="block text-base leading-tight font-semibold">
+            {movement.shortTitle}
           </span>
           <span className="text-muted-foreground mt-1 block text-xs">
             {latest
