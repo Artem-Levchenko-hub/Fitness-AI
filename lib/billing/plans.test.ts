@@ -45,9 +45,9 @@ describe("billing plans", () => {
     );
     expect(BILLING_PLANS.pro_monthly.quotas).toEqual({
       resetInterval: { unit: "month", count: 1 },
-      postWorkoutAnalyses: 20,
-      coachDialogs: 6,
-      trainerRepliesPerDialog: 3,
+      postWorkoutAnalyses: 15,
+      coachReplies: 60,
+      progressSummaries: 20,
       oneShotAiOperations: 10,
     });
     expect(BILLING_PLANS.pro_yearly.quotas).toEqual(

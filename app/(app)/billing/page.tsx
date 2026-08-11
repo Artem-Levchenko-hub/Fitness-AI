@@ -17,6 +17,7 @@ import {
   listTransactions,
 } from "@/lib/repos/credits.repo";
 import { getPaymentForUser } from "@/lib/repos/payments.repo";
+import { getAiQuotaOverview } from "@/lib/repos/ai-quota.repo";
 import { getSubscriptionForUser } from "@/lib/repos/subscriptions.repo";
 
 import { TopupForm } from "./topup-form";
@@ -30,11 +31,12 @@ export default async function BillingPage({ searchParams }: Props) {
   const sp = await searchParams;
   const readiness = getBillingReadiness();
 
-  const [balance, transactions, subscription, returnPayment] = await Promise.all([
+  const [balance, transactions, subscription, returnPayment, quotaOverview] = await Promise.all([
     getOrCreateBalance(user.id),
     listTransactions(user.id, 12),
     getSubscriptionForUser(user.id),
     sp.payment ? getPaymentForUser(user.id, sp.payment) : Promise.resolve(null),
+    getAiQuotaOverview(user.id),
   ]);
 
   const coachPrice = aiCoachPriceKopecks();
@@ -94,6 +96,7 @@ export default async function BillingPage({ searchParams }: Props) {
           enabled={readiness.subscriptionsEnabled}
           recurringEnabled={readiness.recurringPaymentsEnabled}
           mode={readiness.mode}
+          initialQuotaOverview={quotaOverview}
         />
       </div>
 

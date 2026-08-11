@@ -1,10 +1,16 @@
 import "server-only";
 
-import { and, count, countDistinct, eq, gte, inArray } from "drizzle-orm";
+import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import { getBillingPlan } from "@/lib/billing/plans";
+import {
+  aiQuotaBucketStart,
+  effectiveAiQuotas,
+  type EffectiveAiQuotas,
+} from "@/lib/billing/ai-quota-policy";
+import { getBillingPlan, hasActiveProAccess } from "@/lib/billing/plans";
+import { postgresTimestampParameter } from "@/lib/billing/postgres-timestamp";
 
 export const AI_OPERATIONS = [
   "coach_reply",
@@ -17,11 +23,12 @@ export const AI_OPERATIONS = [
 export type AiOperation = (typeof AI_OPERATIONS)[number];
 
 type CapacityResult =
-  | { kind: "allowed"; usageId: string }
+  | { kind: "allowed"; usageId: string; countsTowardQuota: boolean }
   | {
       kind: "duplicate";
       usageId: string;
       status: "processing" | "succeeded";
+      countsTowardQuota: boolean;
     }
   | { kind: "rate_limited"; retryAfterSeconds: number }
   | { kind: "quota_exceeded"; message: string }
@@ -30,32 +37,27 @@ type CapacityResult =
 const MAX_OPERATIONS_PER_MINUTE = 6;
 const ACTIVE_USAGE_STATUSES = ["processing", "succeeded"] as const;
 
-function utcMonthStart(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
-
-function quotaFor(operation: AiOperation, plan: ReturnType<typeof getBillingPlan>) {
+function quotaFor(operation: AiOperation, quotas: EffectiveAiQuotas) {
   switch (operation) {
     case "post_workout_analysis":
+      return quotas.postWorkoutAnalyses;
     case "weekly_review":
     case "daily_digest":
-      return plan.quotas.postWorkoutAnalyses;
+      return quotas.progressSummaries;
     case "one_shot":
-      return plan.quotas.oneShotAiOperations;
+      return quotas.oneShotAiOperations;
     case "coach_reply":
-      return plan.quotas.trainerRepliesPerDialog;
+      return quotas.coachReplies;
   }
 }
 
-/** Эти три фоновых/послетренировочных сценария делят один коммерческий лимит,
- * указанный в тарифе как postWorkoutAnalyses. Иначе пользователь получал бы
- * quota × 3 из-за фильтрации по точному operation. */
+/** Weekly/daily summaries share their own bucket. Workout analyses and coach
+ * replies remain protected from all background operations. */
 function quotaOperations(operation: AiOperation): readonly AiOperation[] {
   switch (operation) {
-    case "post_workout_analysis":
     case "weekly_review":
     case "daily_digest":
-      return ["post_workout_analysis", "weekly_review", "daily_digest"];
+      return ["weekly_review", "daily_digest"];
     default:
       return [operation];
   }
@@ -71,14 +73,14 @@ export async function claimAiCapacity(input: {
   userId: string;
   operation: AiOperation;
   requestKey: string;
-  /** Для coach_reply лимит ответов считается внутри одного диалога. */
+  /** Scope remains in the ledger for audit/idempotency; quota is global/monthly. */
   scopeKey?: string | null;
   /** Coach может оплачиваться из кошелька без Pro, но всё равно rate-limited. */
   allowWallet?: boolean;
   now?: Date;
 }): Promise<CapacityResult> {
   const now = input.now ?? new Date();
-  const bucketStart = utcMonthStart(now);
+  const bucketStart = aiQuotaBucketStart(now);
   const minuteStart = new Date(now.getTime() - 60_000);
 
   return db.transaction(async (tx) => {
@@ -97,6 +99,7 @@ export async function claimAiCapacity(input: {
         operation: schema.aiUsageLedger.operation,
         scopeKey: schema.aiUsageLedger.scopeKey,
         status: schema.aiUsageLedger.status,
+        countsTowardQuota: schema.aiUsageLedger.countsTowardQuota,
         updatedAt: schema.aiUsageLedger.updatedAt,
       })
       .from(schema.aiUsageLedger)
@@ -115,6 +118,7 @@ export async function claimAiCapacity(input: {
           kind: "duplicate" as const,
           usageId: existing.id,
           status: existing.status,
+          countsTowardQuota: existing.countsTowardQuota,
         };
       }
       // Одна mutable reservation не должна превращаться в обход burst-limit:
@@ -139,21 +143,35 @@ export async function claimAiCapacity(input: {
     }
 
     const [subscription] = await tx
-      .select({ planCode: schema.subscriptions.planCode, tier: schema.subscriptions.tier, status: schema.subscriptions.status, currentPeriodEnd: schema.subscriptions.currentPeriodEnd })
+      .select({
+        planCode: schema.subscriptions.planCode,
+        tier: schema.subscriptions.tier,
+        status: schema.subscriptions.status,
+        currentPeriodStart: schema.subscriptions.currentPeriodStart,
+        currentPeriodEnd: schema.subscriptions.currentPeriodEnd,
+      })
       .from(schema.subscriptions)
       .where(eq(schema.subscriptions.userId, input.userId))
       .limit(1);
-    const hasPro = Boolean(
-      subscription?.tier === "pro" &&
-        (subscription.status === "active" || subscription.status === "trialing") &&
-        subscription.currentPeriodEnd &&
-        subscription.currentPeriodEnd > now,
-    );
+    const hasPro = subscription
+      ? hasActiveProAccess(subscription, now)
+      : false;
     if (!hasPro && !input.allowWallet) return { kind: "subscription_required" as const };
 
     if (hasPro) {
       const plan = getBillingPlan(subscription?.planCode ?? "pro_monthly");
-      const quota = quotaFor(input.operation, plan);
+      const [exchange] = await tx
+        .select({ id: schema.aiQuotaExchanges.id })
+        .from(schema.aiQuotaExchanges)
+        .where(
+          and(
+            eq(schema.aiQuotaExchanges.userId, input.userId),
+            eq(schema.aiQuotaExchanges.bucketStart, bucketStart),
+          ),
+        )
+        .limit(1);
+      const quotas = effectiveAiQuotas(plan.quotas, Boolean(exchange));
+      const quota = quotaFor(input.operation, quotas);
       const commonConditions = [
         eq(schema.aiUsageLedger.userId, input.userId),
         inArray(
@@ -161,41 +179,23 @@ export async function claimAiCapacity(input: {
           quotaOperations(input.operation),
         ),
         eq(schema.aiUsageLedger.bucketStart, bucketStart),
+        eq(schema.aiUsageLedger.countsTowardQuota, true),
         inArray(schema.aiUsageLedger.status, ACTIVE_USAGE_STATUSES),
       ];
-      const conditions =
-        input.operation === "coach_reply" && input.scopeKey
-          ? [...commonConditions, eq(schema.aiUsageLedger.scopeKey, input.scopeKey)]
-          : commonConditions;
       const [used] = await tx
         .select({ total: count() })
         .from(schema.aiUsageLedger)
-        .where(and(...conditions));
+        .where(and(...commonConditions));
       if ((used?.total ?? 0) >= quota) {
         return {
           kind: "quota_exceeded" as const,
-          message: "Лимит AI-операций по вашему тарифу на этот месяц исчерпан.",
+          message:
+            input.operation === "coach_reply"
+              ? "Лимит вопросов AI-тренеру на этот месяц исчерпан."
+              : input.operation === "post_workout_analysis"
+                ? "Лимит разборов тренировок на этот месяц исчерпан."
+                : "Лимит AI-операций по вашему тарифу на этот месяц исчерпан.",
         };
-      }
-
-      // Для нового coach-диалога дополнительно ограничиваем число диалогов.
-      if (input.operation === "coach_reply" && input.scopeKey) {
-        const [scope] = await tx
-          .select({ total: count() })
-          .from(schema.aiUsageLedger)
-          .where(and(...commonConditions, eq(schema.aiUsageLedger.scopeKey, input.scopeKey)));
-        if ((scope?.total ?? 0) === 0) {
-          const [dialogs] = await tx
-            .select({ total: countDistinct(schema.aiUsageLedger.scopeKey) })
-            .from(schema.aiUsageLedger)
-            .where(and(...commonConditions));
-          if ((dialogs?.total ?? 0) >= plan.quotas.coachDialogs) {
-            return {
-              kind: "quota_exceeded" as const,
-              message: "Лимит диалогов с AI-тренером на этот месяц исчерпан.",
-            };
-          }
-        }
       }
     }
 
@@ -205,6 +205,7 @@ export async function claimAiCapacity(input: {
         .set({
           status: "processing",
           bucketStart,
+          countsTowardQuota: hasPro,
           createdAt: now,
           updatedAt: now,
         })
@@ -220,9 +221,14 @@ export async function claimAiCapacity(input: {
           kind: "duplicate" as const,
           usageId: existing.id,
           status: "processing" as const,
+          countsTowardQuota: existing.countsTowardQuota,
         };
       }
-      return { kind: "allowed" as const, usageId: reopened.id };
+      return {
+        kind: "allowed" as const,
+        usageId: reopened.id,
+        countsTowardQuota: hasPro,
+      };
     }
 
     const [created] = await tx
@@ -233,11 +239,16 @@ export async function claimAiCapacity(input: {
         requestKey: input.requestKey,
         scopeKey: input.scopeKey ?? null,
         bucketStart,
+        countsTowardQuota: hasPro,
         status: "processing",
       })
       .returning({ id: schema.aiUsageLedger.id });
     if (!created) throw new Error("Failed to reserve AI capacity");
-    return { kind: "allowed" as const, usageId: created.id };
+    return {
+      kind: "allowed" as const,
+      usageId: created.id,
+      countsTowardQuota: hasPro,
+    };
   });
 }
 
@@ -246,6 +257,24 @@ export async function settleAiCapacity(usageId: string, succeeded: boolean): Pro
     .update(schema.aiUsageLedger)
     .set({ status: succeeded ? "succeeded" : "failed", updatedAt: new Date() })
     .where(and(eq(schema.aiUsageLedger.id, usageId), eq(schema.aiUsageLedger.status, "processing")));
+}
+
+/** Releases reservations abandoned by a crashed/disconnected AI request.
+ * Every AI route has a <=60s timeout, so five minutes cannot overlap a valid
+ * operation. Failed rows stop consuming monthly quota and remain auditable. */
+export async function releaseStaleAiCapacity(before: Date): Promise<number> {
+  const beforeIso = postgresTimestampParameter(before);
+  const released = await db
+    .update(schema.aiUsageLedger)
+    .set({ status: "failed", updatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.aiUsageLedger.status, "processing"),
+        sql`${schema.aiUsageLedger.updatedAt} <= ${beforeIso}::timestamptz`,
+      ),
+    )
+    .returning({ id: schema.aiUsageLedger.id });
+  return released.length;
 }
 
 export function capacityErrorResponse(result: Exclude<CapacityResult, { kind: "allowed" } | { kind: "duplicate" }>) {

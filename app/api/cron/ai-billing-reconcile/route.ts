@@ -2,6 +2,7 @@ import {
   failAndRefundAiBillingOperation,
   listStaleAiBillingOperations,
 } from "@/lib/repos/ai-billing.repo";
+import { releaseStaleAiCapacity } from "@/lib/ai/guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -19,9 +20,9 @@ export async function POST(request: Request) {
 
   // AI route timeout = 45s. Даём большой запас на onFinish и только затем
   // считаем processing-операцию оборванной.
-  const stale = await listStaleAiBillingOperations(
-    new Date(Date.now() - 5 * 60_000),
-  );
+  const cutoff = new Date(Date.now() - 5 * 60_000);
+  const releasedCapacity = await releaseStaleAiCapacity(cutoff);
+  const stale = await listStaleAiBillingOperations(cutoff);
   let refunded = 0;
   for (const operation of stale) {
     if (
@@ -33,7 +34,11 @@ export async function POST(request: Request) {
       refunded += 1;
     }
   }
-  return Response.json({ checked: stale.length, refunded });
+  return Response.json({
+    checked: stale.length,
+    refunded,
+    releasedCapacity,
+  });
 }
 
 export async function GET(request: Request) {
