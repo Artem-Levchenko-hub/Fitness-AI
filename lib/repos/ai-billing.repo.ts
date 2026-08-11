@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { postgresTimestampParameter } from "@/lib/billing/postgres-timestamp";
 
 type Coverage = (typeof schema.AI_BILLING_COVERAGE)[number];
 
@@ -181,13 +182,14 @@ export async function listStaleAiBillingOperations(
   before: Date,
   limit = 50,
 ) {
+  const beforeIso = postgresTimestampParameter(before);
   return db
     .select({ id: schema.aiBillingOperations.id })
     .from(schema.aiBillingOperations)
     .where(
       and(
         eq(schema.aiBillingOperations.status, "processing"),
-        sql`${schema.aiBillingOperations.updatedAt} <= ${before}`,
+        sql`${schema.aiBillingOperations.updatedAt} <= ${beforeIso}::timestamptz`,
       ),
     )
     .limit(limit);
