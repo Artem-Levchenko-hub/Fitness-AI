@@ -11,7 +11,12 @@ const TABS = [
   { href: "/workouts", icon: Activity, label: "Тренировки" },
   { href: "/exercises", icon: Dumbbell, label: "Упражнения" },
   { href: "/billing", icon: Wallet, label: "Баланс" },
-  { href: "/profile", icon: User, label: "Профиль" },
+  {
+    href: "/profile",
+    icon: User,
+    label: "Профиль",
+    relatedPaths: ["/records"],
+  },
 ] as const;
 
 export function BottomTabBar() {
@@ -25,7 +30,12 @@ export function BottomTabBar() {
       <ul className="grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
         {TABS.map((tab) => {
           const active =
-            pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+            pathname === tab.href ||
+            pathname.startsWith(`${tab.href}/`) ||
+            ("relatedPaths" in tab &&
+              tab.relatedPaths.some(
+                (path) => pathname === path || pathname.startsWith(`${path}/`),
+              ));
           const Icon = tab.icon;
           return (
             <li key={tab.href} className="flex">
