@@ -8,6 +8,7 @@ import { MuscleVolumeSilhouette } from "@/components/charts/MuscleVolumeSilhouet
 import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
 import { StatsOverview } from "@/components/stats/StatsOverview";
+import { MonthlyAchievements } from "@/components/stats/MonthlyAchievements";
 import { WeeklyReviewButton } from "@/components/stats/WeeklyReviewButton";
 import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { parseWeeklyReviewResult } from "@/lib/ai/weekly-review-display";
@@ -19,6 +20,7 @@ import {
 } from "@/lib/domain/stats/period-insight";
 import { buildStatsOverview } from "@/lib/domain/stats/overview";
 import { getUserProfile, listMeasurements } from "@/lib/repos/body.repo";
+import { getMonthlyAchievements } from "@/lib/repos/achievements.repo";
 import {
   dailyVolume,
   oneRmTrend,
@@ -74,6 +76,7 @@ export default async function StatsPage({ searchParams }: Props) {
     volumeCompare,
     topMover,
     weeklyReview,
+    monthlyAchievements,
   ] = await Promise.all([
     topLineKpi(user.id, range),
     granularity === "week"
@@ -87,6 +90,7 @@ export default async function StatsPage({ searchParams }: Props) {
     periodVolumeComparison(user.id, range),
     topMoverByE1rm(user.id, range),
     getLatestWeeklyReview(user.id),
+    getMonthlyAchievements(user.id, tz),
   ]);
 
   // H8.2c — авто-сгенерированный недельный разбор (воркер H8.2). Валидируем
@@ -181,6 +185,11 @@ export default async function StatsPage({ searchParams }: Props) {
       </header>
 
       <PeriodPills />
+
+      <MonthlyAchievements
+        monthly={monthlyAchievements.monthly}
+        facts={monthlyAchievements.facts}
+      />
 
       <StatsOverview
         range={range}
