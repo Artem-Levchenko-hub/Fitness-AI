@@ -318,7 +318,10 @@ async function strengthMaxSessionTonnage(userId: string): Promise<number> {
   const byWorkout = db
     .select({
       workoutId: schema.workouts.id,
-      tonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
+      tonnage:
+        sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`.as(
+          "tonnage",
+        ),
     })
     .from(schema.workouts)
     .leftJoin(
@@ -357,7 +360,10 @@ async function circuitMaxSessionTonnage(userId: string): Promise<number> {
   const byWorkout = db
     .select({
       workoutId: schema.circuitWorkouts.id,
-      tonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false), 0)`,
+      tonnage:
+        sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false), 0)`.as(
+          "tonnage",
+        ),
     })
     .from(schema.circuitWorkouts)
     .leftJoin(
