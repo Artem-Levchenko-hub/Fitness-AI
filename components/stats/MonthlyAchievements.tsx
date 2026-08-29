@@ -4,11 +4,13 @@ import {
   Gauge,
   Medal,
   Repeat2,
+  Scale,
   Target,
   Trophy,
 } from "lucide-react";
 
 import {
+  type AchievementTrack,
   buildAchievementTracks,
   countAchievementLevels,
   countUnlockedAchievements,
@@ -28,6 +30,8 @@ export function MonthlyAchievements({
   const totalLevels = countAchievementLevels(tracks);
   const hasMonthlyActivity =
     monthly.workouts > 0 || monthly.totalSets > 0 || monthly.totalReps > 0;
+  const isTonnageTrack = (key: AchievementTrack["key"]) =>
+    key === "maxWorkoutTonnageT" || key === "totalTonnageT";
 
   return (
     <>
@@ -84,11 +88,13 @@ export function MonthlyAchievements({
           {tracks.map((track) => (
             <article
               key={track.key}
-              className="bg-card border-border rounded-2xl border p-4"
+              className={`bg-card border-border rounded-2xl border p-4 ${isTonnageTrack(track.key) ? "md:col-span-2" : ""}`}
             >
               <div className="flex items-start gap-3">
                 <span className="bg-muted text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
-                  {track.key === "workouts" ? (
+                  {isTonnageTrack(track.key) ? (
+                    <Scale className="size-5" aria-hidden />
+                  ) : track.key === "workouts" ? (
                     <Trophy className="size-5" aria-hidden />
                   ) : track.key === "pullUpReps" ? (
                     <Repeat2 className="size-5" aria-hidden />
@@ -143,7 +149,14 @@ export function MonthlyAchievements({
                           ) : (
                             <Medal className="size-3" aria-hidden />
                           )}
-                          {formatNumber(level)} {track.unit}
+                          <span>
+                            {track.levelLabels?.[level] ? (
+                              <span className="mr-1">
+                                {track.levelLabels[level]}
+                              </span>
+                            ) : null}
+                            {formatNumber(level)} {track.unit}
+                          </span>
                         </span>
                       );
                     })}
@@ -152,7 +165,7 @@ export function MonthlyAchievements({
                   <p className="text-muted-foreground mt-3 flex items-center gap-1.5 text-[11px]">
                     <Gauge className="size-3.5" aria-hidden />
                     {track.nextTarget
-                      ? `Следующий рубеж: ${formatNumber(track.nextTarget)} ${track.unit}`
+                      ? `Следующий рубеж: ${track.levelLabels?.[track.nextTarget] ? `${track.levelLabels[track.nextTarget]} · ` : ""}${formatNumber(track.nextTarget)} ${track.unit}`
                       : "Все рубежи открыты"}
                   </p>
                 </div>

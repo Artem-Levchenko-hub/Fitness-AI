@@ -39,6 +39,8 @@ type SourceTotals = {
   monthSets: number;
   monthReps: number;
   monthTonnage: number;
+  totalTonnage: number;
+  maxSessionTonnage: number;
   monthPullUps: number;
   monthWeightedSquats: number;
   totalPullUps: number;
@@ -93,6 +95,11 @@ export async function getMonthlyAchievements(
         quick.squatMax,
         manual.squatMax,
       ),
+      maxWorkoutTonnageT:
+        Math.max(strength.maxSessionTonnage, circuit.maxSessionTonnage) / 1_000,
+      totalTonnageT:
+        (strength.totalTonnage + circuit.totalTonnage + quick.totalTonnage) /
+        1_000,
     },
   };
 }
@@ -107,46 +114,50 @@ async function strengthTotals(
     timeZone,
     month,
   );
-  const [row] = await db
-    .select({
-      monthSessions: sql<number>`COUNT(DISTINCT ${schema.workouts.id}) FILTER (WHERE ${inMonth})`,
-      totalSessions: sql<number>`COUNT(DISTINCT ${schema.workouts.id})`,
-      monthSets: sql<number>`COUNT(${schema.workoutSets.id}) FILTER (WHERE ${inMonth})`,
-      monthReps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${inMonth}), 0)`,
-      monthTonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}) FILTER (WHERE ${inMonth}), 0)`,
-      monthPullUps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${inMonth} AND ${isPullUp}), 0)`,
-      monthWeightedSquats: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${inMonth} AND ${schema.exercises.slug} = 'back-squat' AND ${schema.workoutSets.weightKg} > 0), 0)`,
-      totalPullUps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${isPullUp}), 0)`,
-      benchMax: sql<number>`COALESCE(MAX(${schema.workoutSets.weightKg}) FILTER (WHERE ${schema.exercises.slug} = 'bench-press-barbell'), 0)`,
-      squatMax: sql<number>`COALESCE(MAX(${schema.workoutSets.weightKg}) FILTER (WHERE ${schema.exercises.slug} = 'back-squat'), 0)`,
-    })
-    .from(schema.workouts)
-    .leftJoin(
-      schema.workoutExercises,
-      eq(schema.workoutExercises.workoutId, schema.workouts.id),
-    )
-    .leftJoin(
-      schema.exercises,
-      eq(schema.exercises.id, schema.workoutExercises.exerciseId),
-    )
-    .leftJoin(
-      schema.workoutSets,
-      and(
-        eq(
-          schema.workoutSets.workoutExerciseId,
-          schema.workoutExercises.id,
+  const [rows, maxSessionTonnage] = await Promise.all([
+    db
+      .select({
+        monthSessions: sql<number>`COUNT(DISTINCT ${schema.workouts.id}) FILTER (WHERE ${inMonth})`,
+        totalSessions: sql<number>`COUNT(DISTINCT ${schema.workouts.id})`,
+        monthSets: sql<number>`COUNT(${schema.workoutSets.id}) FILTER (WHERE ${inMonth})`,
+        monthReps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${inMonth}), 0)`,
+        monthTonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}) FILTER (WHERE ${inMonth}), 0)`,
+        totalTonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
+        monthPullUps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${inMonth} AND ${isPullUp}), 0)`,
+        monthWeightedSquats: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${inMonth} AND ${schema.exercises.slug} = 'back-squat' AND ${schema.workoutSets.weightKg} > 0), 0)`,
+        totalPullUps: sql<number>`COALESCE(SUM(${schema.workoutSets.reps}) FILTER (WHERE ${isPullUp}), 0)`,
+        benchMax: sql<number>`COALESCE(MAX(${schema.workoutSets.weightKg}) FILTER (WHERE ${schema.exercises.slug} = 'bench-press-barbell'), 0)`,
+        squatMax: sql<number>`COALESCE(MAX(${schema.workoutSets.weightKg}) FILTER (WHERE ${schema.exercises.slug} = 'back-squat'), 0)`,
+      })
+      .from(schema.workouts)
+      .leftJoin(
+        schema.workoutExercises,
+        eq(schema.workoutExercises.workoutId, schema.workouts.id),
+      )
+      .leftJoin(
+        schema.exercises,
+        eq(schema.exercises.id, schema.workoutExercises.exerciseId),
+      )
+      .leftJoin(
+        schema.workoutSets,
+        and(
+          eq(
+            schema.workoutSets.workoutExerciseId,
+            schema.workoutExercises.id,
+          ),
+          eq(schema.workoutSets.setType, "working"),
         ),
-        eq(schema.workoutSets.setType, "working"),
+      )
+      .where(
+        and(
+          eq(schema.workouts.userId, userId),
+          eq(schema.workouts.status, "completed"),
+        ),
       ),
-    )
-    .where(
-      and(
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "completed"),
-      ),
-    );
+    strengthMaxSessionTonnage(userId),
+  ]);
 
-  return normalizeTotals(row);
+  return normalizeTotals({ ...rows[0], maxSessionTonnage });
 }
 
 async function circuitTotals(
@@ -161,52 +172,56 @@ async function circuitTotals(
     timeZone,
     month,
   );
-  const [row] = await db
-    .select({
-      monthSessions: sql<number>`COUNT(DISTINCT ${schema.circuitWorkouts.id}) FILTER (WHERE ${inMonth})`,
-      totalSessions: sql<number>`COUNT(DISTINCT ${schema.circuitWorkouts.id})`,
-      monthSets: sql<number>`COUNT(${schema.circuitRoundLogs.id}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false)`,
-      monthReps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false), 0)`,
-      monthTonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false), 0)`,
-      monthPullUps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false AND ${isPullUp}), 0)`,
-      monthWeightedSquats: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false AND ${schema.exercises.slug} = 'back-squat' AND ${schema.circuitRoundLogs.actualWeightKg} > 0), 0)`,
-      totalPullUps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false AND ${isPullUp}), 0)`,
-      benchMax: sql<number>`COALESCE(MAX(${schema.circuitRoundLogs.actualWeightKg}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false AND ${schema.exercises.slug} = 'bench-press-barbell'), 0)`,
-      squatMax: sql<number>`COALESCE(MAX(${schema.circuitRoundLogs.actualWeightKg}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false AND ${schema.exercises.slug} = 'back-squat'), 0)`,
-    })
-    .from(schema.circuitWorkouts)
-    .leftJoin(
-      schema.circuitExercises,
-      eq(
-        schema.circuitExercises.circuitWorkoutId,
-        schema.circuitWorkouts.id,
-      ),
-    )
-    .leftJoin(
-      schema.exercises,
-      eq(schema.exercises.id, schema.circuitExercises.exerciseId),
-    )
-    .leftJoin(
-      schema.circuitRoundLogs,
-      and(
+  const [rows, maxSessionTonnage] = await Promise.all([
+    db
+      .select({
+        monthSessions: sql<number>`COUNT(DISTINCT ${schema.circuitWorkouts.id}) FILTER (WHERE ${inMonth})`,
+        totalSessions: sql<number>`COUNT(DISTINCT ${schema.circuitWorkouts.id})`,
+        monthSets: sql<number>`COUNT(${schema.circuitRoundLogs.id}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false)`,
+        monthReps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false), 0)`,
+        monthTonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false), 0)`,
+        totalTonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false), 0)`,
+        monthPullUps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false AND ${isPullUp}), 0)`,
+        monthWeightedSquats: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${inMonth} AND ${schema.circuitRoundLogs.skipped} = false AND ${schema.exercises.slug} = 'back-squat' AND ${schema.circuitRoundLogs.actualWeightKg} > 0), 0)`,
+        totalPullUps: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false AND ${isPullUp}), 0)`,
+        benchMax: sql<number>`COALESCE(MAX(${schema.circuitRoundLogs.actualWeightKg}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false AND ${schema.exercises.slug} = 'bench-press-barbell'), 0)`,
+        squatMax: sql<number>`COALESCE(MAX(${schema.circuitRoundLogs.actualWeightKg}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false AND ${schema.exercises.slug} = 'back-squat'), 0)`,
+      })
+      .from(schema.circuitWorkouts)
+      .leftJoin(
+        schema.circuitExercises,
         eq(
-          schema.circuitRoundLogs.circuitExerciseId,
-          schema.circuitExercises.id,
-        ),
-        eq(
-          schema.circuitRoundLogs.circuitWorkoutId,
+          schema.circuitExercises.circuitWorkoutId,
           schema.circuitWorkouts.id,
         ),
+      )
+      .leftJoin(
+        schema.exercises,
+        eq(schema.exercises.id, schema.circuitExercises.exerciseId),
+      )
+      .leftJoin(
+        schema.circuitRoundLogs,
+        and(
+          eq(
+            schema.circuitRoundLogs.circuitExerciseId,
+            schema.circuitExercises.id,
+          ),
+          eq(
+            schema.circuitRoundLogs.circuitWorkoutId,
+            schema.circuitWorkouts.id,
+          ),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.circuitWorkouts.userId, userId),
+          eq(schema.circuitWorkouts.status, "completed"),
+        ),
       ),
-    )
-    .where(
-      and(
-        eq(schema.circuitWorkouts.userId, userId),
-        eq(schema.circuitWorkouts.status, "completed"),
-      ),
-    );
+    circuitMaxSessionTonnage(userId),
+  ]);
 
-  return normalizeTotals(row);
+  return normalizeTotals({ ...rows[0], maxSessionTonnage });
 }
 
 async function quickTotals(
@@ -224,6 +239,7 @@ async function quickTotals(
       monthSets: sql<number>`COALESCE(SUM(${quickEffectiveSets}) FILTER (WHERE ${inMonth}), 0)`,
       monthReps: sql<number>`COALESCE(SUM(${quickEffectiveReps}) FILTER (WHERE ${inMonth}), 0)`,
       monthTonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * (${quickEffectiveReps})) FILTER (WHERE ${inMonth}), 0)`,
+      totalTonnage: sql<number>`COALESCE(SUM(COALESCE(${schema.quickActivities.weightKg}, 0) * (${quickEffectiveReps})), 0)`,
       monthPullUps: sql<number>`COALESCE(SUM(${quickEffectiveReps}) FILTER (WHERE ${inMonth} AND ${isPullUp}), 0)`,
       monthWeightedSquats: sql<number>`COALESCE(SUM(${quickEffectiveReps}) FILTER (WHERE ${inMonth} AND ${schema.exercises.slug} = 'back-squat' AND ${schema.quickActivities.weightKg} > 0), 0)`,
       totalPullUps: sql<number>`COALESCE(SUM(${quickEffectiveReps}) FILTER (WHERE ${isPullUp}), 0)`,
@@ -241,6 +257,7 @@ async function quickTotals(
     ...row,
     monthSessions: 0,
     totalSessions: 0,
+    maxSessionTonnage: 0,
   });
 }
 
@@ -272,6 +289,8 @@ async function cardioTotals(
     monthSets: 0,
     monthReps: 0,
     monthTonnage: 0,
+    totalTonnage: 0,
+    maxSessionTonnage: 0,
     monthPullUps: 0,
     monthWeightedSquats: 0,
     totalPullUps: 0,
@@ -295,6 +314,90 @@ async function manualRecordMaximums(userId: string) {
   };
 }
 
+async function strengthMaxSessionTonnage(userId: string): Promise<number> {
+  const byWorkout = db
+    .select({
+      workoutId: schema.workouts.id,
+      tonnage: sql<number>`COALESCE(SUM(${schema.workoutSets.weightKg} * ${schema.workoutSets.reps}), 0)`,
+    })
+    .from(schema.workouts)
+    .leftJoin(
+      schema.workoutExercises,
+      eq(schema.workoutExercises.workoutId, schema.workouts.id),
+    )
+    .leftJoin(
+      schema.workoutSets,
+      and(
+        eq(
+          schema.workoutSets.workoutExerciseId,
+          schema.workoutExercises.id,
+        ),
+        eq(schema.workoutSets.setType, "working"),
+      ),
+    )
+    .where(
+      and(
+        eq(schema.workouts.userId, userId),
+        eq(schema.workouts.status, "completed"),
+      ),
+    )
+    .groupBy(schema.workouts.id)
+    .as("strength_session_tonnage");
+
+  const [row] = await db
+    .select({
+      maxSessionTonnage: sql<number>`COALESCE(MAX(${byWorkout.tonnage}), 0)`,
+    })
+    .from(byWorkout);
+
+  return Number(row?.maxSessionTonnage ?? 0);
+}
+
+async function circuitMaxSessionTonnage(userId: string): Promise<number> {
+  const byWorkout = db
+    .select({
+      workoutId: schema.circuitWorkouts.id,
+      tonnage: sql<number>`COALESCE(SUM(${schema.circuitRoundLogs.actualWeightKg} * ${schema.circuitRoundLogs.actualReps}) FILTER (WHERE ${schema.circuitRoundLogs.skipped} = false), 0)`,
+    })
+    .from(schema.circuitWorkouts)
+    .leftJoin(
+      schema.circuitExercises,
+      eq(
+        schema.circuitExercises.circuitWorkoutId,
+        schema.circuitWorkouts.id,
+      ),
+    )
+    .leftJoin(
+      schema.circuitRoundLogs,
+      and(
+        eq(
+          schema.circuitRoundLogs.circuitExerciseId,
+          schema.circuitExercises.id,
+        ),
+        eq(
+          schema.circuitRoundLogs.circuitWorkoutId,
+          schema.circuitWorkouts.id,
+        ),
+      ),
+    )
+    .where(
+      and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "completed"),
+      ),
+    )
+    .groupBy(schema.circuitWorkouts.id)
+    .as("circuit_session_tonnage");
+
+  const [row] = await db
+    .select({
+      maxSessionTonnage: sql<number>`COALESCE(MAX(${byWorkout.tonnage}), 0)`,
+    })
+    .from(byWorkout);
+
+  return Number(row?.maxSessionTonnage ?? 0);
+}
+
 function localMonthFilter(
   column: PgColumn,
   timeZone: string,
@@ -311,6 +414,8 @@ function normalizeTotals(row: Partial<SourceTotals> | undefined): SourceTotals {
     monthSets: Number(row?.monthSets ?? 0),
     monthReps: Number(row?.monthReps ?? 0),
     monthTonnage: Number(row?.monthTonnage ?? 0),
+    totalTonnage: Number(row?.totalTonnage ?? 0),
+    maxSessionTonnage: Number(row?.maxSessionTonnage ?? 0),
     monthPullUps: Number(row?.monthPullUps ?? 0),
     monthWeightedSquats: Number(row?.monthWeightedSquats ?? 0),
     totalPullUps: Number(row?.totalPullUps ?? 0),

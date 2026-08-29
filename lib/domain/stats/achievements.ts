@@ -21,6 +21,8 @@ export type AchievementFacts = {
   pullUpReps: number;
   benchPressKg: number;
   backSquatKg: number;
+  maxWorkoutTonnageT: number;
+  totalTonnageT: number;
 };
 
 export type AchievementTrack = {
@@ -30,6 +32,7 @@ export type AchievementTrack = {
   current: number;
   unit: string;
   levels: readonly number[];
+  levelLabels?: Readonly<Record<number, string>>;
   unlocked: number;
   nextTarget: number | null;
   progressPct: number;
@@ -38,6 +41,34 @@ export type AchievementTrack = {
 const TRACKS: ReadonlyArray<
   Omit<AchievementTrack, "current" | "unlocked" | "nextTarget" | "progressPct">
 > = [
+  {
+    key: "maxWorkoutTonnageT",
+    title: "Тоннаж за тренировку",
+    description: "Лучший тоннаж одной завершённой силовой или круговой сессии",
+    unit: "т",
+    levels: [1, 10],
+    levelLabels: {
+      1: "🚗 Автомобиль",
+      10: "🐘 Африканский слон",
+    },
+  },
+  {
+    key: "totalTonnageT",
+    title: "Тоннаж за всё время",
+    description: "Суммарная внешняя нагрузка за всё время",
+    unit: "т",
+    levels: [100, 204, 250, 1_000, 3_000, 5_000, 10_000, 20_000],
+    levelLabels: {
+      100: "🐋 Синий кит",
+      204: "🗽 Статуя Свободы",
+      250: "✈️ Boeing 747",
+      1_000: "⚖️ Килотонна",
+      3_000: "🚀 Сатурн-5",
+      5_000: "🛕 Будда Весеннего Храма",
+      10_000: "🏛️ Обелиск Вашингтона",
+      20_000: "🛢️ Нефтяная платформа",
+    },
+  },
   {
     key: "pullUpReps",
     title: "Подтягивания",

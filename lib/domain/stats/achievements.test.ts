@@ -31,6 +31,8 @@ describe("buildAchievementTracks", () => {
       pullUpReps: 500,
       benchPressKg: 100,
       backSquatKg: 79.5,
+      maxWorkoutTonnageT: 10,
+      totalTonnageT: 204,
     });
 
     expect(tracks.find((track) => track.key === "pullUpReps")).toMatchObject({
@@ -42,8 +44,30 @@ describe("buildAchievementTracks", () => {
       unlocked: 3,
       nextTarget: 120,
     });
-    expect(countUnlockedAchievements(tracks)).toBe(6);
-    expect(countAchievementLevels(tracks)).toBe(15);
+    const workoutTonnage = tracks.find(
+      (track) => track.key === "maxWorkoutTonnageT",
+    )!;
+    expect(workoutTonnage.levels).toEqual([1, 10]);
+    expect(workoutTonnage).toMatchObject({
+      unlocked: 2,
+      nextTarget: null,
+      progressPct: 100,
+    });
+    expect(workoutTonnage.levelLabels?.[10]).toBe("🐘 Африканский слон");
+    const lifetimeTonnage = tracks.find(
+      (track) => track.key === "totalTonnageT",
+    )!;
+    expect(lifetimeTonnage.levels).toEqual([
+      100, 204, 250, 1_000, 3_000, 5_000, 10_000, 20_000,
+    ]);
+    expect(lifetimeTonnage).toMatchObject({
+      unlocked: 2,
+      nextTarget: 250,
+      progressPct: 81,
+    });
+    expect(lifetimeTonnage.levelLabels?.[204]).toBe("🗽 Статуя Свободы");
+    expect(countUnlockedAchievements(tracks)).toBe(10);
+    expect(countAchievementLevels(tracks)).toBe(25);
   });
 
   it("marks a completed track as 100 percent", () => {
@@ -52,7 +76,9 @@ describe("buildAchievementTracks", () => {
       pullUpReps: 1_200,
       benchPressKg: 0,
       backSquatKg: 0,
-    })[0]!;
+      maxWorkoutTonnageT: 0,
+      totalTonnageT: 0,
+    }).find((track) => track.key === "pullUpReps")!;
 
     expect(pullUps).toMatchObject({
       unlocked: 3,
