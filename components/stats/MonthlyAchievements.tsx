@@ -111,7 +111,7 @@ export function MonthlyAchievements({
                       </p>
                     </div>
                     <span className="tabular shrink-0 text-right text-lg font-semibold">
-                      {formatNumber(track.current)}
+                      {formatAchievementCurrent(track)}
                       <span className="text-muted-foreground ml-1 text-[10px] font-medium">
                         {track.unit}
                       </span>
@@ -175,8 +175,10 @@ export function MonthlyAchievements({
         </div>
 
         <p className="text-muted-foreground mt-3 text-[11px] leading-relaxed">
-          Весовые рубежи — личные ориентиры, не оценка уровня. Учитывается
-          лучший рабочий подход или результат контрольного теста из «Рекордов».
+          Тоннаж — сумма внешней нагрузки в завершённых рабочих подходах;
+          разминки и пропущенные круги не входят. Дополнительная активность
+          входит только в общий тоннаж. Весовые рубежи жима и приседа учитывают
+          лучший рабочий подход или контрольный тест из «Рекордов».
         </p>
       </section>
     </>
@@ -204,6 +206,22 @@ function formatNumber(value: number): string {
   return Number.isInteger(value)
     ? value.toLocaleString("ru-RU")
     : value.toLocaleString("ru-RU", { maximumFractionDigits: 1 });
+}
+
+function formatAchievementCurrent(track: AchievementTrack): string {
+  if (
+    track.key !== "maxWorkoutTonnageT" &&
+    track.key !== "totalTonnageT"
+  ) {
+    return formatNumber(track.current);
+  }
+
+  return formatTonnageAchievementValue(track.current);
+}
+
+export function formatTonnageAchievementValue(value: number): string {
+  const truncated = Math.floor(Math.max(0, value) * 100 + 1e-9) / 100;
+  return truncated.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 }
 
 function formatTonnage(value: number): string {
