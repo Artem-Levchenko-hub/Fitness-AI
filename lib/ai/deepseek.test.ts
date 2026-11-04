@@ -27,7 +27,7 @@ vi.mock("@/lib/env", () => ({
   },
 }));
 
-import { aiClient, COACH_MODEL } from "./deepseek";
+import { aiClient, aiRequestProviderOptions, COACH_MODEL } from "./deepseek";
 
 describe("AITUNNEL provider selection", () => {
   beforeEach(() => {
@@ -53,5 +53,11 @@ describe("AITUNNEL provider selection", () => {
     );
     expect(mocks.openaiChatModel).toHaveBeenCalledWith("kimi-k3");
     expect(mocks.createGemini).not.toHaveBeenCalled();
+  });
+
+  it("attributes AITUNNEL spend to an opaque application user id", () => {
+    expect(aiRequestProviderOptions("user-42")).toEqual({
+      openai: { user: "user-42" },
+    });
   });
 });

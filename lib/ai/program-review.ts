@@ -1,6 +1,11 @@
 import { generateText } from "ai";
 
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import {
+  aiClient,
+  aiRequestProviderOptions,
+  COACH_MODEL,
+  isAiConfigured,
+} from "@/lib/ai/deepseek";
 import { extractJson } from "@/lib/ai/trainer-parse";
 import {
   buildProgramReviewPrompt,
@@ -23,10 +28,12 @@ const TIMEOUT_MS = 45_000;
  *  сбое — оборачивайте в try/catch на стороне экшена (R-32/33). */
 export async function reviewProgram(
   input: ProgramReviewInput,
+  userId: string,
 ): Promise<ProgramReviewResult> {
   const raw = await withCircuitBreaker(BREAKER, async () => {
     const result = await generateText({
       model: aiClient(COACH_MODEL),
+      providerOptions: aiRequestProviderOptions(userId),
       system: PROGRAM_REVIEW_SYSTEM_INSTRUCTION,
       prompt: buildProgramReviewPrompt(input),
       temperature: 0.4,

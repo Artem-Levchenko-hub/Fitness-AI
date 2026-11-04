@@ -23,6 +23,7 @@ vi.mock("@/lib/ai/context-builder", () => ({
 vi.mock("@/lib/ai/coach-tools", () => ({ createCoachTools: vi.fn(() => ({})) }));
 vi.mock("@/lib/ai/deepseek", () => ({
   aiClient: vi.fn(() => "model"),
+  aiRequestProviderOptions: vi.fn(() => ({ openai: { user: "user-1" } })),
   COACH_MODEL: "test",
   isAiConfigured: vi.fn(() => true),
 }));
@@ -122,6 +123,7 @@ describe("POST /api/ai/coach", () => {
     const config = mocks.streamText.mock.calls[0]?.[0];
     const result = mocks.streamText.mock.results[0]?.value;
     expect(config.messages).toEqual([{ role: "user", content: "Вопрос" }]);
+    expect(config.providerOptions).toEqual({ openai: { user: "user-1" } });
     expect(result.consumeStream).toHaveBeenCalledTimes(1);
 
     await config.onFinish({ text: "Сохранённый ответ" });
@@ -163,6 +165,21 @@ describe("POST /api/ai/coach", () => {
       );
     },
   );
+
+  it("does not charge the prepaid wallet for an admin postpaid request", async () => {
+    mocks.billingEnabled = true;
+    mocks.claimAiCapacity.mockResolvedValue({
+      kind: "allowed",
+      usageId: "usage-admin",
+      countsTowardQuota: false,
+      postpaid: true,
+    });
+
+    const response = await POST(validRequest());
+
+    expect(response.status).toBe(200);
+    expect(mocks.claimCoachBillingOperation).not.toHaveBeenCalled();
+  });
 });
 
 function validRequest() {

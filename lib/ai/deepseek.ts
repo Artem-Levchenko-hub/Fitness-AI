@@ -70,6 +70,13 @@ export function aiClient(modelId: string): LanguageModel {
   );
 }
 
+/** AITUNNEL aggregates exact provider spend by this opaque application user id.
+ * Never pass email, phone or another personal identifier here. */
+export function aiRequestProviderOptions(userId: string) {
+  if (resolveProvider() !== "aitunnel") return undefined;
+  return { openai: { user: userId } };
+}
+
 export const COACH_MODEL: string = (() => {
   const provider = resolveProvider();
   if (provider === "gemini") return env.GEMINI_MODEL;

@@ -235,12 +235,15 @@ export async function refineTemplateAction(
   }
 
   try {
-    const refined = await refineTemplate({
-      name: source.name,
-      comment: parsed.data.comment,
-      current: source.current,
-      catalog,
-    });
+    const refined = await refineTemplate(
+      {
+        name: source.name,
+        comment: parsed.data.comment,
+        current: source.current,
+        catalog,
+      },
+      user.id,
+    );
 
     const items: RefineProposalItem[] = [];
     for (const it of refined.items) {

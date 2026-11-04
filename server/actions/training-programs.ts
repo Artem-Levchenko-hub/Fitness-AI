@@ -69,7 +69,7 @@ export async function reviewProgramAction(
   }
 
   try {
-    const review = await reviewProgram(input);
+    const review = await reviewProgram(input, user.id);
     await saveProgramReview(user.id, programId, review);
     await settleAiCapacity(capacity.usageId, true);
     revalidatePath(`/programs/${programId}`);

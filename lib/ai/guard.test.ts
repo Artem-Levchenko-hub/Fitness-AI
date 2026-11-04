@@ -61,7 +61,7 @@ vi.mock("@/db/client", () => ({
   },
 }));
 vi.mock("@/db/schema", () => ({
-  users: { id: "users.id" },
+  users: { id: "users.id", isAdmin: "users.isAdmin" },
   aiUsageLedger: {
     id: "ledger.id",
     userId: "ledger.userId",
@@ -328,6 +328,33 @@ describe("claimAiCapacity", () => {
       usageId: "wallet-usage",
       countsTowardQuota: false,
     });
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ countsTowardQuota: false }),
+    );
+  });
+
+  it("allows an admin to use postpaid AI without a subscription", async () => {
+    mocks.selectResults.push(
+      [{ id: "admin-1", isAdmin: true }],
+      [],
+      [{ total: 0 }],
+    );
+    mocks.insertReturning = [{ id: "admin-usage" }];
+
+    const result = await claimAiCapacity({
+      userId: "admin-1",
+      operation: "post_workout_analysis",
+      requestKey: "admin:analysis:1",
+      now,
+    });
+
+    expect(result).toEqual({
+      kind: "allowed",
+      usageId: "admin-usage",
+      countsTowardQuota: false,
+      postpaid: true,
+    });
+    expect(tx.select).toHaveBeenCalledTimes(3);
     expect(mocks.insertValues).toHaveBeenCalledWith(
       expect.objectContaining({ countsTowardQuota: false }),
     );
