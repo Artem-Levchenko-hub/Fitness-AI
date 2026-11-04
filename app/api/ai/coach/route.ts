@@ -5,7 +5,12 @@ import { z } from "zod";
 
 import { buildTrainerContext } from "@/lib/ai/context-builder";
 import { createCoachTools } from "@/lib/ai/coach-tools";
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import {
+  aiClient,
+  aiRequestProviderOptions,
+  COACH_MODEL,
+  isAiConfigured,
+} from "@/lib/ai/deepseek";
 import { COACH_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
   capacityDuplicateResponse,
@@ -101,14 +106,15 @@ export async function POST(request: Request) {
   // При включённом биллинге durable billing-operation безопасно возвращает
   // cached/in-progress и не допускает двойное списание/генерацию. Без него
   // дубликат нельзя пропускать к LLM.
-  if (capacity.kind === "duplicate" && !isBillingEnabled()) {
+  const billingEnabled = isBillingEnabled();
+  if (capacity.kind === "duplicate" && (!billingEnabled || capacity.postpaid)) {
     return capacityDuplicateResponse(capacity);
   }
   const usageId = capacity.kind === "allowed" ? capacity.usageId : null;
 
   let claim: Extract<ClaimAiBillingOperation, { kind: "claimed" }> | undefined;
   let cachedResponseText: string | null = null;
-  if (isBillingEnabled()) {
+  if (billingEnabled && !capacity.postpaid) {
     const coveredBySubscription = capacity.countsTowardQuota;
     const priceKopecks = coveredBySubscription ? 0 : aiCoachPriceKopecks();
     const result = await claimCoachBillingOperation({
@@ -214,7 +220,10 @@ export async function POST(request: Request) {
 
   let canonContext: string;
   try {
-    const chunks = await retrieveRelevant(ragQuery, { topK: 6 });
+    const chunks = await retrieveRelevant(ragQuery, {
+      topK: 6,
+      userId: user.id,
+    });
     canonContext = formatRetrievedChunks(chunks);
   } catch (error) {
     console.error("[coach] RAG retrieve failed:", error);
@@ -225,6 +234,7 @@ export async function POST(request: Request) {
   try {
     const result = streamText({
       model: aiClient(COACH_MODEL),
+      providerOptions: aiRequestProviderOptions(user.id),
       system: `${COACH_SYSTEM_PROMPT}\n\n## Оркестрация и действия\n\nТы подключён к реальным данным приложения. Когда нужен ID шаблона, упражнения или активной тренировки — сначала используй соответствующий инструмент чтения. Изменяй шаблон, записывай подход, доп. активность или заметку только после явной просьбы атлета сделать это; совет сам по себе не является фактом и не должен записываться. После успешного действия кратко подтверди, что именно сохранено, с цифрами. Не выдумывай выполненные подходы, веса, повторы, сон или питание. Для Myo-reps сохраняй протокол как Myo-reps, а в анализе учитывай его как сопоставимый тренировочный объём, не смешивая активацию и мини-сеты в обычные подходы один к одному.\n\n---\n\n## Контекст из канона (загруженная литература)\n\n${canonContext}\n\n---\n\n## Контекст атлета\n\n${athleteContext}`,
       messages,
       tools: createCoachTools(user.id, parsed.workoutId),

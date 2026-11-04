@@ -23,12 +23,18 @@ export const AI_OPERATIONS = [
 export type AiOperation = (typeof AI_OPERATIONS)[number];
 
 type CapacityResult =
-  | { kind: "allowed"; usageId: string; countsTowardQuota: boolean }
+  | {
+      kind: "allowed";
+      usageId: string;
+      countsTowardQuota: boolean;
+      postpaid?: true;
+    }
   | {
       kind: "duplicate";
       usageId: string;
       status: "processing" | "succeeded";
       countsTowardQuota: boolean;
+      postpaid?: true;
     }
   | { kind: "rate_limited"; retryAfterSeconds: number }
   | { kind: "quota_exceeded"; message: string }
@@ -85,12 +91,13 @@ export async function claimAiCapacity(input: {
 
   return db.transaction(async (tx) => {
     const [user] = await tx
-      .select({ id: schema.users.id })
+      .select({ id: schema.users.id, isAdmin: schema.users.isAdmin })
       .from(schema.users)
       .where(eq(schema.users.id, input.userId))
       .for("update")
       .limit(1);
     if (!user) throw new Error("AI capacity user not found");
+    const postpaidAccess = user.isAdmin ? { postpaid: true as const } : {};
 
     const [existing] = await tx
       .select({
@@ -119,6 +126,7 @@ export async function claimAiCapacity(input: {
           usageId: existing.id,
           status: existing.status,
           countsTowardQuota: existing.countsTowardQuota,
+          ...postpaidAccess,
         };
       }
       // Одна mutable reservation не должна превращаться в обход burst-limit:
@@ -142,24 +150,29 @@ export async function claimAiCapacity(input: {
       return { kind: "rate_limited" as const, retryAfterSeconds: 60 };
     }
 
-    const [subscription] = await tx
-      .select({
-        planCode: schema.subscriptions.planCode,
-        tier: schema.subscriptions.tier,
-        status: schema.subscriptions.status,
-        currentPeriodStart: schema.subscriptions.currentPeriodStart,
-        currentPeriodEnd: schema.subscriptions.currentPeriodEnd,
-      })
-      .from(schema.subscriptions)
-      .where(eq(schema.subscriptions.userId, input.userId))
-      .limit(1);
-    const hasPro = subscription
-      ? hasActiveProAccess(subscription, now)
-      : false;
-    if (!hasPro && !input.allowWallet) return { kind: "subscription_required" as const };
+    let hasPro = false;
+    let planCode: string | null = null;
+    if (!user.isAdmin) {
+      const [subscription] = await tx
+        .select({
+          planCode: schema.subscriptions.planCode,
+          tier: schema.subscriptions.tier,
+          status: schema.subscriptions.status,
+          currentPeriodStart: schema.subscriptions.currentPeriodStart,
+          currentPeriodEnd: schema.subscriptions.currentPeriodEnd,
+        })
+        .from(schema.subscriptions)
+        .where(eq(schema.subscriptions.userId, input.userId))
+        .limit(1);
+      hasPro = subscription ? hasActiveProAccess(subscription, now) : false;
+      planCode = subscription?.planCode ?? null;
+      if (!hasPro && !input.allowWallet) {
+        return { kind: "subscription_required" as const };
+      }
+    }
 
     if (hasPro) {
-      const plan = getBillingPlan(subscription?.planCode ?? "pro_monthly");
+      const plan = getBillingPlan(planCode ?? "pro_monthly");
       const [exchange] = await tx
         .select({ id: schema.aiQuotaExchanges.id })
         .from(schema.aiQuotaExchanges)
@@ -222,12 +235,14 @@ export async function claimAiCapacity(input: {
           usageId: existing.id,
           status: "processing" as const,
           countsTowardQuota: existing.countsTowardQuota,
+          ...postpaidAccess,
         };
       }
       return {
         kind: "allowed" as const,
         usageId: reopened.id,
         countsTowardQuota: hasPro,
+        ...postpaidAccess,
       };
     }
 
@@ -248,6 +263,7 @@ export async function claimAiCapacity(input: {
       kind: "allowed" as const,
       usageId: created.id,
       countsTowardQuota: hasPro,
+      ...postpaidAccess,
     };
   });
 }

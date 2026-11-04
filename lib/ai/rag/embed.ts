@@ -1,6 +1,9 @@
 import { embed, embedMany } from "ai";
 
-import { aiEmbeddingModel } from "@/lib/ai/deepseek";
+import {
+  aiEmbeddingModel,
+  aiRequestProviderOptions,
+} from "@/lib/ai/deepseek";
 
 const BATCH_SIZE = 64;
 
@@ -21,10 +24,14 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 }
 
 /** Эмбеддит одну строку (для retrieve query). */
-export async function embedQuery(text: string): Promise<number[]> {
+export async function embedQuery(
+  text: string,
+  userId?: string,
+): Promise<number[]> {
   const { embedding } = await embed({
     model: aiEmbeddingModel(),
     value: text,
+    providerOptions: userId ? aiRequestProviderOptions(userId) : undefined,
   });
   return embedding;
 }

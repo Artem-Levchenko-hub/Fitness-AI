@@ -76,6 +76,7 @@ export async function generateWeeklyReview(
     "weekly-llm",
     () =>
       generateTrainerResponse({
+        userId,
         systemInstruction: WEEKLY_SYSTEM_PROMPT,
         userPrompt,
         signal: AbortSignal.timeout(WEEKLY_TIMEOUT_MS),

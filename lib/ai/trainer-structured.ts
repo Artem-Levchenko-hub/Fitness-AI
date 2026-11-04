@@ -1,6 +1,11 @@
 import { generateText } from "ai";
 
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import {
+  aiClient,
+  aiRequestProviderOptions,
+  COACH_MODEL,
+  isAiConfigured,
+} from "@/lib/ai/deepseek";
 import {
   parseTrainerJson,
   type TrainerResponse,
@@ -19,7 +24,7 @@ export type {
   TrainerResponse,
 } from "@/lib/ai/trainer-parse";
 
-/** Модель тренера = основная LLM (Qwen 3.7 Plus через AITUNNEL по умолчанию).
+/** Модель тренера = основная LLM (Kimi K3 через AITUNNEL по умолчанию).
  *  Раньше тренер ходил в Gemini structured output (responseSchema); теперь
  *  единый openai-совместимый провайдер + JSON-инструкция + Zod-валидация. */
 export const TRAINER_MODEL: string = COACH_MODEL;
@@ -46,6 +51,7 @@ export const JSON_SHAPE_INSTRUCTION = `Верни ТОЛЬКО валидный 
 Никакого текста до или после JSON.`;
 
 export type GenerateOptions = {
+  userId: string;
   systemInstruction: string;
   userPrompt: string;
   signal?: AbortSignal;
@@ -66,6 +72,7 @@ export async function generateTrainerResponse(
 ): Promise<GenerateResult> {
   const result = await generateText({
     model: aiClient(COACH_MODEL),
+    providerOptions: aiRequestProviderOptions(opts.userId),
     system: `${opts.systemInstruction}\n\n${JSON_SHAPE_INSTRUCTION}`,
     prompt: opts.userPrompt,
     temperature: 0.4,
@@ -89,7 +96,7 @@ export async function generateTrainerResponse(
 }
 
 /** Trainer-специфичная проверка: тренер теперь на том же openai-совместимом
- *  провайдере, что и коуч (Qwen через AITUNNEL по умолчанию). */
+ *  провайдере, что и коуч (Kimi K3 через AITUNNEL по умолчанию). */
 export function isStructuredTrainerConfigured(): boolean {
   return isAiConfigured();
 }

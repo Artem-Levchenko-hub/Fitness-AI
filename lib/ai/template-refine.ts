@@ -1,6 +1,11 @@
 import { generateText } from "ai";
 
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import {
+  aiClient,
+  aiRequestProviderOptions,
+  COACH_MODEL,
+  isAiConfigured,
+} from "@/lib/ai/deepseek";
 import { extractJson } from "@/lib/ai/trainer-parse";
 import {
   buildRefinePrompt,
@@ -31,12 +36,14 @@ export class EmptyRefineError extends Error {
  *  при пустом результате/сбое — оборачивайте в try/catch (R-32/33). */
 export async function refineTemplate(
   input: RefineTemplateInput,
+  userId: string,
 ): Promise<RefineTemplateResult> {
   const validSlugs = new Set(input.catalog.map((c) => c.slug));
 
   const raw = await withCircuitBreaker(BREAKER, async () => {
     const result = await generateText({
       model: aiClient(COACH_MODEL),
+      providerOptions: aiRequestProviderOptions(userId),
       system: TEMPLATE_REFINE_SYSTEM_INSTRUCTION,
       prompt: buildRefinePrompt(input),
       temperature: 0.4,

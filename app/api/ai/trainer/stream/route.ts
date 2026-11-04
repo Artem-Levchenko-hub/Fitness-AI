@@ -14,7 +14,12 @@ import {
   requireOwnedWorkout,
   settleAiCapacity,
 } from "@/lib/ai/guard";
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import {
+  aiClient,
+  aiRequestProviderOptions,
+  COACH_MODEL,
+  isAiConfigured,
+} from "@/lib/ai/deepseek";
 import { TRAINER_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
   formatRetrievedChunks,
@@ -88,6 +93,7 @@ export async function POST(request: Request) {
     try {
       const chunks = await retrieveRelevant(context.prompt.slice(0, 1200), {
         topK: 4,
+        userId: user.id,
       });
       canonContext = formatRetrievedChunks(chunks);
     } catch (e) {
@@ -106,6 +112,7 @@ ${context.prompt}`;
 
     result = streamText({
       model: aiClient(COACH_MODEL),
+      providerOptions: aiRequestProviderOptions(user.id),
       system: `${TRAINER_SYSTEM_PROMPT}\n\n${JSON_SHAPE_INSTRUCTION}`,
       prompt: userPrompt,
       temperature: 0.4,

@@ -1,6 +1,11 @@
 import { generateText } from "ai";
 
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import {
+  aiClient,
+  aiRequestProviderOptions,
+  COACH_MODEL,
+  isAiConfigured,
+} from "@/lib/ai/deepseek";
 import { extractJson } from "@/lib/ai/trainer-parse";
 import {
   aiPlanRawSchema,
@@ -32,6 +37,7 @@ export class EmptyPlanError extends Error {
  *  выкидываются санитайзером). Кидает при пустом результате/сбое — оборачивайте
  *  в try/catch на стороне экшена (R-32/33: timeout + circuit breaker). */
 export async function composeAiPlan(args: {
+  userId: string;
   intake: PlanIntake;
   catalog: PlanCatalogEntry[];
 }): Promise<AiPlan> {
@@ -41,6 +47,7 @@ export async function composeAiPlan(args: {
   const raw = await withCircuitBreaker(BREAKER, async () => {
     const result = await generateText({
       model: aiClient(COACH_MODEL),
+      providerOptions: aiRequestProviderOptions(args.userId),
       system: PLAN_SYSTEM_INSTRUCTION,
       prompt: buildPlanComposerPrompt(intake, catalog),
       temperature: 0.5,

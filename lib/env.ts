@@ -16,8 +16,10 @@ export const env = createEnv({
     /** RFC 5322 формат: "Display Name <email@host>" или просто "email@host". */
     EMAIL_FROM: z.string().min(3),
 
-    /** Основной провайдер тренера — OpenAI-совместимый gateway (Qwen/AITUNNEL). */
-    AI_PROVIDER: z.enum(["gemini", "openai"]).default("openai"),
+    /** Основной провайдер тренера — AITUNNEL с моделью Kimi K3. */
+    AI_PROVIDER: z
+      .enum(["aitunnel", "gemini", "openai"])
+      .default("aitunnel"),
 
     /** OpenAI-совместимый AI gateway (AITUNNEL / OpenRouter / любой другой). */
     AI_API_KEY: z.string().min(1).optional(),
@@ -25,7 +27,7 @@ export const env = createEnv({
       .string()
       .url()
       .default("https://api.aitunnel.ru/v1"),
-    AI_MODEL: z.string().min(1).default("qwen3.7-plus"),
+    AI_MODEL: z.string().min(1).default("kimi-k3"),
     /** Embedding-модель для RAG (OpenAI-совместимый gateway).
      *  text-embedding-3-small = 1536 dim (совпадает с knowledge schema). */
     AI_EMBED_MODEL: z

@@ -18,6 +18,7 @@ type RetrieveOpts = {
   topK?: number;
   minSimilarity?: number;
   domains?: KnowledgeDomain[];
+  userId?: string;
 };
 
 /** Cosine-поиск релевантных chunks. Возвращает отсортированные по
@@ -30,7 +31,7 @@ export async function retrieveRelevant(
   const topK = opts.topK ?? 6;
   const minSimilarity = opts.minSimilarity ?? 0.35;
 
-  const queryVec = await embedQuery(query);
+  const queryVec = await embedQuery(query, opts.userId);
 
   const similarity = sql<number>`1 - (${cosineDistance(knowledgeChunks.embedding, queryVec)})`;
 

@@ -89,7 +89,11 @@ export async function composeAiPlanAction(
 
   let programId: string;
   try {
-    const plan = await composeAiPlan({ intake: parsed.data, catalog });
+    const plan = await composeAiPlan({
+      userId: user.id,
+      intake: parsed.data,
+      catalog,
+    });
     const created = await createAiProgramForUser(user.id, plan);
     programId = created.id;
     await settleAiCapacity(capacity.usageId, true);

@@ -5,20 +5,23 @@ import type { LanguageModel } from "ai";
 import { env } from "@/lib/env";
 
 /**
- * Текущий приоритет:
- *  1. Gemini, если задан GEMINI_API_KEY  — бесплатные токены + 1M контекст.
- *  2. OpenAI-совместимый gateway (AITUNNEL / OpenRouter / ProxyAPI и т.п.).
+ * Поддерживаемые провайдеры:
+ *  1. AITUNNEL — основной production-провайдер для Kimi K3.
+ *  2. Gemini.
+ *  3. Любой другой OpenAI-совместимый gateway.
  *
- *  Provider можно зафиксировать через env AI_PROVIDER=gemini|openai
- *  (см. lib/env.ts). По умолчанию выбран openai-совместимый gateway.
+ * Provider фиксируется через env AI_PROVIDER=aitunnel|gemini|openai
+ * (см. lib/env.ts). По умолчанию выбран AITUNNEL.
  */
 
-type Provider = "gemini" | "openai";
+type Provider = "aitunnel" | "gemini" | "openai";
 
 function resolveProvider(): Provider | null {
   const forced = env.AI_PROVIDER;
   if (forced === "gemini") return env.GEMINI_API_KEY ? "gemini" : null;
-  if (forced === "openai") return env.AI_API_KEY ? "openai" : null;
+  if (forced === "aitunnel" || forced === "openai") {
+    return env.AI_API_KEY ? forced : null;
+  }
   if (env.GEMINI_API_KEY) return "gemini";
   if (env.AI_API_KEY) return "openai";
   return null;
@@ -59,16 +62,25 @@ export function aiClient(modelId: string): LanguageModel {
   if (provider === "gemini") return geminiClient()(modelId);
   // .chat() форсит /v1/chat/completions. Это поддерживается AITUNNEL и
   // сохраняет совместимость с gateway, которые не реализуют /responses.
-  if (provider === "openai") return openaiClient().chat(modelId);
+  if (provider === "aitunnel" || provider === "openai") {
+    return openaiClient().chat(modelId);
+  }
   throw new Error(
     "AI provider not configured. Set GEMINI_API_KEY or AI_API_KEY.",
   );
 }
 
+/** AITUNNEL aggregates exact provider spend by this opaque application user id.
+ * Never pass email, phone or another personal identifier here. */
+export function aiRequestProviderOptions(userId: string) {
+  if (resolveProvider() !== "aitunnel") return undefined;
+  return { openai: { user: userId } };
+}
+
 export const COACH_MODEL: string = (() => {
   const provider = resolveProvider();
   if (provider === "gemini") return env.GEMINI_MODEL;
-  if (provider === "openai") return env.AI_MODEL;
+  if (provider === "aitunnel" || provider === "openai") return env.AI_MODEL;
   return env.GEMINI_MODEL;
 })();
 
@@ -84,7 +96,7 @@ export const EMBED_DIM = 1536;
  *  Gemini-эмбеддинги (768 dim) не совпадают со схемой (1536). */
 export function aiEmbeddingModel() {
   const provider = resolveProvider();
-  if (provider === "openai") {
+  if (provider === "aitunnel" || provider === "openai") {
     return openaiClient().textEmbeddingModel(env.AI_EMBED_MODEL);
   }
   throw new Error(

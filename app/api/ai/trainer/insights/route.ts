@@ -55,6 +55,7 @@ export async function GET(request: Request) {
       topK: INSIGHT_TOP_K,
       minSimilarity: INSIGHT_MIN_SIMILARITY,
       domains: ["training"],
+      userId: user.id,
     });
   } catch (e) {
     console.error("[trainer-insights] RAG retrieve failed:", e);

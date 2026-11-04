@@ -191,7 +191,10 @@ async function processJob(
   let canonContext = "";
   try {
     const { retrieveRelevant, formatRetrievedChunks } = await import("@/lib/ai/rag/retrieve");
-    const chunks = await retrieveRelevant(context.prompt.slice(0, 1200), { topK: 4 });
+    const chunks = await retrieveRelevant(context.prompt.slice(0, 1200), {
+      topK: 4,
+      userId: job.userId,
+    });
     canonContext = formatRetrievedChunks(chunks);
   } catch (e) {
     console.error("[trainer-worker] RAG retrieve failed:", e);
@@ -211,6 +214,7 @@ ${context.prompt}`;
       "trainer-llm",
       () =>
         generateTrainerResponse({
+          userId: job.userId,
           systemInstruction: systemPrompt,
           userPrompt: userPromptWithCanon,
           signal: AbortSignal.timeout(45_000),

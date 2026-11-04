@@ -9,7 +9,12 @@ import { and, eq } from "drizzle-orm";
 
 import { requireUser } from "@/lib/auth/require-user";
 import { buildTrainerContext } from "@/lib/ai/context-builder";
-import { aiClient, COACH_MODEL, isAiConfigured } from "@/lib/ai/deepseek";
+import {
+  aiClient,
+  aiRequestProviderOptions,
+  COACH_MODEL,
+  isAiConfigured,
+} from "@/lib/ai/deepseek";
 import { FINALIZE_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
   capacityDuplicateResponse,
@@ -104,6 +109,7 @@ export async function POST(request: Request) {
 
     const generated = await generateText({
       model: aiClient(COACH_MODEL),
+      providerOptions: aiRequestProviderOptions(user.id),
       system: `${FINALIZE_SYSTEM_PROMPT}\n\n---\n\n## Контекст\n\n${context}`,
       prompt: `## Транскрипт разговора\n\n${transcript}\n\nСделай итог.`,
       abortSignal: AbortSignal.timeout(45_000),
