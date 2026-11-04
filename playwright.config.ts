@@ -42,6 +42,7 @@ export default defineConfig({
         env: {
           ...process.env,
           SKIP_ENV_VALIDATION: "1",
+          NEXT_PUBLIC_APP_URL: baseURL,
           AUTH_SECRET:
             process.env.AUTH_SECRET ??
             "local-public-e2e-secret-is-not-used-outside-this-test-run",
