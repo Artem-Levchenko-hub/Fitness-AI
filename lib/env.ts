@@ -16,7 +16,7 @@ export const env = createEnv({
     /** RFC 5322 формат: "Display Name <email@host>" или просто "email@host". */
     EMAIL_FROM: z.string().min(3),
 
-    /** Основной провайдер тренера — AITUNNEL с моделью Kimi K3. */
+    /** Основной провайдер тренера — AITUNNEL. */
     AI_PROVIDER: z
       .enum(["aitunnel", "gemini", "openai"])
       .default("aitunnel"),
@@ -27,7 +27,9 @@ export const env = createEnv({
       .string()
       .url()
       .default("https://api.aitunnel.ru/v1"),
-    AI_MODEL: z.string().min(1).default("kimi-k3"),
+    AI_MODEL: z.string().min(1).default("deepseek-v4-pro-0813"),
+    /** Включает разбор видео через отдельную модель AITUNNEL. */
+    AI_VIDEO_MODEL: z.string().min(1).optional(),
     /** Embedding-модель для RAG (OpenAI-совместимый gateway).
      *  text-embedding-3-small = 1536 dim (совпадает с knowledge schema). */
     AI_EMBED_MODEL: z

@@ -24,7 +24,7 @@ export type {
   TrainerResponse,
 } from "@/lib/ai/trainer-parse";
 
-/** Модель тренера = основная LLM (Kimi K3 через AITUNNEL по умолчанию).
+/** Модель тренера = основная LLM (DeepSeek V4 Pro через AITUNNEL по умолчанию).
  *  Раньше тренер ходил в Gemini structured output (responseSchema); теперь
  *  единый openai-совместимый провайдер + JSON-инструкция + Zod-валидация. */
 export const TRAINER_MODEL: string = COACH_MODEL;
@@ -96,7 +96,7 @@ export async function generateTrainerResponse(
 }
 
 /** Trainer-специфичная проверка: тренер теперь на том же openai-совместимом
- *  провайдере, что и коуч (Kimi K3 через AITUNNEL по умолчанию). */
+ *  провайдере, что и коуч. */
 export function isStructuredTrainerConfigured(): boolean {
   return isAiConfigured();
 }

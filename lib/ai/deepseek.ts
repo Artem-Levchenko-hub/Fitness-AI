@@ -6,7 +6,7 @@ import { env } from "@/lib/env";
 
 /**
  * Поддерживаемые провайдеры:
- *  1. AITUNNEL — основной production-провайдер для Kimi K3.
+ *  1. AITUNNEL — основной production-провайдер.
  *  2. Gemini.
  *  3. Любой другой OpenAI-совместимый gateway.
  *

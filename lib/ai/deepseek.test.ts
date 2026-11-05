@@ -20,7 +20,7 @@ vi.mock("@/lib/env", () => ({
     AI_PROVIDER: "aitunnel",
     AI_API_KEY: "test-aitunnel-key",
     AI_BASE_URL: "https://api.aitunnel.ru/v1",
-    AI_MODEL: "kimi-k3",
+    AI_MODEL: "configured-chat-model",
     AI_EMBED_MODEL: "text-embedding-3-small",
     GEMINI_API_KEY: "must-not-win",
     GEMINI_MODEL: "gemini-fallback",
@@ -40,8 +40,8 @@ describe("AITUNNEL provider selection", () => {
     mocks.openaiChatModel.mockReturnValue({ provider: "aitunnel" });
   });
 
-  it("routes explicit AITUNNEL configuration to Kimi K3 even when Gemini is configured", () => {
-    expect(COACH_MODEL).toBe("kimi-k3");
+  it("uses the configured AITUNNEL chat model even when Gemini is configured", () => {
+    expect(COACH_MODEL).toBe("configured-chat-model");
 
     aiClient(COACH_MODEL);
 
@@ -51,7 +51,7 @@ describe("AITUNNEL provider selection", () => {
         baseURL: "https://api.aitunnel.ru/v1",
       }),
     );
-    expect(mocks.openaiChatModel).toHaveBeenCalledWith("kimi-k3");
+    expect(mocks.openaiChatModel).toHaveBeenCalledWith("configured-chat-model");
     expect(mocks.createGemini).not.toHaveBeenCalled();
   });
 

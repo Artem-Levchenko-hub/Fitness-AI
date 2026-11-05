@@ -5,12 +5,16 @@ import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { isAiConfigured } from "@/lib/ai/deepseek";
+import { videoTechniqueConfig } from "@/lib/ai/video-technique";
 import { requireUser } from "@/lib/auth/require-user";
 import { totalVolume } from "@/lib/domain";
+import { isUserAdmin } from "@/lib/repos/admin.repo";
 import { listCoachMessages } from "@/lib/repos/coach-conversations.repo";
+import { hasActiveProSubscription } from "@/lib/repos/subscriptions.repo";
 import { getActiveWorkoutForUser } from "@/lib/repos/workouts.repo";
 
 import { CoachChat } from "./coach-chat";
+import { VideoTechniquePanel } from "./video-technique-panel";
 
 export const metadata: Metadata = { title: "AI-коуч" };
 
@@ -53,6 +57,8 @@ export default async function CoachPage({ params }: Props) {
   const initialMessages = aiOn
     ? await listCoachMessages(user.id, workout.id)
     : [];
+  const videoEnabled = workout.status === "completed" && workout.exercises.length > 0 && !!videoTechniqueConfig();
+  const canAnalyzeVideo = videoEnabled && (await isUserAdmin(user.id) || await hasActiveProSubscription(user.id));
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
@@ -124,6 +130,19 @@ export default async function CoachPage({ params }: Props) {
         Коуч сохранит итог разговора в заметки тренировки. Дальше анализ будет
         учитывать эту запись как «вторую память».
       </p>
+      {canAnalyzeVideo && (
+        <VideoTechniquePanel
+          workoutId={workout.id}
+          exercises={workout.exercises.map(({ id, exerciseNameRu }) => ({ id, name: exerciseNameRu }))}
+        />
+      )}
+      {videoEnabled && !canAnalyzeVideo && (
+        <section className="bg-card border-border mt-6 space-y-3 rounded-2xl border p-5">
+          <h2 className="font-serif text-2xl font-normal tracking-tight">Разбор техники по видео</h2>
+          <p className="text-muted-foreground text-sm">Доступен с подпиской Pro.</p>
+          <Button asChild variant="outline" size="sm"><Link href="/billing">Тарифы</Link></Button>
+        </section>
+      )}
     </main>
   );
 }
