@@ -1,36 +1,18 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { db } from "@/db/client";
-import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
-import { env } from "@/lib/env";
 import {
   cancelCircuit,
   cloneCircuit,
   deleteCircuit,
-  finishCircuit,
-  getCircuitForUser,
   logCircuitRound,
   startCircuit,
 } from "@/lib/repos/circuits.repo";
-
-/** Триггер AI-воркера сразу после finish — fire-and-forget. */
-function triggerWorker(): void {
-  if (!env.CRON_SECRET) return;
-  try {
-    void fetch(`${env.NEXT_PUBLIC_APP_URL}/api/cron/process-ai-jobs`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
-    });
-  } catch {
-    /* пусто */
-  }
-}
+import { finishCircuitWorkout } from "@/server/finish-circuit-workout";
 
 const exerciseInputSchema = z.object({
   exerciseId: z.string().uuid(),
@@ -197,33 +179,9 @@ export async function finishCircuitAction(formData: FormData) {
   });
   if (!parsed.success) throw new Error("Bad circuitId");
 
-  const beforeFinish = await getCircuitForUser(user.id, parsed.data.circuitId);
-  if (!beforeFinish || beforeFinish.workout.status !== "active") {
+  const result = await finishCircuitWorkout(user.id, parsed.data.circuitId, parsed.data.notes);
+  if (result !== "changed") {
     throw new Error("Активная круговая тренировка не найдена");
-  }
-
-  await finishCircuit(user.id, parsed.data.circuitId, parsed.data.notes);
-
-  // AI job (kind=circuit_post_workout). Без дубликата (если уже есть).
-  const [existing] = await db
-    .select({ id: schema.aiJobs.id })
-    .from(schema.aiJobs)
-    .where(
-      and(
-        eq(schema.aiJobs.circuitWorkoutId, parsed.data.circuitId),
-        eq(schema.aiJobs.kind, "circuit_post_workout"),
-      ),
-    )
-    .limit(1);
-
-  if (!existing) {
-    await db.insert(schema.aiJobs).values({
-      userId: user.id,
-      circuitWorkoutId: parsed.data.circuitId,
-      kind: "circuit_post_workout",
-      status: "pending",
-    });
-    triggerWorker();
   }
 
   revalidatePath(`/circuits/${parsed.data.circuitId}`);

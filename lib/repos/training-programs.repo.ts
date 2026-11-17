@@ -194,17 +194,48 @@ export async function createAiProgramForUser(
   });
 }
 
+export class ProgramTemplateNotFound extends Error {}
+export class ProgramCreationConflict extends Error {}
+
 /** Обернуть свои шаблоны в тренировочную систему: создаёт программу и привязывает
  *  выбранные шаблоны как дни (в переданном порядке). Все шаблоны должны
  *  принадлежать пользователю (R-7) — иначе ошибка. */
 export async function wrapTemplatesIntoProgram(
   userId: string,
   input: { name: string; description?: string | null; templateIds: string[] },
+  options?: { id: string },
 ): Promise<{ id: string }> {
   if (input.templateIds.length === 0) {
     throw new Error("Нужен хотя бы один шаблон для системы");
   }
   return db.transaction(async (tx) => {
+    const programId = options?.id ?? crypto.randomUUID();
+    const [inserted] = await tx
+      .insert(schema.trainingPrograms)
+      .values({
+        id: programId,
+        userId,
+        name: input.name,
+        description: input.description ?? null,
+        // Existing standalone days remain visible after wrapping them.
+        activatedAt: new Date(),
+      })
+      .onConflictDoNothing({ target: schema.trainingPrograms.id })
+      .returning({ id: schema.trainingPrograms.id });
+
+    if (!inserted) {
+      const [existing] = await tx
+        .select({ id: schema.trainingPrograms.id })
+        .from(schema.trainingPrograms)
+        .where(and(
+          eq(schema.trainingPrograms.id, programId),
+          eq(schema.trainingPrograms.userId, userId),
+        ))
+        .limit(1);
+      if (!options || !existing) throw new ProgramCreationConflict("Program ID already used");
+      return existing;
+    }
+
     const owned = await tx
       .select({ id: schema.workoutTemplates.id })
       .from(schema.workoutTemplates)
@@ -215,19 +246,8 @@ export async function wrapTemplatesIntoProgram(
         ),
       );
     if (owned.length !== input.templateIds.length) {
-      throw new Error("Some templates not found or not yours");
+      throw new ProgramTemplateNotFound("Some templates not found or not yours");
     }
-
-    const programId = crypto.randomUUID();
-    await tx.insert(schema.trainingPrograms).values({
-      id: programId,
-      userId,
-      name: input.name,
-      description: input.description ?? null,
-      // Обёртка своих шаблонов — система активна сразу: эти шаблоны уже были в
-      // «Шаблонах», обёртка не должна их прятать.
-      activatedAt: new Date(),
-    });
 
     // Порядок дней = порядок templateIds (источник истины — выбор пользователя).
     for (const [dayOrder, templateId] of input.templateIds.entries()) {

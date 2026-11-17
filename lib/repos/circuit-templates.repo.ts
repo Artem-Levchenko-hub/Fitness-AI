@@ -14,6 +14,7 @@ import {
 } from "@/lib/domain";
 import { pickSubstitute } from "@/lib/domain/programs/adapt";
 import { startCircuit } from "@/lib/repos/circuits.repo";
+import { FormatWriteError, type FormatStartOptions } from "./training-format-write";
 
 export type CircuitTemplateListItem = {
   id: string;
@@ -71,6 +72,7 @@ export async function listCircuitTemplates(
 export async function startCircuitFromTemplate(
   userId: string,
   templateId: string,
+  options?: FormatStartOptions,
 ): Promise<{ id: string }> {
   const [tpl] = await db
     .select()
@@ -79,10 +81,11 @@ export async function startCircuitFromTemplate(
       and(
         eq(schema.circuitTemplates.id, templateId),
         eq(schema.circuitTemplates.userId, userId),
+        options?.clientWorkoutId ? isNull(schema.circuitTemplates.archivedAt) : undefined,
       ),
     )
     .limit(1);
-  if (!tpl) throw new Error("Круговой шаблон не найден или не твой");
+  if (!tpl) throw new FormatWriteError("template_not_found", "Круговой шаблон не найден или не твой");
 
   const exercises = await db
     .select()
@@ -106,7 +109,7 @@ export async function startCircuitFromTemplate(
       targetWeightKg: e.targetWeightKg,
       notes: e.notes,
     })),
-  });
+  }, options);
 }
 
 /** H14.5b — грузит круговой шаблон + упражнения для редактирования (R-7:

@@ -1,24 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
 import { deleteSleepForDate, upsertSleep } from "@/lib/repos/sleep.repo";
-
-const upsertSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Неверная дата (YYYY-MM-DD)"),
-  hours: z.coerce.number().min(0).max(24),
-  quality: z
-    .union([z.coerce.number().int().min(1).max(5), z.literal("")])
-    .optional()
-    .transform((v) => (v === "" || v == null ? null : Number(v))),
-  notes: z
-    .string()
-    .max(500)
-    .optional()
-    .transform((v) => (v && v.trim().length > 0 ? v.trim() : null)),
-});
+import { sleepLogSchema } from "@/server/schemas/wellness";
 
 export type SleepActionState =
   | { status: "idle" }
@@ -30,7 +16,7 @@ export async function upsertSleepAction(
   formData: FormData,
 ): Promise<SleepActionState> {
   const user = await requireUser();
-  const parsed = upsertSchema.safeParse({
+  const parsed = sleepLogSchema.safeParse({
     date: formData.get("date"),
     hours: formData.get("hours"),
     quality: formData.get("quality") ?? undefined,

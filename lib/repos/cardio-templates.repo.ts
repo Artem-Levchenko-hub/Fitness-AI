@@ -8,6 +8,7 @@ import {
   type CardioTemplatePreset,
 } from "@/lib/domain";
 import { startCardioFromPreset } from "@/lib/repos/cardio.repo";
+import { FormatWriteError, type FormatStartOptions } from "./training-format-write";
 
 export type CardioTemplateListItem = {
   id: string;
@@ -62,6 +63,7 @@ export async function listCardioTemplates(
 export async function startCardioFromTemplate(
   userId: string,
   templateId: string,
+  options?: FormatStartOptions,
 ): Promise<{ id: string }> {
   const [tpl] = await db
     .select()
@@ -70,16 +72,17 @@ export async function startCardioFromTemplate(
       and(
         eq(schema.cardioTemplates.id, templateId),
         eq(schema.cardioTemplates.userId, userId),
+        options?.clientWorkoutId ? isNull(schema.cardioTemplates.archivedAt) : undefined,
       ),
     )
     .limit(1);
-  if (!tpl) throw new Error("Кардио-шаблон не найден или не твой");
+  if (!tpl) throw new FormatWriteError("template_not_found", "Кардио-шаблон не найден или не твой");
 
   return startCardioFromPreset(userId, {
     preset: tpl.preset,
     name: tpl.name,
     params: (tpl.planJson as CardioTemplateParams | null) ?? undefined,
-  });
+  }, options);
 }
 
 export type CardioTemplateRowForEdit = {

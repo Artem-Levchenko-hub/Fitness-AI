@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -8,6 +8,7 @@ import {
   type CardioPresetKind,
   type CustomParams,
 } from "@/lib/domain";
+import { FormatWriteError, type FormatStartOptions, type FormatTransition } from "./training-format-write";
 
 export type CardioSummary = {
   id: string;
@@ -35,40 +36,47 @@ export async function startCardioFromPreset(
     name: string;
     params?: Partial<CustomParams> & { emomRounds?: number };
   },
+  options?: FormatStartOptions,
 ): Promise<{ id: string }> {
   return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`cardio-start:${userId}`}, 0))`);
     const blocks = presetToBlocks(input.preset, input.params);
     if (blocks.length === 0) {
       throw new Error("Preset не дал ни одного блока");
     }
 
-    // Один активный сеанс на формат: закрываем брошенные active-кардио юзера,
-    // чтобы resume-баннер не «висел» (G2) — незавершённые сессии иначе копятся.
-    await tx
-      .update(schema.cardioWorkouts)
-      .set({ status: "cancelled", finishedAt: new Date() })
-      .where(
-        and(
-          eq(schema.cardioWorkouts.userId, userId),
-          eq(schema.cardioWorkouts.status, "active"),
-        ),
-      );
-
-    const cardioId = crypto.randomUUID();
+    const cardioId = options?.clientWorkoutId ?? crypto.randomUUID();
     const planJson: Record<string, unknown> = {
       preset: input.preset,
       blockCount: blocks.length,
     };
     if (input.params) Object.assign(planJson, input.params);
 
-    await tx.insert(schema.cardioWorkouts).values({
+    const [inserted] = await tx.insert(schema.cardioWorkouts).values({
       id: cardioId,
       userId,
       name: input.name,
       preset: input.preset,
       planJson,
       status: "active",
-    });
+    }).onConflictDoNothing({ target: schema.cardioWorkouts.id }).returning({ id: schema.cardioWorkouts.id });
+    if (!inserted) {
+      const [existing] = await tx.select({ id: schema.cardioWorkouts.id })
+        .from(schema.cardioWorkouts)
+        .where(and(eq(schema.cardioWorkouts.id, cardioId), eq(schema.cardioWorkouts.userId, userId)))
+        .limit(1);
+      if (existing) return existing;
+      throw new FormatWriteError("workout_status_conflict", "Не удалось начать кардио");
+    }
+
+    // Повтор мобильного старта возвращается выше и не трогает активный сеанс.
+    await tx.update(schema.cardioWorkouts)
+      .set({ status: "cancelled", finishedAt: new Date() })
+      .where(and(
+        eq(schema.cardioWorkouts.userId, userId),
+        eq(schema.cardioWorkouts.status, "active"),
+        ne(schema.cardioWorkouts.id, cardioId),
+      ));
 
     await tx.insert(schema.cardioBlocks).values(
       blocks.map((b, i) => ({
@@ -123,6 +131,7 @@ export async function cloneCardio(
   if (src.blocks.length === 0) throw new Error("В кардио нет блоков для повтора");
 
   return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`cardio-start:${userId}`}, 0))`);
     await tx
       .update(schema.cardioWorkouts)
       .set({ status: "cancelled", finishedAt: new Date() })
@@ -169,10 +178,11 @@ export async function logCardioBlock(
   userId: string,
   cardioId: string,
   input: LogBlockInput,
+  options?: { activeOnly?: boolean },
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [w] = await tx
-      .select({ id: schema.cardioWorkouts.id })
+      .select({ status: schema.cardioWorkouts.status })
       .from(schema.cardioWorkouts)
       .where(
         and(
@@ -180,8 +190,12 @@ export async function logCardioBlock(
           eq(schema.cardioWorkouts.userId, userId),
         ),
       )
-      .limit(1);
-    if (!w) throw new Error("Cardio не найдено или не твоё");
+      .limit(1)
+      .for("update");
+    if (!w) throw new FormatWriteError("workout_not_found", "Cardio не найдено или не твоё");
+    if (options?.activeOnly && w.status !== "active") {
+      throw new FormatWriteError("workout_status_conflict", "Кардио уже закрыто");
+    }
 
     const [b] = await tx
       .select({ id: schema.cardioBlocks.id })
@@ -193,7 +207,7 @@ export async function logCardioBlock(
         ),
       )
       .limit(1);
-    if (!b) throw new Error("Блок не относится к этому кардио");
+    if (!b) throw new FormatWriteError("block_not_found", "Блок не относится к этому кардио");
 
     await tx
       .update(schema.cardioBlocks)
@@ -212,40 +226,42 @@ export async function finishCardioWorkout(
   userId: string,
   cardioId: string,
   notes?: string | null,
-): Promise<void> {
-  const trimmed = notes?.trim();
-  await db
-    .update(schema.cardioWorkouts)
-    .set({
-      status: "completed",
-      finishedAt: new Date(),
-      // Заметка «как прошло» (G7c feeling-note) — пишем только если непуста,
-      // чтобы повторный finish не затирал её в NULL.
-      ...(trimmed ? { notes: trimmed.slice(0, 500) } : {}),
-    })
-    .where(
-      and(
-        eq(schema.cardioWorkouts.id, cardioId),
-        eq(schema.cardioWorkouts.userId, userId),
-        eq(schema.cardioWorkouts.status, "active"),
-      ),
-    );
+): Promise<FormatTransition> {
+  return transitionCardioWorkout(userId, cardioId, "completed", notes);
 }
 
 export async function cancelCardioWorkout(
   userId: string,
   cardioId: string,
-): Promise<void> {
-  await db
+): Promise<FormatTransition> {
+  return transitionCardioWorkout(userId, cardioId, "cancelled");
+}
+
+async function transitionCardioWorkout(
+  userId: string,
+  cardioId: string,
+  status: "completed" | "cancelled",
+  notes?: string | null,
+): Promise<FormatTransition> {
+  const owned = and(eq(schema.cardioWorkouts.id, cardioId), eq(schema.cardioWorkouts.userId, userId));
+  const trimmed = notes?.trim();
+  const [changed] = await db
     .update(schema.cardioWorkouts)
-    .set({ status: "cancelled", finishedAt: new Date() })
-    .where(
-      and(
-        eq(schema.cardioWorkouts.id, cardioId),
-        eq(schema.cardioWorkouts.userId, userId),
-        eq(schema.cardioWorkouts.status, "active"),
-      ),
-    );
+    .set({
+      status,
+      finishedAt: new Date(),
+      // Заметка «как прошло» (G7c feeling-note) — пишем только если непуста,
+      // чтобы повторный finish не затирал её в NULL.
+      ...(trimmed ? { notes: trimmed.slice(0, 500) } : {}),
+    })
+    .where(and(owned, eq(schema.cardioWorkouts.status, "active")))
+    .returning({ id: schema.cardioWorkouts.id });
+  if (changed) return "changed";
+
+  const [existing] = await db.select({ status: schema.cardioWorkouts.status })
+    .from(schema.cardioWorkouts).where(owned).limit(1);
+  if (!existing) return "workout_not_found";
+  return existing.status === status ? "already_applied" : "workout_status_conflict";
 }
 
 export async function getActiveCardioId(

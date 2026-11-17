@@ -24,7 +24,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 internal const val SITE = "https://fitnesss.online"
-internal class HttpFailure(val code: Int) : IOException("HTTP $code")
+internal class HttpFailure(val code: Int, val reason: String? = null) : IOException("HTTP $code")
 
 internal class JournalApi(context: Context) {
     private val origin = SITE.toHttpUrl()
@@ -34,8 +34,31 @@ internal class JournalApi(context: Context) {
         .followRedirects(false)
         .callTimeout(20, TimeUnit.SECONDS)
         .build()
+    private val analysisClient = client.newBuilder()
+        .readTimeout(65, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(75, TimeUnit.SECONDS)
+        .build()
 
     fun snapshot(): JSONObject = authenticated { json(Request.Builder().url(url(JOURNAL_PATH)).build()) }
+
+    fun request(path: String, body: JSONObject? = null): JSONObject = authenticated {
+        val request = buildRequest(path, body)
+        if (path == "/api/ai/coach/finalize") JSONObject(responseText(request, analysisClient)) else json(request)
+    }
+
+    fun coach(body: JSONObject): String = authenticated {
+        responseText(buildRequest("/api/ai/coach", body), analysisClient)
+    }
+
+    fun videoTechnique(workoutId: String, exerciseId: String, requestId: String, bytes: ByteArray): JSONObject = authenticated {
+        val address = url("/api/ai/video-technique").newBuilder()
+            .addQueryParameter("workoutId", workoutId)
+            .addQueryParameter("exerciseId", exerciseId)
+            .addQueryParameter("requestId", requestId).build()
+        val request = Request.Builder().url(address).post(bytes.toRequestBody(VIDEO_MEDIA_TYPE)).build()
+        JSONObject(responseText(request, analysisClient))
+    }
 
     fun upload(set: QueuedSet): Unit = authenticated {
         val request = Request.Builder().url(url(JOURNAL_PATH))
@@ -103,16 +126,31 @@ internal class JournalApi(context: Context) {
 
     private fun csrfToken(): String = json(Request.Builder().url(url("/api/auth/csrf")).build()).getString("csrfToken")
 
-    private fun json(request: Request): JSONObject = client.newCall(request).execute().use { response ->
-        if (!response.isSuccessful) throw HttpFailure(response.code)
-        JSONObject(response.body?.string().orEmpty())
+    private fun buildRequest(path: String, body: JSONObject?): Request = Request.Builder().url(url(path)).apply {
+        if (body != null) post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+    }.build()
+
+    private fun json(request: Request): JSONObject = JSONObject(responseText(request, client))
+
+    private fun responseText(request: Request, http: OkHttpClient): String = http.newCall(request).execute().use { response ->
+        val text = response.body?.string().orEmpty()
+        if (!response.isSuccessful) {
+            val reason = runCatching { JSONObject(text).optString("error").ifBlank { null } }.getOrNull()
+            val redirectedToLogin = response.isRedirect && response.header("Location")
+                ?.let(origin::resolve)?.encodedPath == "/login"
+            throw HttpFailure(if (redirectedToLogin) 401 else response.code, reason)
+        }
+        text
     }
 
-    private fun url(path: String): HttpUrl = requireNotNull(origin.resolve(path))
+    private fun url(path: String): HttpUrl = requireNotNull(origin.resolve(path)).also {
+        require(it.isHttps && it.host == origin.host && it.port == origin.port)
+    }
 
     private companion object {
         const val JOURNAL_PATH = "/api/mobile/v1/journal"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
+        val VIDEO_MEDIA_TYPE = "video/mp4".toMediaType()
     }
 }
 

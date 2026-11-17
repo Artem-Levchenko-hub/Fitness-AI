@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { resumeCutoff } from "@/lib/domain";
+import { FormatWriteError, type FormatStartOptions, type FormatTransition } from "./training-format-write";
 
 export type CircuitSummary = {
   id: string;
@@ -52,27 +53,16 @@ export type StartCircuitInput = {
 export async function startCircuit(
   userId: string,
   input: StartCircuitInput,
+  options?: FormatStartOptions,
 ): Promise<{ id: string }> {
   if (input.exercises.length === 0) {
     throw new Error("В круге должно быть хотя бы одно упражнение");
   }
 
   return db.transaction(async (tx) => {
-    // Один активный сеанс на формат: закрываем любые брошенные active-круговые
-    // юзера, чтобы resume-баннер не «висел» (G2). Иначе незавершённые сессии
-    // копятся и getActiveCircuitId вечно возвращает старую.
-    await tx
-      .update(schema.circuitWorkouts)
-      .set({ status: "cancelled", finishedAt: new Date() })
-      .where(
-        and(
-          eq(schema.circuitWorkouts.userId, userId),
-          eq(schema.circuitWorkouts.status, "active"),
-        ),
-      );
-
-    const id = crypto.randomUUID();
-    await tx.insert(schema.circuitWorkouts).values({
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`circuit-start:${userId}`}, 0))`);
+    const id = options?.clientWorkoutId ?? crypto.randomUUID();
+    const [inserted] = await tx.insert(schema.circuitWorkouts).values({
       id,
       userId,
       name: input.name,
@@ -81,7 +71,24 @@ export async function startCircuit(
       restBetweenRoundsSec: input.restBetweenRoundsSec,
       restBetweenExercisesSec: input.restBetweenExercisesSec,
       status: "active",
-    });
+    }).onConflictDoNothing({ target: schema.circuitWorkouts.id }).returning({ id: schema.circuitWorkouts.id });
+    if (!inserted) {
+      const [existing] = await tx.select({ id: schema.circuitWorkouts.id })
+        .from(schema.circuitWorkouts)
+        .where(and(eq(schema.circuitWorkouts.id, id), eq(schema.circuitWorkouts.userId, userId)))
+        .limit(1);
+      if (existing) return existing;
+      throw new FormatWriteError("workout_status_conflict", "Не удалось начать круговую");
+    }
+
+    // Повтор мобильного старта возвращается выше и не трогает активный сеанс.
+    await tx.update(schema.circuitWorkouts)
+      .set({ status: "cancelled", finishedAt: new Date() })
+      .where(and(
+        eq(schema.circuitWorkouts.userId, userId),
+        eq(schema.circuitWorkouts.status, "active"),
+        ne(schema.circuitWorkouts.id, id),
+      ));
 
     await tx.insert(schema.circuitExercises).values(
       input.exercises.map((e, idx) => ({
@@ -289,10 +296,11 @@ export async function logCircuitRound(
   userId: string,
   circuitId: string,
   input: LogRoundInput,
+  options?: { activeOnly?: boolean },
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [w] = await tx
-      .select({ id: schema.circuitWorkouts.id })
+      .select({ status: schema.circuitWorkouts.status, totalRounds: schema.circuitWorkouts.totalRounds })
       .from(schema.circuitWorkouts)
       .where(
         and(
@@ -300,8 +308,15 @@ export async function logCircuitRound(
           eq(schema.circuitWorkouts.userId, userId),
         ),
       )
-      .limit(1);
-    if (!w) throw new Error("Круговая не найдена или не твоя");
+      .limit(1)
+      .for("update");
+    if (!w) throw new FormatWriteError("workout_not_found", "Круговая не найдена или не твоя");
+    if (options?.activeOnly && w.status !== "active") {
+      throw new FormatWriteError("workout_status_conflict", "Круговая уже закрыта");
+    }
+    if (options?.activeOnly && (input.roundNumber < 1 || input.roundNumber > w.totalRounds)) {
+      throw new FormatWriteError("round_out_of_range", "Круг не входит в план тренировки");
+    }
 
     const [ex] = await tx
       .select({ id: schema.circuitExercises.id })
@@ -313,7 +328,7 @@ export async function logCircuitRound(
         ),
       )
       .limit(1);
-    if (!ex) throw new Error("Упражнение не относится к этой круговой");
+    if (!ex) throw new FormatWriteError("exercise_not_found", "Упражнение не относится к этой круговой");
 
     const [existing] = await tx
       .select({ id: schema.circuitRoundLogs.id })
@@ -355,37 +370,58 @@ export async function finishCircuit(
   userId: string,
   circuitId: string,
   notes?: string | null,
-): Promise<void> {
-  await db
-    .update(schema.circuitWorkouts)
-    .set({
-      status: "completed",
-      finishedAt: new Date(),
-      notes: notes ?? null,
-    })
-    .where(
-      and(
-        eq(schema.circuitWorkouts.id, circuitId),
-        eq(schema.circuitWorkouts.userId, userId),
-        eq(schema.circuitWorkouts.status, "active"),
-      ),
-    );
+): Promise<FormatTransition> {
+  return transitionCircuit(userId, circuitId, "completed", notes);
 }
 
 export async function cancelCircuit(
   userId: string,
   circuitId: string,
-): Promise<void> {
-  await db
-    .update(schema.circuitWorkouts)
-    .set({ status: "cancelled", finishedAt: new Date() })
-    .where(
-      and(
-        eq(schema.circuitWorkouts.id, circuitId),
-        eq(schema.circuitWorkouts.userId, userId),
-        eq(schema.circuitWorkouts.status, "active"),
-      ),
-    );
+): Promise<FormatTransition> {
+  return transitionCircuit(userId, circuitId, "cancelled");
+}
+
+async function transitionCircuit(
+  userId: string,
+  circuitId: string,
+  status: "completed" | "cancelled",
+  notes?: string | null,
+): Promise<FormatTransition> {
+  const owned = and(eq(schema.circuitWorkouts.id, circuitId), eq(schema.circuitWorkouts.userId, userId));
+  return db.transaction(async (tx) => {
+    const [changed] = await tx.update(schema.circuitWorkouts)
+      .set({
+        status,
+        finishedAt: new Date(),
+        ...(status === "completed" ? { notes: notes ?? null } : {}),
+      })
+      .where(and(owned, eq(schema.circuitWorkouts.status, "active")))
+      .returning({ id: schema.circuitWorkouts.id });
+
+    if (!changed) {
+      const [existing] = await tx.select({ status: schema.circuitWorkouts.status })
+        .from(schema.circuitWorkouts).where(owned).limit(1);
+      if (!existing) return "workout_not_found";
+      return existing.status === status ? "already_applied" : "workout_status_conflict";
+    }
+
+    if (status === "completed") {
+      // Очередь и завершение фиксируются вместе. Конкурентный finish не пройдёт
+      // условие status = active и не добавит вторую задачу.
+      const [job] = await tx.select({ id: schema.aiJobs.id }).from(schema.aiJobs)
+        .where(and(eq(schema.aiJobs.circuitWorkoutId, circuitId), eq(schema.aiJobs.kind, "circuit_post_workout")))
+        .limit(1);
+      if (!job) {
+        await tx.insert(schema.aiJobs).values({
+          userId,
+          circuitWorkoutId: circuitId,
+          kind: "circuit_post_workout",
+          status: "pending",
+        });
+      }
+    }
+    return "changed";
+  });
 }
 
 export async function deleteCircuit(

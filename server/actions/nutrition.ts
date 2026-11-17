@@ -1,34 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
 import {
   deleteNutritionForDate,
   upsertNutrition,
 } from "@/lib/repos/nutrition.repo";
-
-const optionalNumber = (max: number) =>
-  z
-    .union([z.coerce.number().min(0).max(max), z.literal("")])
-    .optional()
-    .transform((v) => (v === "" || v == null ? null : Number(v)));
-
-const upsertSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Неверная дата (YYYY-MM-DD)"),
-  kcal: optionalNumber(10000).transform((v) =>
-    v == null ? null : Math.round(v),
-  ),
-  proteinG: optionalNumber(1000),
-  fatG: optionalNumber(1000),
-  carbsG: optionalNumber(2000),
-  notes: z
-    .string()
-    .max(500)
-    .optional()
-    .transform((v) => (v && v.trim().length > 0 ? v.trim() : null)),
-});
+import { nutritionEntrySchema } from "@/server/schemas/wellness";
 
 export type NutritionActionState =
   | { status: "idle" }
@@ -40,7 +19,7 @@ export async function upsertNutritionAction(
   formData: FormData,
 ): Promise<NutritionActionState> {
   const user = await requireUser();
-  const parsed = upsertSchema.safeParse({
+  const parsed = nutritionEntrySchema.safeParse({
     date: formData.get("date"),
     kcal: formData.get("kcal") ?? undefined,
     proteinG: formData.get("proteinG") ?? undefined,

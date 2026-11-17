@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/db/client";
@@ -43,10 +44,16 @@ export async function getLatestMeasurement(
 export async function addMeasurement(
   userId: string,
   input: NewMeasurementInput,
-): Promise<{ id: string }> {
+  clientEntryId?: string,
+): Promise<schema.BodyMeasurement> {
+  // Native retries keep the same ID. Scope it to the account before inserting.
+  const id = clientEntryId
+    ? createHash("sha256").update(JSON.stringify([userId, clientEntryId])).digest("hex")
+    : undefined;
   const [row] = await db
     .insert(schema.bodyMeasurements)
     .values({
+      id,
       userId,
       measuredAt: input.measuredAt ?? new Date(),
       weightKg: input.weightKg ?? null,
@@ -59,8 +66,20 @@ export async function addMeasurement(
       thighCm: input.thighCm ?? null,
       notes: input.notes ?? null,
     })
-    .returning({ id: schema.bodyMeasurements.id });
-  return { id: row!.id };
+    .onConflictDoNothing({ target: schema.bodyMeasurements.id })
+    .returning();
+  if (row) return row;
+
+  if (id) {
+    const [existing] = await db
+      .select()
+      .from(schema.bodyMeasurements)
+      .where(and(eq(schema.bodyMeasurements.id, id), eq(schema.bodyMeasurements.userId, userId)))
+      .limit(1);
+    if (existing) return existing;
+  }
+
+  throw new Error("Не удалось сохранить замер");
 }
 
 export async function deleteMeasurement(

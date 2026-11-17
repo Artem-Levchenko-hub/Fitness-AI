@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/repos/body.repo", () => ({ getUserProfile: async () => null }));
+
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
+  isUserAdmin: vi.fn(),
+  listTemplates: vi.fn(),
   getActiveWorkoutId: vi.fn(),
   getActiveWorkoutForUser: vi.fn(),
   listRecentWorkouts: vi.fn(),
@@ -9,6 +13,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth/require-user", () => ({ getUser: mocks.getUser }));
+vi.mock("@/lib/repos/admin.repo", () => ({ isUserAdmin: mocks.isUserAdmin }));
+vi.mock("@/lib/repos/templates.repo", () => ({ listTemplates: mocks.listTemplates }));
 vi.mock("@/lib/repos/workouts.repo", () => mocks);
 
 import { GET, POST } from "./route";
@@ -31,12 +37,20 @@ function submit(data: object, accountId = userId) {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.getUser.mockResolvedValue({ id: userId });
+  mocks.isUserAdmin.mockResolvedValue(false);
+  mocks.listTemplates.mockResolvedValue([]);
   mocks.getActiveWorkoutId.mockResolvedValue(workoutId);
   mocks.getActiveWorkoutForUser.mockResolvedValue({
     id: workoutId,
     name: "Ноги",
     status: "active",
-    exercises: [{ id: workoutExerciseId, exerciseNameRu: "Приседания", sets: [] }],
+    startedAt: new Date(completedAt),
+    exercises: [{
+      id: workoutExerciseId,
+      exerciseNameRu: "Приседания",
+      targetRestSeconds: 150,
+      sets: [],
+    }],
   });
   mocks.listRecentWorkouts.mockResolvedValue([]);
 });
@@ -48,10 +62,31 @@ describe("mobile strength journal", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(await response.json()).toMatchObject({
       accountId: userId,
-      workout: { id: workoutId, exercises: [{ id: workoutExerciseId, name: "Приседания" }] },
+      isAdmin: false,
+      templates: [],
+      workout: {
+        id: workoutId,
+        startedAt: completedAt,
+        exercises: [{ id: workoutExerciseId, name: "Приседания", targetRestSeconds: 150 }],
+      },
     });
     expect(mocks.getActiveWorkoutId).toHaveBeenCalledWith(userId, { includeStale: true });
     expect(mocks.getActiveWorkoutForUser).toHaveBeenCalledWith(userId, workoutId);
+  });
+
+  it("projects the signed-in account's admin role and templates", async () => {
+    mocks.isUserAdmin.mockResolvedValue(true);
+    mocks.listTemplates.mockResolvedValue([
+      { id: "template-1", name: "Спина", exerciseCount: 4, description: "Дополнительное поле" },
+    ]);
+
+    const snapshot = await (await GET()).json();
+    expect(snapshot.isAdmin).toBe(true);
+    expect(mocks.isUserAdmin).toHaveBeenCalledWith(userId);
+    expect(mocks.listTemplates).toHaveBeenCalledWith(userId);
+    expect(snapshot.templates).toEqual([
+      { id: "template-1", name: "Спина", exerciseCount: 4 },
+    ]);
   });
 
   it("preserves the client ID and capture time when replaying a set", async () => {

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, max, ne, or, sql } from "drizzle-orm";
 
-import { db } from "@/db/client";
+import { db, type Db } from "@/db/client";
 import * as schema from "@/db/schema";
 import {
   dedupInsightInputs,
@@ -58,8 +58,34 @@ export async function startWorkoutFromTemplate(
   templateId: string,
   opts?: { clientWorkoutId?: string | null },
 ): Promise<{ id: string }> {
-  const clientWorkoutId = opts?.clientWorkoutId ?? null;
+  const result = await startStrengthWorkout(userId, templateId, opts?.clientWorkoutId ?? null, "replace");
+  if ("error" in result) throw new Error("Template not found or not yours");
+  return result;
+}
+
+type StartWorkoutResult =
+  | { id: string }
+  | { error: "template_not_found" | "active_workout_exists" };
+
+export async function startMobileWorkoutFromTemplate(
+  userId: string,
+  templateId: string,
+  clientWorkoutId: string,
+): Promise<StartWorkoutResult> {
+  // Индекс client_workout_id глобальный, а ключ повтора Android принадлежит аккаунту.
+  return startStrengthWorkout(userId, templateId, `mobile:${userId}:${clientWorkoutId}`, "keep");
+}
+
+async function startStrengthWorkout(
+  userId: string,
+  templateId: string,
+  clientWorkoutId: string | null,
+  activeWorkout: "replace" | "keep",
+): Promise<StartWorkoutResult> {
   return db.transaction(async (tx) => {
+    // Серийно проверяем ключ повтора и активную сессию для стартов с сайта и Android.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`strength-start:${userId}`}, 0))`);
+
     // H15.3c-2 — идемпотентность офлайн-старта: реплей того же clientWorkoutId
     // при повторном дренаже outbox находит уже созданную тренировку и НЕ плодит
     // дубль. Проверка ДО отмены активных/вставки — повторный дренаж не должен
@@ -86,23 +112,26 @@ export async function startWorkoutFromTemplate(
         and(
           eq(schema.workoutTemplates.id, templateId),
           eq(schema.workoutTemplates.userId, userId),
+          activeWorkout === "keep" ? isNull(schema.workoutTemplates.archivedAt) : undefined,
         ),
       )
       .limit(1);
 
-    if (!tpl) throw new Error("Template not found or not yours");
+    if (!tpl) return { error: "template_not_found" };
 
-    // Один активный сеанс на формат: закрываем брошенные active-силовые юзера,
-    // чтобы resume-баннер не «висел» (G2) — незавершённые сессии иначе копятся.
-    await tx
-      .update(schema.workouts)
-      .set({ status: "cancelled", finishedAt: new Date() })
-      .where(
-        and(
-          eq(schema.workouts.userId, userId),
-          eq(schema.workouts.status, "active"),
-        ),
-      );
+    const active = and(eq(schema.workouts.userId, userId), eq(schema.workouts.status, "active"));
+    if (activeWorkout === "keep") {
+      const [existing] = await tx.select({ id: schema.workouts.id })
+        .from(schema.workouts)
+        .where(active)
+        .limit(1);
+      if (existing) return { error: "active_workout_exists" };
+    } else {
+      // Сайт закрывает брошенные сессии при старте нового шаблона.
+      await tx.update(schema.workouts)
+        .set({ status: "cancelled", finishedAt: new Date() })
+        .where(active);
+    }
 
     const tplItems = await tx
       .select()
@@ -423,47 +452,77 @@ export async function deleteSet(
   });
 }
 
+type WorkoutTransition = "changed" | "already_applied" | "workout_not_found" | "workout_status_conflict";
+
+async function transitionActiveWorkout(
+  database: Pick<Db, "update" | "select">,
+  userId: string,
+  workoutId: string,
+  status: "completed" | "cancelled",
+): Promise<WorkoutTransition> {
+  const owned = and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId));
+  const [changed] = await database.update(schema.workouts)
+    .set({ status, finishedAt: new Date() })
+    .where(and(owned, eq(schema.workouts.status, "active")))
+    .returning({ id: schema.workouts.id });
+  if (changed) return "changed";
+
+  const [workout] = await database.select({ status: schema.workouts.status })
+    .from(schema.workouts)
+    .where(owned)
+    .limit(1);
+  if (!workout) return "workout_not_found";
+  return workout.status === status ? "already_applied" : "workout_status_conflict";
+}
+
+export type WorkoutFinishNote = {
+  content: string;
+  source: "manual" | "auto_generated";
+};
+
+/** Сохраняет статус, заметку и отложенный анализ в одной транзакции. */
 export async function finishWorkout(
   userId: string,
   workoutId: string,
-): Promise<void> {
-  await db
-    .update(schema.workouts)
-    .set({
-      status: "completed",
-      finishedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(schema.workouts.id, workoutId),
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "active"),
-      ),
-    );
+  note?: WorkoutFinishNote,
+): Promise<WorkoutTransition> {
+  return db.transaction(async (tx) => {
+    const result = await transitionActiveWorkout(tx, userId, workoutId, "completed");
+    if (result !== "changed") return result;
+
+    if (note) {
+      await tx.insert(schema.workoutNotes).values({ userId, workoutId, ...note });
+    }
+
+    const [existing] = await tx.select({ id: schema.aiJobs.id })
+      .from(schema.aiJobs)
+      .where(and(
+        eq(schema.aiJobs.userId, userId),
+        eq(schema.aiJobs.workoutId, workoutId),
+        eq(schema.aiJobs.kind, "post_workout"),
+      ))
+      .limit(1);
+
+    if (!existing) {
+      // Даём тренеру на сайте 90 секунд на разбор. Иначе его подхватит cron.
+      await tx.insert(schema.aiJobs).values({
+        userId,
+        workoutId,
+        kind: "post_workout",
+        status: "pending",
+        scheduledAt: new Date(Date.now() + 90_000),
+      });
+    }
+    return result;
+  });
 }
 
-/** Отменяет брошенную активную силовую сессию (status active → cancelled),
- *  чтобы resume-баннер не «висел» вечно (H2). Зеркало cancelCardio/Circuit:
- *  фильтр active + userId (R-7) делает вызов идемпотентным — повторный тап или
- *  уже-завершённая сессия дают 0 строк без ошибки. Прогресс остаётся в БД как
- *  cancelled (в историю/статистику не идёт, как у других форматов). */
+/** Отменённая сессия сохраняет подходы и исключается из истории и статистики. */
 export async function cancelWorkout(
   userId: string,
   workoutId: string,
-): Promise<void> {
-  await db
-    .update(schema.workouts)
-    .set({
-      status: "cancelled",
-      finishedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(schema.workouts.id, workoutId),
-        eq(schema.workouts.userId, userId),
-        eq(schema.workouts.status, "active"),
-      ),
-    );
+): Promise<WorkoutTransition> {
+  return transitionActiveWorkout(db, userId, workoutId, "cancelled");
 }
 
 /** Удаляет тренировку целиком. Дочерние строки (упражнения, подходы,

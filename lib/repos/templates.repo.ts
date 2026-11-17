@@ -270,15 +270,22 @@ export type CreateTemplateInput = {
 export async function createTemplate(
   userId: string,
   input: CreateTemplateInput,
+  options?: { id: string },
 ): Promise<{ id: string }> {
   return db.transaction(async (tx) => {
-    const id = crypto.randomUUID();
-    await tx.insert(schema.workoutTemplates).values({
+    const id = options?.id ?? crypto.randomUUID();
+    const [created] = await tx.insert(schema.workoutTemplates).values({
       id,
       userId,
       name: input.name,
       description: input.description ?? null,
-    });
+    }).onConflictDoNothing({ target: schema.workoutTemplates.id }).returning({ id: schema.workoutTemplates.id });
+    if (!created) {
+      const [existing] = await tx.select({ id: schema.workoutTemplates.id }).from(schema.workoutTemplates)
+        .where(and(eq(schema.workoutTemplates.id, id), eq(schema.workoutTemplates.userId, userId))).limit(1);
+      if (options && existing) return existing;
+      throw new Error("Template ID already exists");
+    }
 
     if (input.items.length > 0) {
       await tx.insert(schema.templateExercises).values(

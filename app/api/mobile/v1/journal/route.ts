@@ -1,12 +1,17 @@
 import { z } from "zod";
 
 import { getUser } from "@/lib/auth/require-user";
+import { isUserAdmin } from "@/lib/repos/admin.repo";
+import { getUserProfile } from "@/lib/repos/body.repo";
+import { listTemplates } from "@/lib/repos/templates.repo";
 import {
   getActiveWorkoutForUser,
   getActiveWorkoutId,
   listRecentWorkouts,
   recordSet,
 } from "@/lib/repos/workouts.repo";
+
+import { journalJson as json, serializeJournalWorkout } from "./response";
 
 const setSchema = z.object({
   accountId: z.string().min(1).max(128),
@@ -18,34 +23,28 @@ const setSchema = z.object({
   reps: z.number().int().min(1).max(100),
 });
 
-function json(data: unknown, status = 200) {
-  return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
-}
-
 export async function GET() {
   const user = await getUser();
   if (!user) return json({ error: "sign_in_required" }, 401);
 
-  const [workoutId, recent] = await Promise.all([
-    getActiveWorkoutId(user.id, { includeStale: true }),
+  const [workout, recent, isAdmin, templates, profile] = await Promise.all([
+    getActiveWorkoutId(user.id, { includeStale: true }).then(
+      (id) => id ? getActiveWorkoutForUser(user.id, id) : null,
+    ),
     listRecentWorkouts(user.id),
+    isUserAdmin(user.id),
+    listTemplates(user.id),
+    getUserProfile(user.id),
   ]);
-  const workout = workoutId ? await getActiveWorkoutForUser(user.id, workoutId) : null;
 
   return json({
     accountId: user.id,
     email: user.email,
-    workout: workout?.status === "active" ? {
-      id: workout.id,
-      name: workout.name,
-      exercises: workout.exercises.map((exercise) => ({
-        id: exercise.id,
-        name: exercise.exerciseNameRu,
-        sets: exercise.sets.map(({ id, clientSetId, setIndex, weightKg, reps }) => ({
-          id, clientSetId, setIndex, weightKg, reps,
-        })),
-      })),
-    } : null,
+    displayName: profile?.name,
+    weightUnit: profile?.weightUnitPref ?? "kg",
+    isAdmin,
+    templates: templates.map(({ id, name, exerciseCount }) => ({ id, name, exerciseCount })),
+    workout: workout?.status === "active" ? serializeJournalWorkout(workout) : null,
     recent: recent.filter(({ status }) => status === "completed").map(
       ({ id, name, startedAt, setCount }) => ({ id, name, startedAt, setCount }),
     ),

@@ -1,29 +1,22 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { db } from "@/db/client";
-import * as schema from "@/db/schema";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   cancelWorkout,
   deleteSet,
   deleteWorkout,
-  finishWorkout,
-  getActiveWorkoutForUser,
   recordSet,
-  saveWorkoutNote,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
 import { getOrCreateNextWorkoutTemplate } from "@/lib/repos/plan-from-history.repo";
-import { adaptTemplateAfterWorkout } from "@/lib/repos/training-programs.repo";
-import { getTrainingReadiness } from "@/lib/repos/recovery.repo";
 import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
 import { parseClientWorkoutId } from "@/lib/domain/workouts/client-workout-id";
+import { finishStrengthWorkout } from "@/server/finish-strength-workout";
 
 const startSchema = z.object({
   templateId: z.string().uuid(),
@@ -146,13 +139,7 @@ export async function deleteSetAction(formData: FormData) {
   revalidatePath(`/workouts/${parsed.data.workoutId}`);
 }
 
-/**
- * Логика завершения тренировки БЕЗ redirect — единый источник для онлайн-формы
- * (finishWorkoutAction → core + redirect) и фонового дренажа outbox
- * (replayFinishWorkoutAction → только core, без навигации; H15.4). Идемпотентно:
- * finishWorkout фильтрует status=active (повторный дренаж = 0 строк, без ошибки),
- * aiJobs-вставка защищена existing-check. Возвращает workoutId для redirect.
- */
+/** Результат одной формы используется для обычного финиша и фонового дренажа. */
 async function finishWorkoutCore(formData: FormData): Promise<string> {
   const user = await requireUser();
   const workoutId = String(formData.get("workoutId"));
@@ -162,94 +149,18 @@ async function finishWorkoutCore(formData: FormData): Promise<string> {
   // Pliability-тап «легко/норм/тяжело» (H11.3) — одно касание вместо набора.
   const feelingLine = feelingNoteLine(String(formData.get("feelingTag") ?? ""));
 
-  // Не продолжаем цепочку (notes/job) после zero-row finish: иначе чужой или
-  // уже завершённый UUID мог создать данные AI от имени текущего пользователя.
-  const beforeFinish = await getActiveWorkoutForUser(user.id, workoutId);
-  if (!beforeFinish || beforeFinish.status !== "active") {
-    throw new Error("Активная тренировка не найдена");
-  }
-
-  await finishWorkout(user.id, workoutId);
-
   // Самочувствие атлета → одна workout_note. Тап и/или свободный текст
   // объединяются в одну заметку (не плодим строки — context-builder берёт лишь
   // 4 свежих). source=auto_generated, если был только тап; manual, если атлет
   // что-то напечатал. AI-тренер читает заметки целиком при разборе.
-  const noteParts = [feelingLine, feeling].filter(Boolean) as string[];
-  if (noteParts.length > 0) {
-    await saveWorkoutNote(
-      user.id,
-      workoutId,
-      noteParts.join("\n").slice(0, 1000),
-      feeling ? "manual" : "auto_generated",
-    );
+  const content = [feelingLine, feeling].filter(Boolean).join("\n").slice(0, 1000);
+  const result = await finishStrengthWorkout(user.id, workoutId, content ? {
+    content,
+    source: feeling ? "manual" : "auto_generated",
+  } : undefined);
+  if (result === "workout_not_found" || result === "workout_status_conflict") {
+    throw new Error("Активная тренировка не найдена");
   }
-
-  // Прогрессия от тренера по завершённой силовой — чтобы атлет был в потоке и не
-  // собирал шаблон руками. Единый путь для ЛЮБОГО силового шаблона (программный
-  // день ИЛИ одиночный — оба ставят workouts.templateId на старте): тренер
-  // адаптирует ТОТ ЖЕ шаблон НА МЕСТЕ под факт (вес/повторы, изредка свап
-  // застойного упражнения) — корректировка падает сразу в «Шаблоны», готова к
-  // следующему старту. Идемпотентно по lastAdaptedWorkoutId. null = адаптировать
-  // нечего (ad-hoc без шаблона или липкий откат тренера, adaptOptOut).
-  // Fail-soft (R-10): любая ошибка НЕ должна ломать завершение тренировки.
-  try {
-    const done = await getActiveWorkoutForUser(user.id, workoutId);
-    if (done && done.status === "completed") {
-      const performed = done.exercises.map((e) => ({
-        exerciseId: e.exerciseId,
-        sets: e.sets,
-      }));
-
-      const readiness = await getTrainingReadiness(user.id);
-      const adaptation = await adaptTemplateAfterWorkout(
-        user.id,
-        workoutId,
-        performed,
-        readiness,
-      );
-      if (adaptation) {
-        revalidatePath("/programs");
-        revalidatePath("/templates");
-      }
-    }
-  } catch (e) {
-    console.error("[template-adapt] adaptation failed:", e);
-  }
-
-  // Ставим post_workout аналитический job. Если уже стоит (на случай
-  // двойного finish — пользователь дважды тапнул) — не дублируем.
-  const [existing] = await db
-    .select({ id: schema.aiJobs.id })
-    .from(schema.aiJobs)
-    .where(
-      and(
-        eq(schema.aiJobs.workoutId, workoutId),
-        eq(schema.aiJobs.kind, "post_workout"),
-      ),
-    )
-    .limit(1);
-
-  if (!existing) {
-    // Отложенный safety-net (+90с): на /workouts/[id]/trainer живой стрим
-    // (TrainerStreamConsumer) генерит разбор inline и сохраняет раньше — тогда
-    // cron-job идемпотентно пропускается (findExistingAnalysis). Если страницу
-    // не открыли / стрим упал — cron-runner догенерит сам в течение минуты
-    // после scheduledAt. Немедленный триггер воркера УБРАН, чтобы не гонять
-    // вторую генерацию параллельно стриму.
-    await db.insert(schema.aiJobs).values({
-      userId: user.id,
-      workoutId,
-      kind: "post_workout",
-      status: "pending",
-      scheduledAt: new Date(Date.now() + 90_000),
-    });
-  }
-
-  revalidatePath(`/workouts/${workoutId}`);
-  revalidatePath("/workouts");
-  revalidatePath("/dashboard");
-
   return workoutId;
 }
 

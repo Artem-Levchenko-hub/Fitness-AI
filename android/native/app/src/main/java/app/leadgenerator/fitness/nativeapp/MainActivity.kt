@@ -1,46 +1,62 @@
 package app.leadgenerator.fitness.nativeapp
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -50,11 +66,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.text.NumberFormat
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import org.json.JSONObject
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as JournalApplication
@@ -64,6 +77,7 @@ class MainActivity : ComponentActivity() {
     private var error by mutableStateOf("")
     private var codeSentTo by mutableStateOf<String?>(null)
     private var signingInAgain by mutableStateOf(false)
+    private var resumeCount by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,38 +86,46 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         lifecycleScope.launch {
             app.store.changes.collect {
-                val (journalState, awaitingJournal) = io {
-                    val cached = app.store.state()
-                    cached to (cached.journal == null && app.api.hasSession())
+                val (cached, awaitingJournal) = io {
+                    val stored = app.store.state()
+                    stored to (stored.journal == null && app.api.hasSession())
                 }
                 bootstrapping.value = awaitingJournal
-                state.value = journalState
+                state.value = cached
             }
         }
-        scheduleJournalSync(this)
+        refreshJournal()
         setContent {
-            val dark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-            val colors = if (dark) darkColorScheme(primary = Color(0xFFA7D4B1)) else lightColorScheme(
-                primary = Color(0xFF3A6B4A), background = Color(0xFFF6F4EF),
-            )
-            MaterialTheme(colorScheme = colors) {
-                Surface(Modifier.fillMaxSize()) {
-                    val current by state.collectAsState()
-                    val sync by app.syncState.collectAsState()
-                    val awaitingJournal by bootstrapping.collectAsState()
-                    val journal = current?.journal
-                    when {
-                        current == null -> Shell { Text("Открываем дневник…") }
-                        journal == null && awaitingJournal && sync != SyncState.SignIn -> Shell {
-                            Text("Загружаем дневник. Для первой загрузки нужна сеть.")
-                            TextButton(onClick = { scheduleJournalSync(this@MainActivity) }) { Text("Повторить загрузку") }
+            VibeTheme {
+                val cached by state.collectAsState()
+                val sync by app.syncState.collectAsState()
+                val awaitingJournal by bootstrapping.collectAsState()
+                val journal = cached?.journal
+                if (journal != null && !signingInAgain) {
+                    key(journal.accountId) { SignedInApp(requireNotNull(cached), journal, sync) }
+                } else {
+                    Scaffold(containerColor = MaterialTheme.colorScheme.background, contentWindowInsets = WindowInsets.safeDrawing) { padding ->
+                        Box(Modifier.fillMaxSize().padding(padding).imePadding()) {
+                            when {
+                                cached == null -> VibeList { item { VibeHeading("Vibe-trainer", "Открываем дневник…") } }
+                                journal == null && awaitingJournal && sync != SyncState.SignIn -> VibeList {
+                                    item {
+                                        VibeHeading("Vibe-trainer", "Загружаем дневник. Для первой загрузки нужна сеть.")
+                                        TextButton(onClick = ::refreshJournal) { Text("Повторить загрузку") }
+                                    }
+                                }
+                                else -> SignIn(journal?.email)
+                            }
                         }
-                        journal == null || signingInAgain -> SignIn(journal?.email)
-                        else -> JournalScreen(requireNotNull(current), journal, sync)
                     }
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumeCount++
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -114,115 +136,170 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun SignIn(savedEmail: String?) {
-        var email by remember(savedEmail) { mutableStateOf(savedEmail.orEmpty()) }
+        var email by rememberSaveable(savedEmail) { mutableStateOf(savedEmail.orEmpty()) }
         var code by remember(codeSentTo) { mutableStateOf("") }
         val recipient = codeSentTo
-        Shell {
-            Text("Дневник тренировок", style = MaterialTheme.typography.headlineLarge)
-            if (recipient == null) {
-                OutlinedTextField(
-                    email, { email = it }, label = { Text("Email") }, enabled = !busy, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth(),
-                )
-                Button(enabled = !busy && email.contains("@"), onClick = {
-                    val address = email.trim().lowercase(Locale.ROOT)
-                    action("Не удалось отправить код. Проверьте email и соединение.") {
-                        app.sessionLock.withLock { io { app.api.requestCode(address) } }
-                        codeSentTo = address
-                    }
-                }) { Text(if (busy) "Отправляем…" else "Получить код") }
-            } else {
-                Text("Код отправлен на $recipient")
-                OutlinedTextField(
-                    code, { code = it.filter { character -> character in '0'..'9' }.take(6) },
-                    label = { Text("Код из письма") }, enabled = !busy, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
-                )
-                Button(enabled = !busy && code.length == 6, onClick = {
-                    action("Не удалось войти. Проверьте код и соединение.") {
-                        app.sessionLock.withLock { io {
-                            app.api.verifyCode(recipient, code)
-                            app.store.deactivate()
-                        } }
-                        codeSentTo = null
-                        signingInAgain = false
-                        app.syncState.value = SyncState.Idle
-                        scheduleJournalSync(this@MainActivity)
-                    }
-                }) { Text(if (busy) "Входим…" else "Войти") }
-                TextButton(enabled = !busy, onClick = { codeSentTo = null; error = "" }) { Text("Изменить email") }
+        VibeList {
+            item {
+                Image(painterResource(R.mipmap.ic_launcher), null, Modifier.size(64.dp))
+                VibeHeading("Vibe-trainer", "Войдите по коду из письма, чтобы открыть свой дневник.")
             }
-            if (savedEmail != null) {
+            item {
+                VibeCard {
+                    if (recipient == null) {
+                        OutlinedTextField(email, { email = it.take(254) }, Modifier.fillMaxWidth(),
+                            label = { Text("Email") }, enabled = !busy, singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                        Button(enabled = !busy && email.contains("@"), onClick = {
+                            val address = email.trim().lowercase()
+                            action("Не удалось отправить код. Проверьте email и соединение.") {
+                                app.sessionLock.withLock { io { app.api.requestCode(address) } }
+                                codeSentTo = address
+                            }
+                        }) { Text(if (busy) "Отправляем…" else "Получить код") }
+                    } else {
+                        Text("Код отправлен на $recipient")
+                        OutlinedTextField(code, { code = it.filter { character -> character in '0'..'9' }.take(6) },
+                            Modifier.fillMaxWidth(), label = { Text("Код из письма") }, enabled = !busy, singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        Button(enabled = !busy && code.length == 6, onClick = {
+                            action("Не удалось войти. Проверьте код и соединение.") {
+                                app.sessionLock.withLock { io {
+                                    app.api.verifyCode(recipient, code)
+                                    app.store.deactivate()
+                                } }
+                                codeSentTo = null
+                                signingInAgain = false
+                                app.syncState.value = SyncState.Idle
+                                refreshJournal()
+                            }
+                        }) { Text(if (busy) "Входим…" else "Войти") }
+                        TextButton(enabled = !busy, onClick = { codeSentTo = null; error = "" }) { Text("Изменить email") }
+                    }
+                    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            }
+            if (savedEmail != null) item {
                 TextButton(enabled = !busy, onClick = { signingInAgain = false; codeSentTo = null; error = "" }) {
                     Text("Вернуться к записям")
                 }
             }
-            ErrorMessage()
         }
     }
 
     @Composable
-    private fun JournalScreen(state: JournalState, journal: Journal, sync: SyncState) {
-        val workout = journal.workout
-        val pending = state.queue.count { it.entry.state == UploadState.Pending }
-        val failed = state.queue.filter { it.entry.state == UploadState.Failed }
-        LazyColumn(
-            Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(horizontal = 20.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
-                Text("Дневник тренировок", style = MaterialTheme.typography.headlineLarge)
-                Text(journal.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row {
-                    TextButton(enabled = !busy && sync != SyncState.Syncing, onClick = {
-                        scheduleJournalSync(this@MainActivity)
-                    }) { Text("Обновить") }
-                    TextButton(enabled = !busy, onClick = {
-                        action("Не удалось выйти из аккаунта.") {
-                            app.sessionLock.withLock { io {
-                                app.api.signOut()
-                                app.store.deactivate()
-                            } }
+    private fun SignedInApp(cached: JournalState, journal: Journal, sync: SyncState) {
+        var tab by rememberSaveable(journal.accountId) { mutableStateOf(MainTab.Home) }
+        var page by rememberSaveable(journal.accountId) { mutableStateOf<DetailPage?>(null) }
+        var workoutId by rememberSaveable(journal.accountId) { mutableStateOf("") }
+        var coachWorkout by remember(journal.accountId) { mutableStateOf<Workout?>(null) }
+        var restDeadline by rememberSaveable(journal.workout?.id) { mutableLongStateOf(0L) }
+        var startKey by rememberSaveable(journal.accountId) { mutableStateOf("") }
+        var startTemplate by rememberSaveable(journal.accountId) { mutableStateOf("") }
+        val snackbar = remember { SnackbarHostState() }
+        LaunchedEffect(page, error) {
+            if (page == DetailPage.Library && error.isNotBlank()) snackbar.showSnackbar(error)
+        }
+        val transport: ScreenRequest = { path, payload -> ownedRequest(journal.accountId) { app.api.request(path, payload) } }
+        val closePage: () -> Unit = {
+            page = if (page == DetailPage.Coach) DetailPage.Workout else null
+            error = ""
+        }
+        val openWorkout: (String) -> Unit = { id -> workoutId = id; page = DetailPage.Workout }
+        val signIn = { signingInAgain = true; error = "" }
+        val startWorkout: (TrainingTemplate) -> Unit = { template ->
+            if (startTemplate != template.id || startKey.isBlank()) {
+                startTemplate = template.id
+                startKey = UUID.randomUUID().toString()
+            }
+            val body = JSONObject().put("action", "start").put("templateId", template.id).put("clientWorkoutId", startKey)
+            action("Не удалось начать тренировку.") {
+                sessionAction(journal.accountId, body)
+                startKey = ""
+                page = null
+                tab = MainTab.Training
+            }
+        }
+        BackHandler(enabled = page != null, onBack = closePage)
+
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets.safeDrawing,
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                if (page != null && page != DetailPage.Admin) {
+                    Surface(color = MaterialTheme.colorScheme.background) {
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = closePage) { Icon(Icons.AutoMirrored.Default.ArrowBack, "Назад") }
+                            Text("Vibe-trainer", style = MaterialTheme.typography.titleMedium)
                         }
-                    }) { Text("Выйти") }
-                }
-                when {
-                    sync == SyncState.SignIn -> TextButton(onClick = { signingInAgain = true }) { Text("Войти для синхронизации") }
-                    sync == SyncState.Syncing -> Text("Синхронизация…")
-                    pending > 0 -> Text("На телефоне сохранено подходов: $pending. Они отправятся при подключении к сети и входе в этот аккаунт.")
-                    sync == SyncState.WaitingForNetwork -> Text("Связь с сервером недоступна")
-                }
-                if (failed.isNotEmpty()) {
-                    Text("Сервер не принял эти подходы. Записи сохранены на телефоне.", color = MaterialTheme.colorScheme.error)
-                    failed.forEach { Text("${it.exerciseName} · ${formatWeight(it.entry.weight)} кг × ${it.entry.reps}") }
-                }
-                ErrorMessage()
-            }
-            if (workout == null) {
-                item {
-                    Text("Нет активной тренировки", style = MaterialTheme.typography.titleLarge)
-                    Text("Начните тренировку на сайте и нажмите «Обновить». После загрузки упражнения доступны без интернета.")
-                    TextButton(onClick = { openSite("/dashboard") }) { Text("Открыть Fitness AI") }
-                }
-            } else {
-                item { Text(workout.name, style = MaterialTheme.typography.headlineSmall) }
-                items(workout.exercises, key = { it.id }) { exercise ->
-                    key(workout.id, exercise.id) { ExerciseCard(state, journal, workout, exercise) }
-                }
-                item {
-                    TextButton(enabled = pending == 0, onClick = { openSite("/workouts/${workout.id}") }) {
-                        Text("Открыть тренировку на сайте")
                     }
                 }
-            }
-            if (journal.recent.isNotEmpty()) {
-                item { Text("История", style = MaterialTheme.typography.headlineSmall) }
-                items(journal.recent, key = { it.id }) { recent ->
-                    Column(Modifier.fillMaxWidth()) {
-                        Text(recent.name, style = MaterialTheme.typography.titleMedium)
-                        Text("${formatDate(recent.startedAt)} · Подходов: ${recent.setCount}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            },
+            bottomBar = {
+                if (page == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
+                    MainTab.entries.forEach { entry ->
+                        NavigationBarItem(
+                            selected = tab == entry, onClick = { tab = entry; error = "" },
+                            icon = { Icon(entry.icon, null) }, label = { Text(entry.label) },
+                        )
+                    }
+                }
+            },
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding).imePadding()) {
+                when (page) {
+                    DetailPage.Admin -> if (journal.isAdmin) AdminScreen(transport, closePage) else VibeList {
+                        item {
+                            VibeHeading("Админка", "Доступ закрыт.")
+                            TextButton(onClick = closePage) { Text("Назад") }
+                        }
+                    }
+                    DetailPage.Catalog, DetailPage.Template -> CatalogScreen(journal.accountId, page == DetailPage.Template, transport) {
+                        refreshJournal()
+                        tab = MainTab.Training
+                        closePage()
+                    }
+                    DetailPage.Wallet -> WalletScreen(transport, resumeCount, ::openExternal)
+                    DetailPage.Formats -> FormatsScreen(transport, journal.accountId, journal.weightUnit)
+                    DetailPage.Library -> LibraryScreen(transport, startWorkout, busy)
+                    DetailPage.Schedule -> CompanionScreen("schedule", transport)
+                    DetailPage.Friends -> CompanionScreen("friends", transport)
+                    DetailPage.Notes -> CompanionScreen("notes", transport)
+                    DetailPage.Settings -> ProfileSettings(journal.accountId, transport) { refreshJournal(); closePage() }
+                    DetailPage.Workout, DetailPage.Coach -> {
+                        val selected = coachWorkout
+                        if (page == DetailPage.Coach && selected != null) CoachScreen(selected, transport,
+                            onMessage = { body -> ownedRequest(journal.accountId) { app.api.coach(body) } },
+                            onVideo = { workout, exercise, request, bytes ->
+                                ownedRequest(journal.accountId) { app.api.videoTechnique(workout, exercise, request, bytes) }
+                            },
+                        ) else WorkoutDetails(workoutId, journal.weightUnit, transport) { workout -> coachWorkout = workout; page = DetailPage.Coach }
+                    }
+                    null -> when (tab) {
+                        MainTab.Home -> HomeScreen(journal, { tab = MainTab.Training }, { tab = MainTab.Progress },
+                            { page = DetailPage.Catalog }, openWorkout)
+                        MainTab.Progress -> ProgressScreen(transport)
+                        MainTab.Profile -> Profile(journal, sync, signIn, ::refreshJournal, { page = it })
+                        MainTab.Training -> TrainingScreen(
+                            cached, journal, sync, busy, error, restDeadline, { restDeadline = 0 }, ::refreshJournal, signIn,
+                            onStart = startWorkout,
+                            onFinish = { workout -> action("Не удалось завершить тренировку.") {
+                                sessionAction(journal.accountId, JSONObject().put("action", "finish").put("workoutId", workout.id))
+                                openWorkout(workout.id)
+                            } },
+                            onCancel = { workout -> action("Не удалось отменить тренировку.") {
+                                sessionAction(journal.accountId, JSONObject().put("action", "cancel").put("workoutId", workout.id))
+                            } },
+                            onRecord = { workout, exercise, weight, reps -> action("Не удалось сохранить подход.") {
+                                io { app.store.record(journal.accountId, workout.id, exercise.id, weight, reps) }
+                                if (exercise.restSeconds > 0) restDeadline = SystemClock.elapsedRealtime() + exercise.restSeconds * 1000L
+                                refreshJournal()
+                            } },
+                            onHistory = openWorkout, onCatalog = { page = DetailPage.Catalog }, onNewTemplate = { page = DetailPage.Template },
+                            onFormats = { page = DetailPage.Formats },
+                            onLibrary = { page = DetailPage.Library },
+                        )
                     }
                 }
             }
@@ -230,58 +307,61 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun ExerciseCard(state: JournalState, journal: Journal, workout: Workout, exercise: Exercise) {
-        var weight by remember { mutableStateOf("") }
-        var reps by remember { mutableStateOf("") }
-        val enteredWeight = weight.replace(',', '.').toDoubleOrNull()?.takeIf { it in 0.0..1000.0 }
-        val enteredReps = reps.toIntOrNull()?.takeIf { it in 1..100 }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(exercise.name, style = MaterialTheme.typography.titleLarge)
-                entryRows(state.entries(workout, exercise))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SetField(weight, { weight = it }, "Вес, кг", KeyboardType.Decimal)
-                    SetField(reps, { reps = it }, "Повторы", KeyboardType.Number)
+    private fun Profile(journal: Journal, sync: SyncState, onSignIn: () -> Unit, onRefresh: () -> Unit, onOpen: (DetailPage) -> Unit) {
+        VibeList {
+            item { VibeHeading("Профиль") }
+            item {
+                VibeCard {
+                    Text(journal.displayName.ifBlank { journal.email }, style = MaterialTheme.typography.titleLarge)
+                    if (journal.displayName.isNotBlank()) Text(journal.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SyncStatus(sync, state.value?.queue?.count { it.entry.state == UploadState.Pending } ?: 0, onSignIn)
+                    TextButton(onClick = onRefresh, enabled = !busy && sync != SyncState.Syncing) { Text("Синхронизировать") }
                 }
-                Button(enabled = !busy && enteredWeight != null && enteredReps != null, onClick = {
-                    if (enteredWeight == null || enteredReps == null) return@Button
-                    action("Не удалось сохранить подход. Обновите тренировку и попробуйте снова.") {
-                        io { app.store.record(journal.accountId, workout.id, exercise.id, enteredWeight, enteredReps) }
-                        scheduleJournalSync(this@MainActivity)
+            }
+            item { SettingsRow("Настройки профиля", Icons.Default.Settings) { onOpen(DetailPage.Settings) } }
+            item { SettingsRow("Расписание", Icons.Default.DateRange) { onOpen(DetailPage.Schedule) } }
+            item { SettingsRow("Друзья", Icons.Default.Person) { onOpen(DetailPage.Friends) } }
+            item { SettingsRow("Заметки", Icons.Default.List) { onOpen(DetailPage.Notes) } }
+            item { SettingsRow("Подписка и баланс", Icons.Default.Favorite) { onOpen(DetailPage.Wallet) } }
+            if (journal.isAdmin) item { SettingsRow("Админка", Icons.Default.Settings) { onOpen(DetailPage.Admin) } }
+            item {
+                TextButton(enabled = !busy, onClick = {
+                    action("Не удалось выйти из аккаунта.") {
+                        app.sessionLock.withLock { io { app.api.signOut(); app.store.deactivate() } }
                     }
-                }) { Text("Записать подход") }
+                }) { Text("Выйти") }
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }
         }
     }
 
-    @Composable
-    private fun entryRows(entries: List<SetEntry>) {
-        for ((index, entry) in entries.withIndex()) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("${index + 1}. ${formatWeight(entry.weight)} кг × ${entry.reps}")
-                val label = when (entry.state) {
-                    UploadState.Pending -> "На телефоне"
-                    UploadState.Sent -> ""
-                    UploadState.Failed -> "Не отправлен"
-                }
-                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    private suspend fun sessionAction(accountId: String, body: JSONObject) {
+        ownedRequest(accountId) {
+            val workoutId = body.optString("workoutId")
+            if (workoutId.isNotBlank() && app.store.state().queue.any { it.workoutId == workoutId && it.entry.state == UploadState.Pending }) {
+                throw HttpFailure(409, "pending_sets")
+            }
+            app.api.request("/api/mobile/v1/journal/session", body.put("accountId", accountId))
+            val updated = app.api.snapshot()
+            if (updated.optString("accountId") != accountId) throw HttpFailure(409, "account_changed")
+            app.store.saveSnapshot(updated)
+        }
+        refreshJournal()
+    }
+
+    private suspend fun <T> ownedRequest(accountId: String, run: () -> T): T = app.sessionLock.withLock {
+        io {
+            if (app.store.accountId() != accountId) throw HttpFailure(409, "account_changed")
+            try {
+                run()
+            } catch (failure: HttpFailure) {
+                if (failure.code == 401 || failure.reason == "account_changed") app.syncState.value = SyncState.SignIn
+                throw failure
             }
         }
-        if (entries.isNotEmpty()) HorizontalDivider()
     }
 
-    @Composable
-    private fun RowScope.SetField(value: String, change: (String) -> Unit, label: String, type: KeyboardType) {
-        OutlinedTextField(
-            value, { change(it.take(8)) }, label = { Text(label) }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = type), modifier = Modifier.weight(1f),
-        )
-    }
-
-    @Composable
-    private fun ErrorMessage() {
-        if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
-    }
+    private fun refreshJournal() = scheduleJournalSync(this)
 
     private fun action(failure: String, run: suspend () -> Unit) {
         if (busy) return
@@ -292,31 +372,30 @@ class MainActivity : ComponentActivity() {
                 run()
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                error = failure
+            } catch (requestFailure: Exception) {
+                error = when ((requestFailure as? HttpFailure)?.reason) {
+                    "active_workout_exists" -> "Уже есть активная тренировка. Обновите дневник, чтобы продолжить её."
+                    "pending_sets" -> "Дождитесь отправки подходов."
+                    else -> failure
+                }
             } finally {
                 busy = false
             }
         }
     }
 
-    private fun openSite(path: String) {
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("$SITE$path")))
+    private fun openExternal(url: String) {
+        val link = Uri.parse(url)
+        require(link.scheme == "https" && !link.host.isNullOrBlank())
+        startActivity(Intent(Intent.ACTION_VIEW, link))
     }
-}
-
-@Composable
-private fun Shell(content: @Composable () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) { content() }
 }
 
 private suspend fun <T> io(run: () -> T): T = withContext(Dispatchers.IO) { run() }
 
-private fun formatWeight(weight: Double): String = NumberFormat.getNumberInstance(Locale.forLanguageTag("ru"))
-    .apply { maximumFractionDigits = 3 }.format(weight)
+private enum class MainTab(val label: String, val icon: ImageVector) {
+    Home("Главная", Icons.Default.Home), Training("Тренировки", Icons.Default.List),
+    Progress("Прогресс", Icons.Default.Favorite), Profile("Профиль", Icons.Default.Person),
+}
 
-private fun formatDate(date: String): String = Instant.parse(date).atZone(ZoneId.systemDefault())
-    .format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.forLanguageTag("ru")))
+private enum class DetailPage { Workout, Coach, Catalog, Template, Wallet, Admin, Formats, Library, Schedule, Friends, Notes, Settings }
