@@ -14,6 +14,7 @@ type SetTypeLiteral = (typeof schema.setType.enumValues)[number];
 
 export type ActiveWorkoutSet = {
   id: string;
+  clientSetId?: string | null;
   setIndex: number;
   setType: SetTypeLiteral;
   weightKg: number;
@@ -291,6 +292,7 @@ export type RecordSetInput = {
    *  реплее буферизованной записи — partial-unique делает повтор no-op
    *  (онлайн-путь не передаёт → NULL → обычная вставка). */
   clientSetId?: string | null;
+  completedAt?: Date;
 };
 
 export async function recordSet(
@@ -334,7 +336,7 @@ export async function recordSet(
         rpe: input.rpe ?? null,
         restSeconds: input.restSeconds ?? null,
         clientSetId: input.clientSetId ?? null,
-        completedAt: new Date(),
+        completedAt: input.completedAt ?? new Date(),
       })
       // Реплей одного и того же офлайн-подхода (тот же clientSetId) — no-op:
       // дренаж outbox идемпотентен (H15.4). Онлайн-путь даёт clientSetId=null,
