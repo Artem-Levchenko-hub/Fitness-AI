@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -42,8 +43,24 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 
+internal data class CoachWorkout(val id: String, val name: String, val exercises: List<Exercise>) {
+    companion object {
+        val Saver = listSaver<CoachWorkout?, String>(
+            save = { workout ->
+                if (workout == null) emptyList() else listOf(workout.id, workout.name) +
+                    workout.exercises.flatMap { listOf(it.id, it.name) }
+            },
+            restore = { items ->
+                CoachWorkout(items[0], items[1], items.drop(2).chunked(2).map { (id, name) ->
+                    Exercise(id, name, emptyList())
+                })
+            },
+        )
+    }
+}
+
 @Composable
-internal fun WorkoutDetails(workoutId: String, weightUnit: String, request: ScreenRequest, onCoach: (Workout) -> Unit) {
+internal fun WorkoutDetails(workoutId: String, weightUnit: String, request: ScreenRequest, onCoach: (CoachWorkout) -> Unit) {
     var refresh by remember { mutableIntStateOf(0) }
     val result = loadScreenJson("/api/mobile/v1/journal/workouts/$workoutId", refresh, request)
     val workout = result.data?.optJSONObject("workout")?.let(Workout::fromJson)
@@ -54,7 +71,11 @@ internal fun WorkoutDetails(workoutId: String, weightUnit: String, request: Scre
         } else {
             item { VibeHeading(workout.name, formatWorkoutDate(workout.startedAt).ifBlank { null }) }
             if (workout.status == "completed") {
-                item { Button(onClick = { onCoach(workout) }) { Text("Разбор и AI-коуч") } }
+                item {
+                    Button(onClick = { onCoach(CoachWorkout(workout.id, workout.name, workout.exercises)) }) {
+                        Text("Разбор и AI-коуч")
+                    }
+                }
             }
             items(workout.exercises, key = { it.id }) { exercise ->
                 VibeCard {
@@ -69,7 +90,7 @@ internal fun WorkoutDetails(workoutId: String, weightUnit: String, request: Scre
 
 @Composable
 internal fun CoachScreen(
-    workout: Workout,
+    workout: CoachWorkout,
     request: ScreenRequest,
     onMessage: suspend (JSONObject) -> String,
     onVideo: suspend (String, String, String, ByteArray) -> JSONObject,
@@ -237,10 +258,11 @@ internal fun CoachScreen(
                         }
                     }
                 }
-                CoachPage.Video -> {
-                    if (data.optBoolean("videoAvailable")) item { VideoTechniquePanel(workout, onVideo) }
-                }
+                CoachPage.Video -> Unit
             }
+        }
+        if (selectedPage == CoachPage.Video && data?.optBoolean("videoAvailable") != false) {
+            item("video-technique") { VideoTechniquePanel(workout, onVideo, enabled = data != null) }
         }
     }
 }
@@ -270,7 +292,11 @@ private fun ReadableResponse(content: String) {
 }
 
 @Composable
-private fun VideoTechniquePanel(workout: Workout, onVideo: suspend (String, String, String, ByteArray) -> JSONObject) {
+private fun VideoTechniquePanel(
+    workout: CoachWorkout,
+    onVideo: suspend (String, String, String, ByteArray) -> JSONObject,
+    enabled: Boolean,
+) {
     val context = LocalContext.current
     val resolver = context.contentResolver
     val scope = rememberCoroutineScope()
@@ -312,16 +338,16 @@ private fun VideoTechniquePanel(workout: Workout, onVideo: suspend (String, Stri
         Text("Выберите один подход. MP4 до 7 МБ.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         workout.exercises.forEach { exercise ->
             if (exercise.id == exerciseId) FilledTonalButton(onClick = {}, enabled = false) { Text(exercise.name) }
-            else TextButton(enabled = !pending, onClick = {
+            else TextButton(enabled = enabled && !pending, onClick = {
                 exerciseId = exercise.id
                 requestId = UUID.randomUUID().toString()
                 analysis = ""
             }) { Text(exercise.name) }
         }
-        FilledTonalButton(enabled = !pending, onClick = {
+        FilledTonalButton(enabled = enabled && !pending, onClick = {
             picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
         }) { Text(if (uriText == null) "Выбрать видео" else "Выбрать другое видео") }
-        TextButton(enabled = !pending && capturePath == null, onClick = {
+        TextButton(enabled = enabled && !pending && capturePath == null, onClick = {
             val directory = File(context.cacheDir, "technique-clips")
             try {
                 directory.mkdirs()
@@ -338,7 +364,7 @@ private fun VideoTechniquePanel(workout: Workout, onVideo: suspend (String, Stri
         val selected = uriText?.let(Uri::parse)
         if (selected != null) {
             Text("Видео передаётся AITUNNEL и Alibaba для анализа.", style = MaterialTheme.typography.bodySmall)
-            Button(enabled = exerciseId.isNotBlank() && !pending, onClick = {
+            Button(enabled = enabled && exerciseId.isNotBlank() && !pending, onClick = {
                 pending = true
                 error = ""
                 analysis = ""

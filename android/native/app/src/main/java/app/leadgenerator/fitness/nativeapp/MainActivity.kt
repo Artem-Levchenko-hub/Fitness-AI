@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
         var tab by rememberSaveable(journal.accountId) { mutableStateOf(MainTab.Home) }
         var page by rememberSaveable(journal.accountId) { mutableStateOf<DetailPage?>(null) }
         var workoutId by rememberSaveable(journal.accountId) { mutableStateOf("") }
-        var coachWorkout by remember(journal.accountId) { mutableStateOf<Workout?>(null) }
+        var coachWorkout by rememberSaveable(journal.accountId, stateSaver = CoachWorkout.Saver) { mutableStateOf<CoachWorkout?>(null) }
         var restDeadline by rememberSaveable(journal.workout?.id) { mutableLongStateOf(0L) }
         var startKey by rememberSaveable(journal.accountId) { mutableStateOf("") }
         var startTemplate by rememberSaveable(journal.accountId) { mutableStateOf("") }
