@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-native-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   preview:
     runs-on: ubuntu-24.04
@@ -21,9 +25,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
-      - name: Install Android platform
-        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Check the runner's Android SDK
+        run: |
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt2"
       - name: Test and assemble preview APK
         working-directory: android/native
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug

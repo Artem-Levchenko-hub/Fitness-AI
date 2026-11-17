@@ -928,7 +928,10 @@ export async function getSharedAnalysis(token: string): Promise<{
   return row ?? null;
 }
 
-export async function getActiveWorkoutId(userId: string): Promise<string | null> {
+export async function getActiveWorkoutId(
+  userId: string,
+  options?: { includeStale?: boolean },
+): Promise<string | null> {
   const [row] = await db
     .select({ id: schema.workouts.id })
     .from(schema.workouts)
@@ -937,7 +940,7 @@ export async function getActiveWorkoutId(userId: string): Promise<string | null>
         eq(schema.workouts.userId, userId),
         eq(schema.workouts.status, "active"),
         // H2.2b: брошенная сессия старше окна не всплывает как resume-фантом.
-        gte(schema.workouts.startedAt, resumeCutoff(new Date())),
+        options?.includeStale ? undefined : gte(schema.workouts.startedAt, resumeCutoff(new Date())),
       ),
     )
     .orderBy(desc(schema.workouts.startedAt))

@@ -50,6 +50,7 @@ describe("mobile strength journal", () => {
       accountId: userId,
       workout: { id: workoutId, exercises: [{ id: workoutExerciseId, name: "Приседания" }] },
     });
+    expect(mocks.getActiveWorkoutId).toHaveBeenCalledWith(userId, { includeStale: true });
     expect(mocks.getActiveWorkoutForUser).toHaveBeenCalledWith(userId, workoutId);
   });
 

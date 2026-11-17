@@ -13,4 +13,4 @@
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-APK появится в `app/build/outputs/apk/debug/app-debug.apk`. Сборка Preview устанавливается рядом с выпущенным Vibe-trainer. Такой же APK доступен в артефактах GitHub Actions `Android native preview`.
+APK появится в `app/build/outputs/apk/debug/app-debug.apk`. Сборка Preview устанавливается рядом с выпущенным Vibe-trainer. APK из GitHub Actions `Android native preview` подписан отладочным ключом сборочного окружения. Перед удалением Preview дождитесь отправки записей.

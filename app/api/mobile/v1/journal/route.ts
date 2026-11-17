@@ -27,7 +27,7 @@ export async function GET() {
   if (!user) return json({ error: "sign_in_required" }, 401);
 
   const [workoutId, recent] = await Promise.all([
-    getActiveWorkoutId(user.id),
+    getActiveWorkoutId(user.id, { includeStale: true }),
     listRecentWorkouts(user.id),
   ]);
   const workout = workoutId ? await getActiveWorkoutForUser(user.id, workoutId) : null;
