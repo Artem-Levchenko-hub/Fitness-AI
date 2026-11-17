@@ -14,7 +14,6 @@ const setSchema = z.object({
   workoutExerciseId: z.uuid(),
   clientSetId: z.uuid(),
   completedAt: z.iso.datetime(),
-  setIndex: z.number().int().min(0).max(1000),
   weightKg: z.number().min(0).max(1000),
   reps: z.number().int().min(1).max(100),
 });
@@ -67,7 +66,7 @@ export async function POST(request: Request) {
   if (accountId !== user.id) return json({ error: "account_changed" }, 409);
 
   const workout = await getActiveWorkoutForUser(user.id, workoutId);
-  if (!workout?.exercises.some(({ id }) => id === set.workoutExerciseId)) {
+  if (workout?.status === "cancelled" || !workout?.exercises.some(({ id }) => id === set.workoutExerciseId)) {
     return json({ error: "exercise_not_found" }, 404);
   }
 

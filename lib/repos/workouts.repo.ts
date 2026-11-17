@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, max, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
@@ -282,7 +282,7 @@ export async function getActiveWorkoutForUser(
 
 export type RecordSetInput = {
   workoutExerciseId: string;
-  setIndex: number;
+  setIndex?: number;
   weightKg: number;
   reps: number;
   rpe?: number | null;
@@ -299,8 +299,8 @@ export async function recordSet(
   userId: string,
   workoutId: string,
   input: RecordSetInput,
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<number> {
+  return db.transaction(async (tx) => {
     const [w] = await tx
       .select({ id: schema.workouts.id })
       .from(schema.workouts)
@@ -322,14 +322,23 @@ export async function recordSet(
           eq(schema.workoutExercises.workoutId, workoutId),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!we) throw new Error("Exercise not part of this workout");
+
+    const [order] = await tx.select({
+      last: max(schema.workoutSets.setIndex),
+      occupied: sql<boolean>`coalesce(bool_or(${schema.workoutSets.setIndex} = ${input.setIndex ?? -1}), false)`,
+    }).from(schema.workoutSets).where(eq(schema.workoutSets.workoutExerciseId, we.id));
+    const setIndex = input.setIndex === undefined || order?.occupied
+      ? (order?.last ?? -1) + 1
+      : input.setIndex;
 
     await tx
       .insert(schema.workoutSets)
       .values({
         workoutExerciseId: input.workoutExerciseId,
-        setIndex: input.setIndex,
+        setIndex,
         setType: input.setType ?? "working",
         weightKg: input.weightKg,
         reps: input.reps,
@@ -345,6 +354,7 @@ export async function recordSet(
         target: schema.workoutSets.clientSetId,
         where: sql`${schema.workoutSets.clientSetId} is not null`,
       });
+    return setIndex;
   });
 }
 

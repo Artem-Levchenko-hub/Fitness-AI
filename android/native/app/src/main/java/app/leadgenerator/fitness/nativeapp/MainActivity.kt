@@ -59,6 +59,7 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     private val app get() = application as JournalApplication
     private val state = MutableStateFlow<JournalState?>(null)
+    private val bootstrapping = MutableStateFlow(false)
     private var busy by mutableStateOf(false)
     private var error by mutableStateOf("")
     private var codeSentTo by mutableStateOf<String?>(null)
@@ -68,7 +69,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lifecycleScope.launch {
-            app.store.changes.collect { state.value = withContext(Dispatchers.IO) { app.store.state() } }
+            app.store.changes.collect {
+                val (journalState, awaitingJournal) = io {
+                    val cached = app.store.state()
+                    cached to (cached.journal == null && app.api.hasSession())
+                }
+                bootstrapping.value = awaitingJournal
+                state.value = journalState
+            }
         }
         scheduleJournalSync(this)
         setContent {
@@ -80,9 +88,14 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) {
                     val current by state.collectAsState()
                     val sync by app.syncState.collectAsState()
+                    val awaitingJournal by bootstrapping.collectAsState()
                     val journal = current?.journal
                     when {
                         current == null -> Shell { Text("Открываем дневник…") }
+                        journal == null && awaitingJournal && sync != SyncState.SignIn -> Shell {
+                            Text("Загружаем дневник. Для первой загрузки нужна сеть.")
+                            TextButton(onClick = { scheduleJournalSync(this@MainActivity) }) { Text("Повторить загрузку") }
+                        }
                         journal == null || signingInAgain -> SignIn(journal?.email)
                         else -> JournalScreen(requireNotNull(current), journal, sync)
                     }
@@ -119,7 +132,10 @@ class MainActivity : ComponentActivity() {
                 )
                 Button(enabled = !busy && code.length == 6, onClick = {
                     action("Не удалось войти. Проверьте код и соединение.") {
-                        app.sessionLock.withLock { io { app.store.saveSnapshot(app.api.verifyCode(recipient, code), activate = true) } }
+                        app.sessionLock.withLock { io {
+                            app.api.verifyCode(recipient, code)
+                            app.store.deactivate()
+                        } }
                         codeSentTo = null
                         signingInAgain = false
                         app.syncState.value = SyncState.Idle
@@ -154,7 +170,7 @@ class MainActivity : ComponentActivity() {
                     TextButton(enabled = !busy && sync != SyncState.Syncing, onClick = {
                         scheduleJournalSync(this@MainActivity)
                     }) { Text("Обновить") }
-                    TextButton(enabled = !busy && pending == 0 && failed.isEmpty(), onClick = {
+                    TextButton(enabled = !busy, onClick = {
                         action("Не удалось выйти из аккаунта.") {
                             app.sessionLock.withLock { io {
                                 app.api.signOut()
@@ -166,7 +182,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     sync == SyncState.SignIn -> TextButton(onClick = { signingInAgain = true }) { Text("Войти для синхронизации") }
                     sync == SyncState.Syncing -> Text("Синхронизация…")
-                    pending > 0 -> Text("Сохранено на телефоне. Ожидают отправки: $pending")
+                    pending > 0 -> Text("На телефоне сохранено подходов: $pending. Они отправятся при подключении к сети и входе в этот аккаунт.")
                     sync == SyncState.WaitingForNetwork -> Text("Связь с сервером недоступна")
                 }
                 if (failed.isNotEmpty()) {
@@ -187,7 +203,7 @@ class MainActivity : ComponentActivity() {
                     key(workout.id, exercise.id) { ExerciseCard(state, journal, workout, exercise) }
                 }
                 item {
-                    TextButton(enabled = pending == 0 && failed.isEmpty(), onClick = { openSite("/workouts/${workout.id}") }) {
+                    TextButton(enabled = pending == 0, onClick = { openSite("/workouts/${workout.id}") }) {
                         Text("Открыть тренировку на сайте")
                     }
                 }

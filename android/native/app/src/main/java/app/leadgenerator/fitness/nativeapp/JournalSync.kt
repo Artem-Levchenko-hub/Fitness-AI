@@ -48,9 +48,14 @@ class JournalSyncWorker(context: Context, parameters: WorkerParameters) : Corout
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         app.sessionLock.withLock {
-            val accountId = app.store.accountId() ?: return@withLock Result.success()
+            val savedAccountId = app.store.accountId()
+            if (savedAccountId == null && !app.api.hasSession()) return@withLock Result.success()
             app.syncState.value = SyncState.Syncing
             try {
+                val accountId = savedAccountId ?: app.api.snapshot().let { snapshot ->
+                    app.store.saveSnapshot(snapshot, activate = true)
+                    snapshot.getString("accountId")
+                }
                 sendQueuedSets(app.store.state().queue, app.api::upload, app.store::mark)
                 val snapshot = app.api.snapshot()
                 if (snapshot.getString("accountId") != accountId) throw HttpFailure(409)

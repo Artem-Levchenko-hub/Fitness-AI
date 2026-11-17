@@ -269,12 +269,9 @@ export function createCoachTools(userId: string, currentWorkoutId: string) {
         }
         const exercise = workout.exercises.find((item) => item.id === parsed.workoutExerciseId);
         if (!exercise) return { ok: false, error: "Упражнение не входит в эту тренировку" };
-        const nextIndex =
-          parsed.setIndex ??
-          (exercise.sets.reduce((max, set) => Math.max(max, set.setIndex), -1) + 1);
-        await recordSet(userId, parsed.workoutId, {
+        const nextIndex = await recordSet(userId, parsed.workoutId, {
           workoutExerciseId: parsed.workoutExerciseId,
-          setIndex: nextIndex,
+          setIndex: parsed.setIndex,
           weightKg: parsed.weightKg,
           reps: parsed.reps,
           rpe: parsed.rpe ?? null,

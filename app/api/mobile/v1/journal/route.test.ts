@@ -18,7 +18,7 @@ const workoutId = "be4591be-c585-4ded-8b34-fd1e463bcae3";
 const workoutExerciseId = "8a8d6cc9-fb2d-4baf-a19d-ec6cee8d6b33";
 const clientSetId = "2b086e22-ab4f-4dc4-a04b-57bb54114430";
 const completedAt = "2026-11-17T10:00:00.000Z";
-const set = { workoutId, workoutExerciseId, clientSetId, completedAt, setIndex: 2, weightKg: 42.5, reps: 8 };
+const set = { workoutId, workoutExerciseId, clientSetId, completedAt, weightKg: 42.5, reps: 8 };
 
 function submit(data: object, accountId = userId) {
   return POST(new Request("https://fitnesss.online/api/mobile/v1/journal", {
@@ -75,6 +75,15 @@ describe("mobile strength journal", () => {
 
   it("keeps the queue unsent if the workout was deleted", async () => {
     mocks.getActiveWorkoutForUser.mockResolvedValue(null);
+    expect((await submit(set)).status).toBe(404);
+    expect(mocks.recordSet).not.toHaveBeenCalled();
+  });
+
+  it("does not acknowledge a set for a cancelled workout", async () => {
+    mocks.getActiveWorkoutForUser.mockResolvedValue({
+      status: "cancelled",
+      exercises: [{ id: workoutExerciseId }],
+    });
     expect((await submit(set)).status).toBe(404);
     expect(mocks.recordSet).not.toHaveBeenCalled();
   });

@@ -59,7 +59,6 @@ internal data class QueuedSet(
         .put("workoutId", workoutId)
         .put("workoutExerciseId", exerciseId)
         .put("clientSetId", entry.id)
-        .put("setIndex", entry.index)
         .put("weightKg", entry.weight)
         .put("reps", entry.reps)
         .put("completedAt", completedAt)

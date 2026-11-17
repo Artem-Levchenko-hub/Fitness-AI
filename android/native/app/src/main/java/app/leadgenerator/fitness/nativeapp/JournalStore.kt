@@ -79,7 +79,6 @@ internal class JournalStore(context: Context) : SQLiteOpenHelper(context, "journ
         val workout = requireNotNull(journal.workout).also { require(it.id == workoutId) }
         val exercise = workout.exercises.first { it.id == exerciseId }
         val index = (snapshot.entries(workout, exercise).maxOfOrNull { it.index } ?: -1) + 1
-        require(index <= 1000)
         val entry = QueuedSet(accountId, workoutId, exercise.id, exercise.name, SetEntry(
             UUID.randomUUID().toString(), index, weight, reps, UploadState.Pending,
         ))

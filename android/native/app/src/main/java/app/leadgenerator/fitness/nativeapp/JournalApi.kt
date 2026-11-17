@@ -37,7 +37,7 @@ internal class JournalApi(context: Context) {
 
     fun snapshot(): JSONObject = authenticated { json(Request.Builder().url(url(JOURNAL_PATH)).build()) }
 
-    fun upload(set: QueuedSet) = authenticated {
+    fun upload(set: QueuedSet): Unit = authenticated {
         val request = Request.Builder().url(url(JOURNAL_PATH))
             .post(set.payload().toString().toRequestBody(JSON_MEDIA_TYPE)).build()
         val acknowledgement = json(request)
@@ -64,7 +64,7 @@ internal class JournalApi(context: Context) {
         }
     }
 
-    fun verifyCode(email: String, code: String): JSONObject {
+    fun verifyCode(email: String, code: String) {
         val address = url("/api/auth/callback/resend").newBuilder()
             .addQueryParameter("email", email).addQueryParameter("token", code)
             .addQueryParameter("callbackUrl", "$SITE/dashboard").build()
@@ -74,8 +74,9 @@ internal class JournalApi(context: Context) {
                 throw HttpFailure(401)
             }
         }
-        return snapshot()
     }
+
+    fun hasSession(): Boolean = session.hasSession()
 
     fun signOut() {
         try {
@@ -155,6 +156,9 @@ private class EncryptedSessionJar(context: Context, private val origin: HttpUrl)
 
     @Synchronized
     fun hasRefreshCookie(): Boolean = loadForRequest(origin).any { it.name == "fitness-refresh-token" }
+
+    @Synchronized
+    fun hasSession(): Boolean = loadForRequest(origin).any { isPersistent(it.name) }
 
     @Synchronized
     fun clear() {
