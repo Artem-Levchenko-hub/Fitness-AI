@@ -193,6 +193,7 @@ class MainActivity : ComponentActivity() {
         var page by rememberSaveable(journal.accountId) { mutableStateOf<DetailPage?>(null) }
         var workoutId by rememberSaveable(journal.accountId) { mutableStateOf("") }
         var coachWorkout by rememberSaveable(journal.accountId, stateSaver = CoachWorkout.Saver) { mutableStateOf<CoachWorkout?>(null) }
+        var videoBusy by remember { mutableStateOf(false) }
         var restDeadline by rememberSaveable(journal.workout?.id) { mutableLongStateOf(0L) }
         var startKey by rememberSaveable(journal.accountId) { mutableStateOf("") }
         var startTemplate by rememberSaveable(journal.accountId) { mutableStateOf("") }
@@ -202,8 +203,10 @@ class MainActivity : ComponentActivity() {
         }
         val transport: ScreenRequest = { path, payload -> ownedRequest(journal.accountId) { app.api.request(path, payload) } }
         val closePage: () -> Unit = {
-            page = if (page == DetailPage.Coach) DetailPage.Workout else null
-            error = ""
+            if (!videoBusy) {
+                page = if (page == DetailPage.Coach) DetailPage.Workout else null
+                error = ""
+            }
         }
         val openWorkout: (String) -> Unit = { id -> workoutId = id; page = DetailPage.Workout }
         val signIn = { signingInAgain = true; error = "" }
@@ -230,7 +233,7 @@ class MainActivity : ComponentActivity() {
                 if (page != null && page != DetailPage.Admin) {
                     Surface(color = MaterialTheme.colorScheme.background) {
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = closePage) { Icon(Icons.AutoMirrored.Default.ArrowBack, "Назад") }
+                            IconButton(onClick = closePage, enabled = !videoBusy) { Icon(Icons.AutoMirrored.Default.ArrowBack, "Назад") }
                             Text("Vibe-trainer", style = MaterialTheme.typography.titleMedium)
                         }
                     }
@@ -274,6 +277,7 @@ class MainActivity : ComponentActivity() {
                             onVideo = { workout, exercise, request, bytes ->
                                 ownedRequest(journal.accountId) { app.api.videoTechnique(workout, exercise, request, bytes) }
                             },
+                            videoBusy = videoBusy, onVideoBusy = { videoBusy = it },
                         ) else WorkoutDetails(workoutId, journal.weightUnit, transport) { workout -> coachWorkout = workout; page = DetailPage.Coach }
                     }
                     null -> when (tab) {

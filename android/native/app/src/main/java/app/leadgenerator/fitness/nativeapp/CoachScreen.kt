@@ -94,6 +94,8 @@ internal fun CoachScreen(
     request: ScreenRequest,
     onMessage: suspend (JSONObject) -> String,
     onVideo: suspend (String, String, String, ByteArray) -> JSONObject,
+    videoBusy: Boolean,
+    onVideoBusy: (Boolean) -> Unit,
 ) {
     var refresh by remember { mutableIntStateOf(0) }
     val result = loadScreenJson("/api/mobile/v1/coach?workoutId=${workout.id}", refresh, request)
@@ -108,6 +110,8 @@ internal fun CoachScreen(
     var error by remember { mutableStateOf("") }
     var localReply by remember { mutableStateOf<Pair<String, String>?>(null) }
     var savedJobAnalysis by remember { mutableStateOf<String?>(null) }
+    var videoAnalysis by rememberSaveable { mutableStateOf("") }
+    var videoError by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(jobId, poll) {
@@ -151,8 +155,8 @@ internal fun CoachScreen(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     tabs.forEach { tab ->
                         val select = { selectedPage = tab; error = "" }
-                        if (selectedPage == tab) FilledTonalButton(onClick = select) { Text(tab.label) }
-                        else TextButton(onClick = select) { Text(tab.label) }
+                        if (selectedPage == tab) FilledTonalButton(onClick = select, enabled = !videoBusy) { Text(tab.label) }
+                        else TextButton(onClick = select, enabled = !videoBusy) { Text(tab.label) }
                     }
                 }
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
@@ -262,7 +266,30 @@ internal fun CoachScreen(
             }
         }
         if (selectedPage == CoachPage.Video && data?.optBoolean("videoAvailable") != false) {
-            item("video-technique") { VideoTechniquePanel(workout, onVideo, enabled = data != null) }
+            item("video-technique") {
+                VideoTechniquePanel(workout, enabled = data != null, pending = videoBusy,
+                    analysis = videoAnalysis, error = videoError, onResult = { analysis, error ->
+                        videoAnalysis = analysis
+                        videoError = error
+                    }, onSubmit = { exerciseId, requestId, readVideo, removeClip ->
+                        onVideoBusy(true)
+                        videoError = ""
+                        videoAnalysis = ""
+                        scope.launch {
+                            try {
+                                val bytes = withContext(Dispatchers.IO) { readVideo() }
+                                videoAnalysis = onVideo(workout.id, exerciseId, requestId, bytes).getString("analysis")
+                                removeClip()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Exception) {
+                                videoError = aiError(failure, "Не удалось разобрать видео. Выберите короткий MP4 и повторите.")
+                            } finally {
+                                onVideoBusy(false)
+                            }
+                        }
+                    })
+            }
         }
     }
 }
@@ -294,28 +321,27 @@ private fun ReadableResponse(content: String) {
 @Composable
 private fun VideoTechniquePanel(
     workout: CoachWorkout,
-    onVideo: suspend (String, String, String, ByteArray) -> JSONObject,
     enabled: Boolean,
+    pending: Boolean,
+    analysis: String,
+    error: String,
+    onResult: (String, String) -> Unit,
+    onSubmit: (String, String, () -> ByteArray, () -> Unit) -> Unit,
 ) {
     val context = LocalContext.current
     val resolver = context.contentResolver
-    val scope = rememberCoroutineScope()
     var exerciseId by rememberSaveable { mutableStateOf(workout.exercises.firstOrNull()?.id.orEmpty()) }
     var uriText by rememberSaveable { mutableStateOf<String?>(null) }
     var capturePath by rememberSaveable { mutableStateOf<String?>(null) }
     var ownClip by rememberSaveable { mutableStateOf<String?>(null) }
     var requestId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
-    var pending by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf("") }
-    var analysis by remember { mutableStateOf("") }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { selected ->
         if (selected != null) {
             ownClip?.let { File(it).delete() }
             ownClip = null
             uriText = selected.toString()
             requestId = UUID.randomUUID().toString()
-            analysis = ""
-            error = ""
+            onResult("", "")
         }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { recorded ->
@@ -326,8 +352,7 @@ private fun VideoTechniquePanel(
             ownClip = file.path
             uriText = clipUri(context, file).toString()
             requestId = UUID.randomUUID().toString()
-            analysis = ""
-            error = ""
+            onResult("", "")
         } else {
             file?.delete()
         }
@@ -341,7 +366,7 @@ private fun VideoTechniquePanel(
             else TextButton(enabled = enabled && !pending, onClick = {
                 exerciseId = exercise.id
                 requestId = UUID.randomUUID().toString()
-                analysis = ""
+                onResult("", "")
             }) { Text(exercise.name) }
         }
         FilledTonalButton(enabled = enabled && !pending, onClick = {
@@ -358,30 +383,17 @@ private fun VideoTechniquePanel(
             } catch (_: Exception) {
                 capturePath?.let { File(it).delete() }
                 capturePath = null
-                error = "Не удалось открыть камеру. Можно выбрать готовый ролик."
+                onResult(analysis, "Не удалось открыть камеру. Можно выбрать готовый ролик.")
             }
         }) { Text("Снять подход") }
         val selected = uriText?.let(Uri::parse)
         if (selected != null) {
             Text("Видео передаётся AITUNNEL и Alibaba для анализа.", style = MaterialTheme.typography.bodySmall)
             Button(enabled = enabled && exerciseId.isNotBlank() && !pending, onClick = {
-                pending = true
-                error = ""
-                analysis = ""
-                scope.launch {
-                    try {
-                        val bytes = withContext(Dispatchers.IO) { readClip(resolver, selected) }
-                        analysis = onVideo(workout.id, exerciseId, requestId, bytes).getString("analysis")
-                        ownClip?.let { File(it).delete() }
-                        ownClip = null
-                        uriText = null
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (failure: Exception) {
-                        error = aiError(failure, "Не удалось разобрать видео. Выберите короткий MP4 и повторите.")
-                    } finally {
-                        pending = false
-                    }
+                onSubmit(exerciseId, requestId, { readClip(resolver, selected) }) {
+                    ownClip?.let { File(it).delete() }
+                    ownClip = null
+                    uriText = null
                 }
             }) { Text(if (pending) "Разбираем видео…" else "Разобрать технику") }
         }
