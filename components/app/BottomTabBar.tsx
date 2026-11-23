@@ -1,33 +1,45 @@
 "use client";
 
-import { Activity, Dumbbell, Home, User, Wallet } from "lucide-react";
+import { Activity, ChartNoAxesCombined, Home, User } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/dashboard", icon: Home, label: "Главная" },
-  { href: "/workouts", icon: Activity, label: "Тренировки" },
-  { href: "/exercises", icon: Dumbbell, label: "Упражнения" },
-  { href: "/billing", icon: Wallet, label: "Баланс" },
+  {
+    href: "/workouts", icon: Activity, label: "Тренировки",
+    relatedPaths: ["/create", "/templates", "/programs", "/library", "/circuits", "/cardio", "/exercises"],
+  },
+  { href: "/stats", icon: ChartNoAxesCombined, label: "Прогресс", relatedPaths: ["/body", "/sleep", "/nutrition"] },
   {
     href: "/profile",
     icon: User,
     label: "Профиль",
-    relatedPaths: ["/records"],
+    relatedPaths: ["/records", "/settings", "/billing", "/friends", "/admin", "/schedule", "/notes"],
   },
 ] as const;
 
 export function BottomTabBar() {
   const pathname = usePathname();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => setKeyboardOpen(window.innerHeight - viewport.height > 140 && viewport.width < 768);
+    viewport.addEventListener("resize", update);
+    return () => viewport.removeEventListener("resize", update);
+  }, []);
 
   return (
     <nav
-      className="bg-card/90 border-border supports-[backdrop-filter]:bg-card/70 fixed inset-x-0 bottom-0 z-50 border-t shadow-[0_-12px_36px_-28px_color-mix(in_oklch,var(--foreground)_35%,transparent)] backdrop-blur-xl"
+      hidden={keyboardOpen}
+      className="app-tab-bar bg-card/95 border-border fixed inset-x-0 bottom-0 z-50 border-t backdrop-blur-xl"
       aria-label="Главная навигация"
     >
-      <ul className="grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
+      <ul className="mx-auto grid max-w-2xl grid-cols-4 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {TABS.map((tab) => {
           const active =
             pathname === tab.href ||
@@ -44,7 +56,7 @@ export function BottomTabBar() {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "group/tab focus-visible:ring-ring relative flex w-full flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium tracking-tight transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
-                  "min-h-14",
+                  "min-h-14 text-[11px]",
                   active
                     ? "text-primary"
                     : "text-muted-foreground hover:text-foreground",

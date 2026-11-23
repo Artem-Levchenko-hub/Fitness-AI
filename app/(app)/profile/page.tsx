@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { ChevronRight, Dumbbell, Library, Settings, Users, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -87,6 +87,20 @@ export default async function ProfilePage({
       </header>
 
       <ProfileTabs active="profile" />
+
+      <nav aria-label="Сервисы профиля" className="mb-5 grid grid-cols-2 gap-2">
+        {[
+          { href: "/exercises", label: "Упражнения", Icon: Dumbbell },
+          { href: "/billing", label: "Баланс", Icon: Wallet },
+          { href: "/programs", label: "Мои планы", Icon: Library },
+          { href: "/friends", label: "Друзья", Icon: Users },
+        ].map(({href, label, Icon}) => (
+          <Link key={href} href={href} className="bg-card border-border flex min-h-12 items-center gap-2 rounded-2xl border px-3 text-sm font-medium">
+            <Icon className="text-primary size-4 shrink-0" aria-hidden="true" />
+            {label}<ChevronRight className="text-muted-foreground ml-auto size-4 shrink-0" aria-hidden="true" />
+          </Link>
+        ))}
+      </nav>
 
       {!hasData ? (
         <div className="border-border text-muted-foreground mb-4 rounded-2xl border border-dashed px-5 py-4 text-sm">

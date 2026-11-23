@@ -145,6 +145,7 @@ export async function copyLibraryProgramToUser(
 export async function createAiProgramForUser(
   userId: string,
   plan: AiPlan,
+  options?: { id: string },
 ): Promise<{ id: string }> {
   const slugs = [
     ...new Set(plan.days.flatMap((d) => d.items.map((i) => i.exerciseSlug))),
@@ -152,14 +153,20 @@ export async function createAiProgramForUser(
   const idBySlug = await resolveSystemExerciseIds(slugs);
 
   return db.transaction(async (tx) => {
-    const programId = crypto.randomUUID();
-    await tx.insert(schema.trainingPrograms).values({
+    const programId = options?.id ?? crypto.randomUUID();
+    const [inserted] = await tx.insert(schema.trainingPrograms).values({
       id: programId,
       userId,
       name: plan.name,
       description: plan.description || null,
       activatedAt: new Date(),
-    });
+    }).onConflictDoNothing({ target: schema.trainingPrograms.id }).returning({ id: schema.trainingPrograms.id });
+    if (!inserted) {
+      const [existing] = await tx.select({ id: schema.trainingPrograms.id }).from(schema.trainingPrograms)
+        .where(and(eq(schema.trainingPrograms.id, programId), eq(schema.trainingPrograms.userId, userId))).limit(1);
+      if (!options || !existing) throw new ProgramCreationConflict("Program ID already used");
+      return existing;
+    }
 
     for (const [dayOrder, day] of plan.days.entries()) {
       const resolved = day.items.filter((it) => idBySlug.has(it.exerciseSlug));

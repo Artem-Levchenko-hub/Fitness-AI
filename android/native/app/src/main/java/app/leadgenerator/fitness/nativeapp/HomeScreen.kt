@@ -42,6 +42,7 @@ internal fun HomeScreen(
     onProgress: () -> Unit,
     onCatalog: () -> Unit,
     onHistory: (String) -> Unit,
+    onBody: () -> Unit,
 ) {
     val today = LocalDate.now()
     val counts = journal.recent.mapNotNull { workoutDate(it.startedAt) }.groupingBy { it }.eachCount()
@@ -93,6 +94,7 @@ internal fun HomeScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsRow("Каталог упражнений", Icons.Default.List, onCatalog)
                 SettingsRow("Прогресс и самочувствие", Icons.Default.Favorite, onProgress)
+                SettingsRow("Модель тела и мышцы", Icons.Default.Favorite, onBody)
                 SettingsRow("История тренировок", Icons.Default.DateRange, onTraining)
             }
         }

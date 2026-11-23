@@ -44,7 +44,9 @@ internal class JournalApi(context: Context) {
 
     fun request(path: String, body: JSONObject? = null): JSONObject = authenticated {
         val request = buildRequest(path, body)
-        if (path == "/api/ai/coach/finalize") JSONObject(responseText(request, analysisClient)) else json(request)
+        if (path == "/api/ai/coach/finalize" || (path == "/api/mobile/v1/library" && body?.optString("action") == "ai_create")) {
+            JSONObject(responseText(request, analysisClient))
+        } else json(request)
     }
 
     fun coach(body: JSONObject): String = authenticated {

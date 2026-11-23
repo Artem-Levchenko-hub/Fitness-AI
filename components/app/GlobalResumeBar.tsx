@@ -46,7 +46,7 @@ export function GlobalResumeBar({ initial }: { initial: ResumeView[] }) {
   const compact = visible.length > 1;
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 px-5 md:px-8">
+    <div className="app-resume-bar fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-4 md:px-8">
       <div className="mx-auto w-full max-w-2xl">
         <nav
           aria-label="Активные тренировки"

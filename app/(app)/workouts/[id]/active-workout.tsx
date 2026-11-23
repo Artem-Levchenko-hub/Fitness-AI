@@ -161,12 +161,11 @@ export function ActiveWorkoutView({
   return (
     <div className="space-y-4">
       <div className="bg-card border-border rounded-2xl border p-4">
-        <h2 className="text-base font-semibold tracking-tight">
-          {workout.name}
-        </h2>
-        <p className="text-muted-foreground mt-1 text-xs">
-          Выполнено упражнений: <span className="tabular">{completedExercises}/{workout.exercises.length}</span>
-        </p>
+        <div className="mb-3 flex items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">Упражнения выполнены</span>
+          <span className="tabular font-semibold">{completedExercises} из {workout.exercises.length}</span>
+        </div>
+        <progress aria-label="Прогресс тренировки" max={Math.max(1, workout.exercises.length)} value={completedExercises} className="workout-progress block h-1.5 w-full overflow-hidden rounded-full" />
       </div>
 
       <ul className="space-y-3">
@@ -411,7 +410,7 @@ function ExerciseCard({
       </button>
 
       {expanded ? (
-        <div className="space-y-4 border-t px-4 pt-4 pb-4">
+        <div className="space-y-4 border-t px-3 pt-4 pb-4 sm:px-4">
           {exercise.sets.length > 0 || pending.length > 0 ? (
             <ul className="space-y-1.5">
               {exercise.sets.map((s) => (

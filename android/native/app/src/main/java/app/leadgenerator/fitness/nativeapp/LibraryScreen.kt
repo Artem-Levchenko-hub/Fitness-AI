@@ -48,11 +48,12 @@ import java.util.UUID
 
 private const val LIBRARY_PATH = "/api/mobile/v1/library"
 private enum class LibraryPage(val title: String) {
-    LIST("Библиотека"), PROGRAM("Программа"), DAY("День программы"), CREATE("Собрать план"), ARTICLE("Статья"),
+    LIST("Библиотека"), PROGRAM("Программа"), DAY("День программы"), CREATE("Собрать план"), AI("План с ИИ"), ARTICLE("Статья"),
 }
 
 @Composable
-internal fun LibraryScreen(request: ScreenRequest, onStartDay: (TrainingTemplate) -> Unit, starting: Boolean) {
+internal fun LibraryScreen(request: ScreenRequest, onStartDay: (TrainingTemplate) -> Unit, starting: Boolean,
+    onSubscription: () -> Unit = {}, onEditTemplate: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var page by rememberSaveable { mutableStateOf(LibraryPage.LIST) }
     var programId by rememberSaveable { mutableStateOf("") }
@@ -67,6 +68,7 @@ internal fun LibraryScreen(request: ScreenRequest, onStartDay: (TrainingTemplate
         LibraryPage.PROGRAM -> "$LIBRARY_PATH?programId=$programId"
         LibraryPage.DAY -> "$LIBRARY_PATH?programId=$programId&dayId=$dayId"
         LibraryPage.CREATE -> "$LIBRARY_PATH?new=1"
+        LibraryPage.AI -> "$LIBRARY_PATH?ai=1"
         LibraryPage.ARTICLE -> "$LIBRARY_PATH?articleId=$articleId"
     }
     val result = key(path) { loadScreenJson(path, refresh, request) }
@@ -103,6 +105,12 @@ internal fun LibraryScreen(request: ScreenRequest, onStartDay: (TrainingTemplate
                     "template_not_found" -> "Один из шаблонов больше недоступен. Откройте список заново."
                     "program_not_found" -> "Эта программа больше недоступна."
                     "invalid_program" -> "Проверьте название и выбранные шаблоны."
+                    "subscription_required" -> "Для персонального плана нужна активная подписка Pro."
+                    "ai_quota_exceeded" -> "Лимит ИИ-операций по вашему тарифу на этот месяц исчерпан."
+                    "ai_rate_limited" -> "Подождите минуту перед следующим запросом."
+                    "ai_request_in_progress" -> "Тренер ещё составляет план. Через несколько секунд повторите запрос."
+                    "ai_unavailable", "exercise_catalog_empty" -> "ИИ-планы сейчас недоступны. Попробуйте позже."
+                    "ai_generation_failed" -> "Тренер не смог составить план. Попробуйте ещё раз через минуту."
                     else -> "Не удалось сохранить. Попробуйте ещё раз."
                 }
             } catch (_: Exception) {
@@ -116,6 +124,12 @@ internal fun LibraryScreen(request: ScreenRequest, onStartDay: (TrainingTemplate
     BackHandler(enabled = page != LibraryPage.LIST, onBack = ::goBack)
     if (page == LibraryPage.CREATE && data != null) {
         LibraryProgramBuilder(data.objects("templates"), saving, actionError, ::goBack) { payload ->
+            mutate(payload) { openProgram(it.getString("programId")) }
+        }
+        return
+    }
+    if (page == LibraryPage.AI && data != null) {
+        AiProgramBuilder(data.optBoolean("aiConfigured"), saving, actionError, ::goBack, onSubscription) { payload ->
             mutate(payload) { openProgram(it.getString("programId")) }
         }
         return
@@ -137,6 +151,7 @@ internal fun LibraryScreen(request: ScreenRequest, onStartDay: (TrainingTemplate
                     articles = data.objects("articles"),
                     onProgram = ::openProgram,
                     onCreate = { goTo(LibraryPage.CREATE) },
+                    onAi = { goTo(LibraryPage.AI) },
                     onArticle = { id ->
                         articleId = id
                         goTo(LibraryPage.ARTICLE)
@@ -156,8 +171,11 @@ internal fun LibraryScreen(request: ScreenRequest, onStartDay: (TrainingTemplate
                         goTo(LibraryPage.DAY)
                     },
                 )
-                LibraryPage.DAY -> libraryDay(data.getJSONObject("day"), onStartDay, starting)
-                LibraryPage.CREATE -> Unit
+                LibraryPage.DAY -> {
+                    libraryDay(data.getJSONObject("day"), onStartDay, starting)
+                    item("edit-program-day") { OutlinedButton(onClick = { onEditTemplate(dayId) }, enabled = !starting) { Text("Редактировать день") } }
+                }
+                LibraryPage.CREATE, LibraryPage.AI -> Unit
                 LibraryPage.ARTICLE -> libraryArticle(data.getJSONObject("article"))
             }
         }
@@ -169,9 +187,17 @@ private fun LazyListScope.libraryPrograms(
     articles: List<JSONObject>,
     onProgram: (String) -> Unit,
     onCreate: () -> Unit,
+    onAi: () -> Unit,
     onArticle: (String) -> Unit,
 ) {
     item("library-title") { VibeHeading("Библиотека") }
+    item("ai-plan") {
+        VibeCard {
+            Text("Ваш план с ИИ-тренером", style = MaterialTheme.typography.headlineSmall)
+            LibraryDetail("Цель, опыт и доступный инвентарь — тренер подберёт упражнения, повторы и отдых. Доступно с Pro.")
+            Button(onClick = onAi, modifier = Modifier.fillMaxWidth()) { Text("Составить план с ИИ") }
+        }
+    }
     item("library-controls") {
         Row(
             Modifier.fillMaxWidth(),

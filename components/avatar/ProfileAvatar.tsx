@@ -42,6 +42,7 @@ export function ProfileAvatar({
 }) {
   const [selected, setSelected] = useState<string | null>(initialMuscle);
   const [cycle, setCycle] = useState(0);
+  const [side, setSide] = useState<"front" | "back">("front");
   // Поддержка WebGL — внешнее (браузерное) состояние, читаем через
   // useSyncExternalStore: на сервере считаем поддержку (canvas всё равно
   // ssr:false), на клиенте — реальная проба. Без cascading-render в effect.
@@ -83,9 +84,17 @@ export function ProfileAvatar({
           crossOrigin="anonymous"
         />
       ) : null}
-      <div className="bg-card/40 border-border relative aspect-[3/4] w-full overflow-hidden rounded-3xl border">
+      <div className="bg-card/40 border-border relative aspect-[4/5] max-h-[32rem] w-full overflow-hidden rounded-3xl border">
+        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 p-3">
+          <span className="bg-card/90 rounded-full px-3 py-2 text-xs font-medium">Нагрузка за 7 дней</span>
+          <div role="group" aria-label="Вид модели" className="bg-card/90 flex rounded-full p-1">
+            {([{key: "front", label: "Спереди"}, {key: "back", label: "Сзади"}] as const).map(view => (
+              <button key={view.key} type="button" aria-pressed={side === view.key} onClick={() => setSide(view.key)} className="aria-pressed:bg-primary aria-pressed:text-primary-foreground min-h-9 rounded-full px-3 text-xs font-medium transition-colors">{view.label}</button>
+            ))}
+          </div>
+        </div>
         {webgl ? (
-          <AvatarCanvas data={data} selected={selected} onSelect={onSelect} />
+          <AvatarCanvas data={data} selected={selected} onSelect={onSelect} side={side} />
         ) : (
           <MuscleListFallback
             data={data}

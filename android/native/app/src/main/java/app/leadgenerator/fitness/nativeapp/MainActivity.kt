@@ -197,6 +197,7 @@ class MainActivity : ComponentActivity() {
         var restDeadline by rememberSaveable(journal.workout?.id) { mutableLongStateOf(0L) }
         var startKey by rememberSaveable(journal.accountId) { mutableStateOf("") }
         var startTemplate by rememberSaveable(journal.accountId) { mutableStateOf("") }
+        var editingTemplateId by rememberSaveable(journal.accountId) { mutableStateOf<String?>(null) }
         val snackbar = remember { SnackbarHostState() }
         LaunchedEffect(page, error) {
             if (page == DetailPage.Library && error.isNotBlank()) snackbar.showSnackbar(error)
@@ -258,14 +259,17 @@ class MainActivity : ComponentActivity() {
                             TextButton(onClick = closePage) { Text("Назад") }
                         }
                     }
-                    DetailPage.Catalog, DetailPage.Template -> CatalogScreen(journal.accountId, page == DetailPage.Template, transport) {
+                    DetailPage.Catalog, DetailPage.Template -> CatalogScreen(journal.accountId, page == DetailPage.Template, transport, editingTemplateId) {
                         refreshJournal()
                         tab = MainTab.Training
                         closePage()
                     }
                     DetailPage.Wallet -> WalletScreen(transport, resumeCount, ::openExternal)
                     DetailPage.Formats -> FormatsScreen(transport, journal.accountId, journal.weightUnit)
-                    DetailPage.Library -> LibraryScreen(transport, startWorkout, busy)
+                    DetailPage.Body -> BodyScreen(request = transport)
+                    DetailPage.Library -> LibraryScreen(transport, startWorkout, busy,
+                        onSubscription = { page = DetailPage.Wallet },
+                        onEditTemplate = { id -> editingTemplateId = id; page = DetailPage.Template })
                     DetailPage.Schedule -> CompanionScreen("schedule", transport)
                     DetailPage.Friends -> CompanionScreen("friends", transport)
                     DetailPage.Notes -> CompanionScreen("notes", transport)
@@ -282,7 +286,7 @@ class MainActivity : ComponentActivity() {
                     }
                     null -> when (tab) {
                         MainTab.Home -> HomeScreen(journal, { tab = MainTab.Training }, { tab = MainTab.Progress },
-                            { page = DetailPage.Catalog }, openWorkout)
+                            { page = DetailPage.Catalog }, openWorkout, { page = DetailPage.Body })
                         MainTab.Progress -> ProgressScreen(transport)
                         MainTab.Profile -> Profile(journal, sync, signIn, ::refreshJournal, { page = it })
                         MainTab.Training -> TrainingScreen(
@@ -300,9 +304,10 @@ class MainActivity : ComponentActivity() {
                                 if (exercise.restSeconds > 0) restDeadline = SystemClock.elapsedRealtime() + exercise.restSeconds * 1000L
                                 refreshJournal()
                             } },
-                            onHistory = openWorkout, onCatalog = { page = DetailPage.Catalog }, onNewTemplate = { page = DetailPage.Template },
+                            onHistory = openWorkout, onCatalog = { page = DetailPage.Catalog }, onNewTemplate = { editingTemplateId = null; page = DetailPage.Template },
                             onFormats = { page = DetailPage.Formats },
                             onLibrary = { page = DetailPage.Library },
+                            onEditTemplate = { id -> editingTemplateId = id; page = DetailPage.Template },
                         )
                     }
                 }
@@ -323,6 +328,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             item { SettingsRow("Настройки профиля", Icons.Default.Settings) { onOpen(DetailPage.Settings) } }
+            item { SettingsRow("Модель тела и мышцы", Icons.Default.Person) { onOpen(DetailPage.Body) } }
             item { SettingsRow("Расписание", Icons.Default.DateRange) { onOpen(DetailPage.Schedule) } }
             item { SettingsRow("Друзья", Icons.Default.Person) { onOpen(DetailPage.Friends) } }
             item { SettingsRow("Заметки", Icons.Default.List) { onOpen(DetailPage.Notes) } }
@@ -402,4 +408,4 @@ private enum class MainTab(val label: String, val icon: ImageVector) {
     Progress("Прогресс", Icons.Default.Favorite), Profile("Профиль", Icons.Default.Person),
 }
 
-private enum class DetailPage { Workout, Coach, Catalog, Template, Wallet, Admin, Formats, Library, Schedule, Friends, Notes, Settings }
+private enum class DetailPage { Workout, Coach, Catalog, Template, Wallet, Admin, Formats, Library, Schedule, Friends, Notes, Settings, Body }

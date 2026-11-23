@@ -46,6 +46,13 @@ export default async function WorkoutsPage() {
         </h1>
       </header>
 
+      {items.length > 0 ? (
+        <div className="mb-6 grid grid-cols-[1fr_auto] gap-2">
+          <Button asChild size="xl" className="rounded-2xl"><Link href="/create"><Dumbbell className="size-5" />Начать тренировку</Link></Button>
+          <Button asChild size="xl" variant="outline" className="rounded-2xl px-4"><Link href="/templates">Шаблоны</Link></Button>
+        </div>
+      ) : null}
+
       {items.length === 0 ? (
         <EmptyState />
       ) : (

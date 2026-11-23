@@ -183,6 +183,7 @@ body {
 /* Общий визуальный слой приложения. Два очень мягких токенизированных блика
    добавляют глубину бумажной базе, не конкурируя с контентом. */
 .app-shell {
+  padding-top: env(safe-area-inset-top);
   background-color: var(--background);
   background-image:
     radial-gradient(
@@ -195,6 +196,51 @@ body {
       color-mix(in oklch, var(--primary) 4%, transparent),
       transparent 28rem
     );
+}
+
+.app-tab-bar[hidden] {
+  display: none;
+}
+
+.app-shell:has(.app-tab-bar[hidden]) .app-resume-bar {
+  display: none;
+}
+
+.workout-progress {
+  background: var(--muted);
+  accent-color: var(--primary);
+}
+
+.workout-progress::-webkit-progress-bar {
+  background: var(--muted);
+  border-radius: 1rem;
+}
+
+.workout-progress::-webkit-progress-value {
+  background: var(--primary);
+  border-radius: 1rem;
+}
+
+.app-shell :is(button, a, [role="button"]) {
+  touch-action: manipulation;
+}
+
+.app-shell main {
+  scroll-padding-block: 1rem 10rem;
+}
+
+@media (max-width: 639px) {
+  .app-shell main {
+    padding-inline: 1rem;
+  }
+
+  .app-shell :is(input, textarea, select) {
+    font-size: max(1rem, 1em);
+  }
+
+  .app-shell {
+    overscroll-behavior-y: contain;
+  }
 }
 
 /* template.tsx remounts this wrapper on top-level App Router navigation.

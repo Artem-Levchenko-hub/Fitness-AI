@@ -132,12 +132,12 @@ function makeEvent(request: Req): SwEvent {
 const SW_SOURCE = readFileSync(join(process.cwd(), "public", "sw.js"), "utf8");
 
 /** Загружает реальный sw.js в песочницу, возвращает captured-листенеры + моки. */
-function loadSw(fetchImpl: FetchImpl) {
+function loadSw(fetchImpl: FetchImpl, origin = "https://fitnesss.online") {
   const listeners: Record<string, (e: unknown) => void> = {};
   const skipWaiting = vi.fn(() => Promise.resolve());
   const claim = vi.fn(() => Promise.resolve());
   const self = {
-    location: { origin: "https://fitnesss.online" },
+    location: { origin },
     addEventListener: (type: string, fn: (e: unknown) => void) => {
       listeners[type] = fn;
     },
@@ -166,6 +166,14 @@ const offlineFetch: FetchImpl = (req) =>
     : Promise.resolve(new FakeResponse("", { status: 404 }));
 
 describe("public/sw.js — PWA офлайн-фундамент (H15.1)", () => {
+  it("leaves mutable local development styles to the network", () => {
+    const { listeners } = loadSw(offlineFetch, "http://localhost:3000");
+    const request = { url: "http://localhost:3000/_next/static/app.css", method: "GET", mode: "cors" };
+    const respondWith = vi.fn();
+    listeners.fetch({ request, respondWith });
+    expect(respondWith).not.toHaveBeenCalled();
+  });
+
   it("install: прекэширует /offline.html и зовёт skipWaiting (инвариант 1+3)", async () => {
     const { listeners, caches, skipWaiting } = loadSw(offlineFetch);
     const evt = makeEvent("/install");

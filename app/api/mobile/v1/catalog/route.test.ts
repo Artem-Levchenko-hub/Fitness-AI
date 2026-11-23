@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(), listExercises: vi.fn(), listMuscleGroups: vi.fn(), createTemplate: vi.fn(),
+  getTemplateWithItems: vi.fn(), updateTemplate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/require-user", () => ({ getUser: mocks.getUser }));
 vi.mock("@/lib/repos/exercises.repo", () => ({ listExercises: mocks.listExercises, listMuscleGroups: mocks.listMuscleGroups }));
-vi.mock("@/lib/repos/templates.repo", () => ({ createTemplate: mocks.createTemplate }));
+vi.mock("@/lib/repos/templates.repo", () => mocks);
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { GET, POST } from "./route";
@@ -51,5 +52,47 @@ describe("mobile catalog", () => {
     mocks.listExercises.mockResolvedValue([]);
     expect((await submit()).status).toBe(404);
     expect(mocks.createTemplate).not.toHaveBeenCalled();
+  });
+
+  it("loads an owned template with all editable targets and myoreps intact", async () => {
+    const template = { id: templateId, name: "Ноги", description: "План", items: [{
+      ...body.items[0], targetWeightKg: 42.5, notes: "Темп", myoReps: true,
+      myoMiniSets: 4, myoMiniReps: 6, myoMiniRestSeconds: 15,
+    }] };
+    mocks.getTemplateWithItems.mockResolvedValue(template);
+    const response = await GET(new Request(`https://fitnesss.online/api/mobile/v1/catalog?templateId=${templateId}`));
+    expect(await response.json()).toMatchObject({ accountId: "user-1", template });
+    expect(mocks.getTemplateWithItems).toHaveBeenCalledWith("user-1", templateId);
+  });
+
+  it("replaces the owned template without creating a second template on retry", async () => {
+    mocks.getTemplateWithItems.mockResolvedValue({ id: templateId });
+    const update = { ...body, action: "update", description: "Описание", items: [{
+      ...body.items[0], targetWeightKg: 42.5, notes: "Темп", myoReps: true,
+      myoMiniSets: 4, myoMiniReps: 6, myoMiniRestSeconds: 15,
+    }] };
+    expect((await submit(update)).status).toBe(200);
+    expect((await submit(update)).status).toBe(200);
+    expect(mocks.createTemplate).not.toHaveBeenCalled();
+    expect(mocks.updateTemplate).toHaveBeenCalledWith("user-1", templateId, {
+      name: "Ноги", description: "Описание", items: update.items,
+    });
+  });
+
+  it("rejects editing missing or foreign templates before writing", async () => {
+    mocks.getTemplateWithItems.mockResolvedValue(null);
+    expect((await submit({ ...body, action: "update" })).status).toBe(404);
+    expect(mocks.updateTemplate).not.toHaveBeenCalled();
+  });
+
+  it.each([null, ""])("round-trips nullable text and unset weight %j without turning it into zero", async (targetWeightKg) => {
+    mocks.getTemplateWithItems.mockResolvedValue({ id: templateId });
+    const response = await submit({ ...body, action: "update", description: null, items: [{
+      ...body.items[0], notes: null, targetWeightKg,
+    }] });
+    expect(response.status).toBe(200);
+    expect(mocks.updateTemplate).toHaveBeenCalledWith("user-1", templateId, expect.objectContaining({
+      description: null, items: [expect.objectContaining({ notes: null, targetWeightKg: null })],
+    }));
   });
 });

@@ -23,14 +23,16 @@ type Props = {
   data: AvatarMuscleDatum[];
   selected: string | null;
   onSelect: (key: string | null) => void;
+  side: "front" | "back";
 };
 
-export default function AvatarCanvas({ data, selected, onSelect }: Props) {
+export default function AvatarCanvas({ data, selected, onSelect, side }: Props) {
   return (
     <Canvas
+      key={side}
       frameloop="demand"
       dpr={[1, 2]}
-      camera={{ position: [0, 0.1, 2.9], fov: 38 }}
+      camera={{ position: [0, 0.1, side === "front" ? 2.9 : -2.9], fov: 38 }}
       onPointerMissed={() => onSelect(null)}
       gl={{ antialias: true }}
     >

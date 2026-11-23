@@ -27,9 +27,20 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") return;
 
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js", { scope: "/", updateViaCache: "none" })
-        .catch(() => {});
+      if (process.env.NODE_ENV === "production") {
+        navigator.serviceWorker
+          .register("/sw.js", { scope: "/", updateViaCache: "none" })
+          .catch(() => {});
+      } else {
+        // Development chunk names stay stable across edits. An old worker's
+        // cache-first strategy would otherwise serve yesterday's CSS to HMR.
+        void navigator.serviceWorker.getRegistration("/").then(async (registration) => {
+          if (registration?.active?.scriptURL !== `${window.location.origin}/sw.js`) return;
+          const controlled = navigator.serviceWorker.controller?.scriptURL === registration.active.scriptURL;
+          await registration.unregister();
+          if (controlled) window.location.reload();
+        }).catch(() => {});
+      }
     }
 
     const dismissed = localStorage.getItem(DISMISS_KEY);

@@ -41,6 +41,9 @@ self.addEventListener("fetch", (event) => {
 
   if (request.method !== "GET") return;
   if (url.origin !== self.location.origin) return;
+  // Development chunks are mutable. Let HMR fetch their current contents even
+  // while a worker left by an earlier local build is still controlling a tab.
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]") return;
 
   // API routes — network only, never cache
   if (API_ROUTES.test(url.pathname)) return;

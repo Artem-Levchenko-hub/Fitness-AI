@@ -2,8 +2,10 @@ import {
   ArrowRight,
   BarChart3,
   ChevronRight,
+  Dumbbell,
   Plus,
   Settings2,
+  Settings,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -12,6 +14,8 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
+import { DashboardAvatarTile } from "@/components/dashboard/DashboardAvatarTile";
+import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { FriendsActivityPreview } from "@/components/dashboard/FriendsActivityPreview";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { QuickActivityTile } from "@/components/dashboard/QuickActivityTile";
@@ -33,7 +37,7 @@ import { getUserProfile } from "@/lib/repos/body.repo";
 import { listFriendsActivity } from "@/lib/repos/friends.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
-import { dailyVolume, workoutFrequency } from "@/lib/repos/stats.repo";
+import { dailyVolume, muscleHeatProfile, workoutFrequency } from "@/lib/repos/stats.repo";
 import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "Главная" };
@@ -55,6 +59,7 @@ export default async function DashboardPage() {
     daily,
     frequency,
     friendsActivity,
+    heat,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     listRecentCardio(user.id, 10),
@@ -67,6 +72,7 @@ export default async function DashboardPage() {
     // Лента активности друзей — тот же источник, что /friends (H3.2). Превью
     // тайла берёт ровно её топ, чтобы строка не разошлась с верхней карточкой.
     listFriendsActivity(user.id),
+    muscleHeatProfile(user.id, now),
   ]);
 
   // Понедельник текущей ISO-недели в TZ юзера — общая граница для week-strip
@@ -101,13 +107,18 @@ export default async function DashboardPage() {
   // (H12.4): один носитель вместо page-level баннеров на /dashboard и /workouts.
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
-      <header className="mb-8">
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
-          {greetingLabel(new Date())}
-        </p>
-        <h1 className="font-serif mt-1 text-4xl font-normal tracking-tight md:text-5xl">
-          Привет, {name}
-        </h1>
+      <header className="mb-6 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-muted-foreground text-xs font-medium capitalize">
+            {new Intl.DateTimeFormat("ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: tz }).format(now)}
+          </p>
+          <h1 className="font-serif mt-1 text-3xl font-normal tracking-tight md:text-4xl">
+            Привет, {name}
+          </h1>
+        </div>
+        <Link href="/settings" aria-label="Настройки" className="bg-card border-border text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-full border">
+          <Settings className="size-5" aria-hidden="true" />
+        </Link>
       </header>
 
       <TodayScheduleCard userId={user.id} />
@@ -141,6 +152,10 @@ export default async function DashboardPage() {
             <FriendsActivityPreview activity={topFriendActivity} />
           ) : null}
         </DashboardNavTile>
+      </section>
+
+      <section className="mt-3">
+        <DashboardAvatarTile data={buildAvatarData(heat, now)} />
       </section>
 
       {/* Доп. активность — быстрый лог подхода/тотала между делом без создания
@@ -190,13 +205,16 @@ export default async function DashboardPage() {
 
 function StartCard() {
   return (
-    <section className="bg-card text-card-foreground border-border rounded-2xl border p-6">
-      <h2 className="font-serif text-2xl font-normal tracking-tight">
-        Готовы тренироваться?
-      </h2>
-      <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-        Попроси ИИ-тренера собрать персональный план — или начни тренировку сам.
-      </p>
+    <section className="overflow-hidden rounded-3xl bg-[#294b38] p-5 text-[#fcfbf4] sm:p-6">
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-serif text-[1.75rem] leading-tight font-normal tracking-tight sm:text-3xl">Время тренироваться</h2>
+          <p className="mt-2 max-w-64 text-sm leading-relaxed text-[#e1eadc]">Выбери готовый план или начни свою тренировку.</p>
+        </div>
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+          <Dumbbell className="size-6" aria-hidden="true" />
+        </span>
+      </div>
 
       {/*
        * H12.2 item-c — один канонический вход «повторить»: «Начать тренировку»
@@ -208,23 +226,20 @@ function StartCard() {
        * запуск и управление (столп 4 — запуск из /templates сохранён, но это уже
        * не входная точка повтора с дашборда).
        */}
-      <div className="mt-5 flex flex-col gap-3">
-        <Button asChild size="xl" className="w-full">
+      <Button asChild size="xl" className="w-full rounded-2xl bg-[#e5eddc] text-[#213a2c] hover:bg-white">
+        <Link href="/create"><Plus className="size-5" />Начать тренировку<ArrowRight className="ml-auto size-5" /></Link>
+      </Button>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Button asChild variant="ghost" className="h-auto min-h-12 justify-start whitespace-normal rounded-xl px-2 text-xs text-[#e1eadc] hover:bg-white/10 hover:text-white">
           <Link href="/programs/ai" data-testid="dashboard-ai-plan">
-            <Sparkles className="size-5" />
-            Составить план с ИИ-тренером
+            <Sparkles className="size-4" />
+            План с AI-тренером
           </Link>
         </Button>
-        <Button asChild size="xl" variant="outline" className="w-full">
-          <Link href="/create">
-            <Plus className="size-5" />
-            Начать тренировку
-          </Link>
-        </Button>
-        <Button asChild size="xl" variant="outline" className="w-full">
+        <Button asChild variant="ghost" className="h-auto min-h-12 justify-end whitespace-normal rounded-xl px-2 text-xs text-[#e1eadc] hover:bg-white/10 hover:text-white">
           <Link href="/templates" data-testid="dashboard-manage-templates">
-            <Settings2 className="size-5" />
-            Управление шаблонами
+            <Settings2 className="size-4" />
+            Мои шаблоны
           </Link>
         </Button>
       </div>
@@ -291,13 +306,4 @@ function pluralize(
   if (mod10 === 1 && mod100 !== 11) return one;
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
   return many;
-}
-
-function greetingLabel(d: Date): string {
-  const h = d.getHours();
-  if (h < 5) return "Ночью";
-  if (h < 12) return "Утро";
-  if (h < 17) return "День";
-  if (h < 23) return "Вечер";
-  return "Ночь";
 }

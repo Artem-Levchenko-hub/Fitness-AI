@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plus } from "lucide-react";
+import { Check, ChevronDown, Loader2, Plus } from "lucide-react";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,9 @@ export function SetInput({
   );
   const [reps, setReps] = useState<string>(String(defaultRepsMax));
   const [rpe, setRpe] = useState<string>("");
+  const [localError, setLocalError] = useState("");
+  const [savingOffline, setSavingOffline] = useState(false);
+  const offlineSavingRef = useRef(false);
 
   const weightRef = useRef<HTMLInputElement>(null);
   const wasPendingRef = useRef(false);
@@ -78,9 +81,10 @@ export function SetInput({
   }, [defaultRepsMax, defaultWeightKg, nextSetIndex, workoutExerciseId]);
 
   useEffect(() => {
-    if (state.status === "idle" && !pending) {
+    if (state.status === "idle" && !pending && wasPendingRef.current) {
       // После успешного добавления ставим фокус обратно на вес
-      weightRef.current?.focus();
+      if (window.matchMedia("(pointer: fine)").matches) weightRef.current?.focus({ preventScroll: true });
+      else if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur();
       // H10.4: подход записан на сервер → черновик больше не нужен. Успех
       // detect-им по переходу pending true→false без ошибки (success-ветка
       // recordSetAction возвращает тот же {status:"idle"}, что и стартовый —
@@ -128,7 +132,7 @@ export function SetInput({
     setWeight(defaultWeightKg ? String(defaultWeightKg) : "");
     setReps(String(defaultRepsMax));
     setRpe("");
-    weightRef.current?.focus();
+    if (window.matchMedia("(pointer: fine)").matches) weightRef.current?.focus({ preventScroll: true });
   }
 
   function measuredRestSeconds(): string {
@@ -173,10 +177,11 @@ export function SetInput({
     const persisted = (await listPending()).some(
       (m) => m.clientId === clientSetId,
     );
-    if (persisted) {
-      clearSetDraft(workoutExerciseId);
-      resetFields();
+    if (!persisted) {
+      throw new Error("Local set was not persisted");
     }
+    clearSetDraft(workoutExerciseId);
+    resetFields();
 
     // Обновляем родителя после очистки черновика, чтобы следующая фаза
     // Myo-reps получила рассчитанную цель, а не старый draft активации.
@@ -193,12 +198,21 @@ export function SetInput({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (pending || offlineSavingRef.current) return;
+    setLocalError("");
     const fd = new FormData(e.currentTarget);
     fd.set("restSeconds", measuredRestSeconds());
 
     // H15.3b-2 — офлайн (navigator.onLine=false) идёт в outbox, не на сервер.
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      void recordOffline(fd);
+      offlineSavingRef.current = true;
+      setSavingOffline(true);
+      void recordOffline(fd).catch(() => {
+        setLocalError("Не удалось сохранить подход на устройстве. Значения оставлены в полях. Повторите запись.");
+      }).finally(() => {
+        offlineSavingRef.current = false;
+        setSavingOffline(false);
+      });
       return;
     }
 
@@ -217,7 +231,7 @@ export function SetInput({
       <input type="hidden" name="setIndex" value={nextSetIndex} />
       <input type="hidden" name="restSeconds" value="" />
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-3">
         <div>
           <label
             htmlFor={`weight-${workoutExerciseId}`}
@@ -225,14 +239,14 @@ export function SetInput({
           >
             Вес, кг
           </label>
-          <div className="flex items-stretch gap-1">
+          <div className="bg-background border-border flex min-w-0 items-center rounded-2xl border px-1">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={() => adjustWeight(-2.5)}
               aria-label="−2.5 кг"
-              className="size-11 shrink-0"
+              className="size-9 shrink-0 rounded-xl"
             >
               −
             </Button>
@@ -244,15 +258,15 @@ export function SetInput({
               value={weight}
               onChange={changeWeight}
               required
-              className="tabular h-11 text-center text-xl font-semibold"
+              className="tabular h-14 min-w-0 rounded-none border-0 bg-transparent px-0 text-center text-xl font-semibold shadow-none focus-visible:ring-inset"
             />
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={() => adjustWeight(+2.5)}
               aria-label="+2.5 кг"
-              className="size-11 shrink-0"
+              className="size-9 shrink-0 rounded-xl"
             >
               <Plus className="size-4" />
             </Button>
@@ -266,14 +280,14 @@ export function SetInput({
           >
             Повторений
           </label>
-          <div className="flex items-stretch gap-1">
+          <div className="bg-background border-border flex min-w-0 items-center rounded-2xl border px-1">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={() => adjustReps(-1)}
               aria-label="−1 повторение"
-              className="size-11 shrink-0"
+              className="size-9 shrink-0 rounded-xl"
             >
               −
             </Button>
@@ -283,15 +297,15 @@ export function SetInput({
               value={reps}
               onChange={changeReps}
               required
-              className="tabular h-11 text-center text-xl font-semibold"
+              className="tabular h-14 min-w-0 rounded-none border-0 bg-transparent px-0 text-center text-xl font-semibold shadow-none focus-visible:ring-inset"
             />
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={() => adjustReps(+1)}
               aria-label="+1 повторение"
-              className="size-11 shrink-0"
+              className="size-9 shrink-0 rounded-xl"
             >
               <Plus className="size-4" />
             </Button>
@@ -299,7 +313,12 @@ export function SetInput({
         </div>
       </div>
 
-      <div>
+      <details className="group rounded-xl bg-muted/40 px-3">
+        <summary className="text-muted-foreground flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-xs [&::-webkit-details-marker]:hidden">
+          Ощущение нагрузки · RPE
+          <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="pb-3">
         <label
           htmlFor={`rpe-${workoutExerciseId}`}
           className="text-muted-foreground mb-1 block text-[10px] font-medium tracking-wide uppercase"
@@ -315,7 +334,10 @@ export function SetInput({
           className="tabular h-9 text-center"
           placeholder="напр. 8"
         />
-      </div>
+        </div>
+      </details>
+
+      {localError ? <p className="text-destructive text-sm" role="alert">{localError}</p> : null}
 
       {state.status === "error" ? (
         <p className="text-destructive text-sm" role="alert">
@@ -326,17 +348,17 @@ export function SetInput({
       <Button
         type="submit"
         size="xl"
-        className={cn("w-full")}
-        disabled={pending || !weight || !reps}
-        aria-busy={pending}
+        className={cn("w-full rounded-2xl")}
+        disabled={pending || savingOffline || !weight || !reps}
+        aria-busy={pending || savingOffline}
       >
-        {pending ? (
+        {pending || savingOffline ? (
           <>
             <Loader2 className="size-4 animate-spin" />
             Сохраняем…
           </>
         ) : (
-          `Завершить подход ${nextSetIndex + 1}`
+          <><Check className="size-5" aria-hidden="true" />{`Завершить подход ${nextSetIndex + 1}`}</>
         )}
       </Button>
     </form>

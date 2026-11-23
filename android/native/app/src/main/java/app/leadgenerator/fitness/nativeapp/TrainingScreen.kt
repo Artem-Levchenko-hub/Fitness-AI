@@ -59,6 +59,7 @@ internal fun TrainingScreen(
     onNewTemplate: () -> Unit,
     onFormats: () -> Unit,
     onLibrary: () -> Unit,
+    onEditTemplate: (String) -> Unit,
 ) {
     val workout = journal.workout
     val pending = state.queue.count { it.entry.state == UploadState.Pending }
@@ -112,6 +113,7 @@ internal fun TrainingScreen(
                             Icon(Icons.Default.Add, "Начать тренировку ${template.name}")
                         }
                     }
+                    TextButton(onClick = { onEditTemplate(template.id) }, enabled = !busy) { Text("Редактировать шаблон") }
                 }
             }
         } else {
