@@ -24,6 +24,7 @@ export function DashboardNavTile({
   return (
     <Link
       href={href}
+      oai-annotatable={label}
       className="interactive-surface bg-card border-border hover:border-primary/30 focus-visible:ring-ring flex min-h-14 flex-col gap-2 rounded-2xl border p-4 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
     >
       <div className="flex items-center justify-between">

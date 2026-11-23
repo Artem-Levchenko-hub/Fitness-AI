@@ -11,11 +11,11 @@ export const metadata: Metadata = {
 };
 
 type Props = {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: Props) {
-  const { callbackUrl } = await searchParams;
+  const { callbackUrl, error } = await searchParams;
 
   return (
     <div className="space-y-6">
@@ -32,7 +32,10 @@ export default async function LoginPage({ searchParams }: Props) {
         </p>
       </div>
 
-      <LoginForm callbackUrl={callbackUrl} />
+      <LoginForm
+        callbackUrl={callbackUrl}
+        verificationFailed={error === "Verification"}
+      />
 
       <p className="text-muted-foreground text-center text-xs leading-relaxed">
         Продолжая, вы принимаете{" "}

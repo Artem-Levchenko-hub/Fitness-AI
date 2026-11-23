@@ -75,6 +75,7 @@ export function LastSessionMini({ item }: { item: HistoryItem }) {
   return (
     <Link
       href={href}
+      oai-annotatable="Последняя тренировка"
       className="interactive-surface bg-card hover:bg-accent/40 border-border hover:border-primary/25 focus-visible:ring-ring block rounded-2xl border p-4 focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="flex items-center justify-between gap-2">

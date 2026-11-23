@@ -10,7 +10,13 @@ import { signInWithEmail, type SignInState } from "@/server/actions/auth";
 
 type Step = "email" | "code";
 
-export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
+export function LoginForm({
+  callbackUrl,
+  verificationFailed,
+}: {
+  callbackUrl?: string;
+  verificationFailed?: boolean;
+}) {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [savedCallback, setSavedCallback] = useState<string>(
@@ -70,6 +76,12 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
     >
       <input type="hidden" name="callbackUrl" value={savedCallback} />
 
+      {verificationFailed && !pending && !error ? (
+        <p className="text-destructive text-sm" role="alert">
+          Код не подошёл. Запросите новый код и введите его из последнего письма.
+        </p>
+      ) : null}
+
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input
@@ -126,13 +138,26 @@ export function CodeStep({
   const [resending, setResending] = useState(false);
   const [resentJustNow, setResentJustNow] = useState(false);
   const [resendError, setResendError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const submittingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
+
+    function restoreForm(event: PageTransitionEvent) {
+      if (event.persisted) {
+        submittingRef.current = false;
+        setVerifying(false);
+      }
+    }
+
+    window.addEventListener("pageshow", restoreForm);
+    return () => window.removeEventListener("pageshow", restoreForm);
   }, []);
 
   async function handleResend() {
+    if (submittingRef.current) return;
     setResending(true);
     setResentJustNow(false);
     setResendError(null);
@@ -177,6 +202,15 @@ export function CodeStep({
         method="GET"
         action="/api/auth/callback/resend"
         className="space-y-4"
+        onSubmit={(event) => {
+          if (submittingRef.current || resending) {
+            event.preventDefault();
+            return;
+          }
+          // The callback consumes the code once. Lock before navigation starts.
+          submittingRef.current = true;
+          setVerifying(true);
+        }}
       >
         <input type="hidden" name="email" value={email} />
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
@@ -202,8 +236,14 @@ export function CodeStep({
           />
         </div>
 
-        <Button type="submit" size="xl" className="w-full" disabled={code.length !== 6}>
-          Войти
+        <Button
+          type="submit"
+          size="xl"
+          className="w-full"
+          disabled={code.length !== 6 || verifying || resending}
+          aria-busy={verifying}
+        >
+          {verifying ? "Входим…" : "Войти"}
         </Button>
       </form>
 
@@ -216,7 +256,7 @@ export function CodeStep({
         <button
           type="button"
           onClick={handleResend}
-          disabled={resending}
+          disabled={resending || verifying}
           className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline disabled:opacity-50"
         >
           {resending
@@ -229,7 +269,8 @@ export function CodeStep({
           <button
             type="button"
             onClick={onBack}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm"
+            disabled={verifying}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm disabled:opacity-50"
           >
             <ArrowLeft className="size-3.5" />
             Изменить email

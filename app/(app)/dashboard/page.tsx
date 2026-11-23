@@ -106,8 +106,11 @@ export default async function DashboardPage() {
   // ГЛОБАЛЬНАЯ полоса (GlobalResumeBar в (app)/layout), видна с любого экрана
   // (H12.4): один носитель вместо page-level баннеров на /dashboard и /workouts.
   return (
-    <main className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10">
-      <header className="mb-6 flex items-center justify-between gap-3">
+    <main
+      oai-annotation-container=""
+      className="mx-auto w-full max-w-2xl px-5 pt-6 pb-8 md:px-8 md:pt-10"
+    >
+      <header oai-annotatable="Приветствие" className="mb-6 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-muted-foreground text-xs font-medium capitalize">
             {new Intl.DateTimeFormat("ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: tz }).format(now)}
@@ -154,17 +157,17 @@ export default async function DashboardPage() {
         </DashboardNavTile>
       </section>
 
-      <section className="mt-3">
+      <section oai-annotatable="Карта мышц" className="mt-3">
         <DashboardAvatarTile data={buildAvatarData(heat, now)} />
       </section>
 
       {/* Доп. активность — быстрый лог подхода/тотала между делом без создания
           тренировки; учитывается в /stats, нагреве аватара и недельном разборе. */}
-      <section className="mt-3">
+      <section oai-annotatable="Дополнительная активность" className="mt-3">
         <QuickActivityTile userId={user.id} tz={tz} />
       </section>
 
-      <section className="mt-6 space-y-2">
+      <section oai-annotatable="Восстановление" className="mt-6 space-y-2">
         <h2 className="text-muted-foreground mb-2 px-1 text-xs font-medium tracking-wide uppercase">
           Восстановление
         </h2>
@@ -172,12 +175,12 @@ export default async function DashboardPage() {
         <NutritionTile userId={user.id} />
       </section>
 
-      <section className="mt-6">
+      <section oai-annotatable="Спросить тренера" className="mt-6">
         <TrainerTrigger lastWorkoutId={last?.id ?? null} />
       </section>
 
       {recentHistory.length > 0 ? (
-        <section className="mt-8">
+        <section oai-annotatable="Недавние тренировки" className="mt-8">
           <div className="mb-3 flex items-center justify-between px-1">
             <h2 className="font-serif text-2xl font-normal tracking-tight">
               Недавние
@@ -205,7 +208,10 @@ export default async function DashboardPage() {
 
 function StartCard() {
   return (
-    <section className="overflow-hidden rounded-3xl bg-[#294b38] p-5 text-[#fcfbf4] sm:p-6">
+    <section
+      oai-annotatable="Время тренироваться"
+      className="overflow-hidden rounded-3xl bg-[#294b38] p-5 text-[#fcfbf4] sm:p-6"
+    >
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h2 className="font-serif text-[1.75rem] leading-tight font-normal tracking-tight sm:text-3xl">Время тренироваться</h2>
@@ -256,7 +262,7 @@ function StartCard() {
 // канонического источника; число тренировок нигде не дублируется (столп 3+4).
 function WeekCard({ workouts }: { workouts: number }) {
   return (
-    <div className="bg-card border-border rounded-2xl border p-4">
+    <div oai-annotatable="Эта неделя" className="bg-card border-border rounded-2xl border p-4">
       <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         Эта неделя
       </p>
@@ -275,7 +281,7 @@ function WeekCard({ workouts }: { workouts: number }) {
 
 function EmptyMini() {
   return (
-    <div className="bg-card border-border flex flex-col justify-between rounded-2xl border p-4">
+    <div oai-annotatable="Первая тренировка" className="bg-card border-border flex flex-col justify-between rounded-2xl border p-4">
       <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         Первая тренировка
       </p>

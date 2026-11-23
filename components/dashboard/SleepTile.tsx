@@ -12,7 +12,7 @@ export async function SleepTile({ userId }: { userId: string }) {
   const row = await getSleepForDate(userId, todayIso());
 
   return (
-    <div className="bg-card border-border flex items-center justify-between gap-4 rounded-2xl border p-4">
+    <div oai-annotatable="Сон сегодня" className="bg-card border-border flex items-center justify-between gap-4 rounded-2xl border p-4">
       <div className="flex items-center gap-3">
         <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full">
           <Moon className="size-5" />

@@ -116,7 +116,10 @@ export async function TodayScheduleCard({ userId }: { userId: string }) {
   const items = todays.map((s) => ({ schedule: s, target: resolvePreset(s, names) }));
 
   return (
-    <section className="border-primary/30 bg-primary/5 mb-6 rounded-2xl border p-5">
+    <section
+      oai-annotatable="Сегодня по расписанию"
+      className="border-primary/30 bg-primary/5 mb-6 rounded-2xl border p-5"
+    >
       <p className="text-primary flex items-center gap-1.5 text-xs font-medium tracking-[0.18em] uppercase">
         <CalendarClock className="size-3.5" aria-hidden="true" />
         Сегодня по расписанию
