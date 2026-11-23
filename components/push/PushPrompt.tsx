@@ -57,7 +57,7 @@ export function PushPrompt({
   if (!vapidPublicKey) {
     return (
       <p className="text-muted-foreground text-xs">
-        Push-уведомления не настроены администратором.
+        Напоминания пока недоступны.
       </p>
     );
   }

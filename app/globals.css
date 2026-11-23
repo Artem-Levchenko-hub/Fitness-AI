@@ -254,6 +254,10 @@ body {
   min-height: 2.75rem;
 }
 
+.app-shell [data-slot="select-trigger"] {
+  min-height: 2.75rem;
+}
+
 @media (max-width: 639px) {
   .app-shell main {
     padding-inline: 1rem;
