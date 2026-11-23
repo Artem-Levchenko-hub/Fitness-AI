@@ -33,6 +33,20 @@ describe("proxy security headers and deep links", () => {
     expect(csp).not.toContain("'unsafe-eval'");
   });
 
+  it("allows the browser annotation stylesheet without allowing arbitrary inline styles", async () => {
+    const response = (await proxy(
+      request("https://fitnesss.online/dashboard", { user: { id: "test" } }),
+      {} as never,
+    )) as Response;
+    const styles = response.headers
+      .get("Content-Security-Policy")
+      ?.split(";")
+      .find((directive) => directive.trim().startsWith("style-src-elem "));
+
+    expect(styles).toContain("'sha256-62lPaUtpvg47KrxPOXYc0Ki8fkE6PNsbY5I9DpyEwZ4='");
+    expect(styles).not.toContain("'unsafe-inline'");
+  });
+
   it("сохраняет deep link для любого app-route, включая billing", async () => {
     const response = (await proxy(
       request("https://fitnesss.online/billing?source=upgrade"),

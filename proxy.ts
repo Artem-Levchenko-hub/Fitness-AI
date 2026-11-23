@@ -29,17 +29,23 @@ const PROTECTED_PREFIXES = [
 
 const { auth } = NextAuth(authConfig);
 
+const INLINE_STYLE_HASHES = [
+  // Sonner 2.0.7's empty and populated style elements.
+  "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='",
+  "'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY='",
+  // The built-in Codex browser injects this annotation stylesheet without a nonce.
+  "'sha256-62lPaUtpvg47KrxPOXYc0Ki8fkE6PNsbY5I9DpyEwZ4='",
+].join(" ");
+
 type Csp = { value: string; requestHeaders: Headers };
 
 function createCsp(headers: Headers): Csp {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const isDev = process.env.NODE_ENV === "development";
-  // Sonner 2.0.7 создаёт сначала пустой <style>, затем заполняет его своей
-  // статичной таблицей. Разрешаем ровно эти два содержимых, не весь inline CSS.
   const value = `
     default-src 'self';
     script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ""};
-    style-src-elem 'self' 'nonce-${nonce}' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=' 'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY=';
+    style-src-elem 'self' 'nonce-${nonce}' ${INLINE_STYLE_HASHES};
     style-src-attr 'unsafe-inline';
     img-src 'self' blob: data:;
     font-src 'self';
