@@ -49,6 +49,7 @@ describe("mobile strength workout details", () => {
         name: "Ноги",
         status: "completed",
         startedAt,
+        autoFinishAt: null,
         exercises: [{
           id: "exercise-1",
           name: "Приседания",
