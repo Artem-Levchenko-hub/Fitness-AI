@@ -24,6 +24,7 @@ type Props = {
   description: string;
   triggerLabel?: string;
   confirmLabel?: string;
+  iconOnly?: boolean;
   /** Растянуть триггер на всю ширину. */
   fullWidth?: boolean;
   className?: string;
@@ -38,6 +39,7 @@ export function ConfirmDeleteButton({
   description,
   triggerLabel = "Удалить",
   confirmLabel = "Удалить",
+  iconOnly = false,
   fullWidth = false,
   className,
 }: Props) {
@@ -47,16 +49,19 @@ export function ConfirmDeleteButton({
     <>
       <Button
         type="button"
-        variant="outline"
+        variant={iconOnly ? "ghost" : "outline"}
+        size={iconOnly ? "icon" : "default"}
+        aria-label={iconOnly ? triggerLabel : undefined}
         onClick={() => setOpen(true)}
         className={cn(
-          "text-destructive hover:bg-destructive/10 hover:text-destructive",
+          iconOnly ? "text-muted-foreground" : "text-destructive",
+          "hover:bg-destructive/10 hover:text-destructive",
           fullWidth && "w-full",
           className,
         )}
       >
-        <Trash2 className="size-4" />
-        {triggerLabel}
+        <Trash2 className="size-4" aria-hidden="true" />
+        {iconOnly ? null : triggerLabel}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

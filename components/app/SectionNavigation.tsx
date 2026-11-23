@@ -3,7 +3,17 @@
 import { animate, AnimatePresence, motion, type MotionValue, useMotionValue, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState, useTransition, type PointerEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useTransition,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 
 import { MAIN_TABS, mainTabIndex, rootTabIndex, swipeTarget } from "@/lib/navigation/main-tabs";
 
@@ -25,6 +35,12 @@ export function useSectionNavigation(): Navigation {
 }
 
 type Gesture = { id: number; x: number; y: number; startedAt: number; horizontal: boolean; width: number };
+type WheelGesture = { lastAt: number; distance: number; handled: boolean };
+
+function isSwipeArea(target: Element, pathname: string): boolean {
+  return Boolean(target.closest("[data-section-tabs]"))
+    || (rootTabIndex(pathname) >= 0 && Boolean(target.closest("[data-section-content]")));
+}
 
 function ownsGesture(target: Element, boundary: HTMLElement): boolean {
   if (target.closest('input, textarea, select, button, canvas, [contenteditable="true"], [role="slider"], [role="dialog"], [role="application"], [data-swipe-block], .recharts-wrapper')) return true;
@@ -44,7 +60,9 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
   const [hint, setHint] = useState<number | null>(null);
   const position = useMotionValue(Math.max(0, index));
   const offset = useMotionValue(0);
+  const shellRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  const wheelGesture = useRef<WheelGesture | null>(null);
   const suppressClick = useRef(false);
   const scrollPositions = useRef(new Map<string, number>());
   const requestedTab = useRef<string | null>(null);
@@ -64,6 +82,7 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
   useEffect(() => {
     // A route change or browser Back cancels a gesture that began on the old page.
     gesture.current = null;
+    shellRef.current?.removeAttribute("data-dragging-section");
     offset.set(0);
     const fromTabs = requestedTab.current === pathname;
     if (fromTabs) requestedTab.current = null;
@@ -101,6 +120,47 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("scroll", rememberScroll);
   }, [pathname]);
 
+  const handleWheel = useEffectEvent((event: WheelEvent, shell: HTMLElement) => {
+    const { deltaMode, deltaX, deltaY, timeStamp, target } = event;
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || index < 0) return;
+    if (!(target instanceof Element) || !isSwipeArea(target, pathname)) return;
+    if (deltaX === 0 || Math.abs(deltaX) < Math.abs(deltaY) * 1.35) {
+      if (wheelGesture.current) wheelGesture.current.distance = 0;
+      return;
+    }
+    if (ownsGesture(target, shell)) return;
+
+    // Trackpad momentum is part of the original gesture, even after a route changes.
+    if (!wheelGesture.current || timeStamp - wheelGesture.current.lastAt > 180) {
+      wheelGesture.current = { lastAt: timeStamp, distance: 0, handled: false };
+    }
+    const current = wheelGesture.current;
+    current.lastAt = timeStamp;
+    const adjacent = index + Math.sign(deltaX);
+    if (!current.handled && (adjacent < 0 || adjacent >= MAIN_TABS.length)) {
+      current.distance = 0;
+      return;
+    }
+    if (event.cancelable) event.preventDefault();
+    if (current.handled || pending || gesture.current) return;
+
+    const width = document.documentElement.clientWidth;
+    const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? width : 1;
+    current.distance += deltaX * unit;
+    const next = swipeTarget(index, -current.distance, 0, 0, width);
+    if (next == null) return;
+    current.handled = true;
+    navigate(MAIN_TABS[next].href);
+  });
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onWheel = (event: WheelEvent) => handleWheel(event, shell);
+    shell.addEventListener("wheel", onWheel, { passive: false });
+    return () => shell.removeEventListener("wheel", onWheel);
+  }, []);
+
   function navigate(href: string) {
     if (pending || href === pathname) return;
     const next = mainTabIndex(href);
@@ -114,17 +174,19 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
   function reset() {
     gesture.current = null;
     setHint(null);
+    shellRef.current?.removeAttribute("data-dragging-section");
     void animate(offset, 0, reduced ? { duration: 0 } : { type: "spring", stiffness: 450, damping: 38 });
     void animate(position, Math.max(0, index), reduced ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 36 });
   }
 
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
     suppressClick.current = false;
-    if (event.isPrimary === false) { reset(); return; }
-    if (pending || event.button !== 0 || !(event.target instanceof Element)) return;
+    if (gesture.current) reset();
+    if (event.isPrimary === false) return;
+    if (pending || event.defaultPrevented || event.button !== 0) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (!(event.target instanceof Element) || index < 0 || !isSwipeArea(event.target, pathname)) return;
     const onTabs = Boolean(event.target.closest("[data-section-tabs]"));
-    if ((!onTabs && rootTabIndex(pathname) < 0) || index < 0) return;
-    if (event.pointerType === "mouse" && !onTabs) return;
     if (ownsGesture(event.target, event.currentTarget)) return;
     const width = document.documentElement.clientWidth;
     // Keep the screen edges available for the browser and OS Back gesture.
@@ -135,12 +197,18 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
   function pointerMove(event: PointerEvent<HTMLDivElement>) {
     const start = gesture.current;
     if (!start || start.id !== event.pointerId) return;
+    if (event.pointerType === "mouse" && (event.buttons & 1) === 0) {
+      reset();
+      return;
+    }
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
     if (!start.horizontal) {
       if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { reset(); return; }
       if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.35) return;
       start.horizontal = true;
+      event.currentTarget.setAttribute("data-dragging-section", "");
+      if (event.pointerType === "mouse") window.getSelection()?.removeAllRanges();
       event.currentTarget.setPointerCapture?.(event.pointerId);
     }
     event.preventDefault();
@@ -162,8 +230,19 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
 
   return (
     <SectionContext.Provider value={{ index, selected, pending, direction: intent.direction, position, offset, navigate }}>
-      <div className="app-shell flex min-h-dvh min-w-0 flex-col overflow-x-clip"
-        onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={reset}
+      <div
+        ref={shellRef}
+        className="app-shell flex min-h-dvh min-w-0 flex-col overflow-x-clip data-[dragging-section]:select-none"
+        onPointerDown={pointerDown}
+        onPointerMove={pointerMove}
+        onPointerUp={pointerUp}
+        onPointerCancel={reset}
+        onLostPointerCapture={event => {
+          if (event.target === event.currentTarget && gesture.current?.id === event.pointerId) reset();
+        }}
+        onDragStart={event => {
+          if (gesture.current) event.preventDefault();
+        }}
         onClickCapture={event => {
           if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; }
         }}>

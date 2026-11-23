@@ -1,12 +1,14 @@
-import { ChevronRight, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 
+import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
 import type { CardioPresetKind } from "@/lib/domain/cardio/presets";
 import {
   buildHistory,
   countWeekSessions,
   type HistoryItem,
 } from "@/lib/domain/workouts/history";
+import { deleteHistoryItemAction } from "@/server/actions/history";
 
 // Слияние истории — чистая доменная логика (lib/domain/workouts/history.ts),
 // здесь только её реэкспорт + отрисовка. Существующие импортёры (дашборд,
@@ -27,15 +29,22 @@ const FORMAT_HREF: Record<HistoryItem["kind"], string> = {
   cardio: "/cardio",
 };
 
+const DELETE_LABEL: Record<HistoryItem["kind"], string> = {
+  strength: "Удалить тренировку",
+  circuit: "Удалить круговую",
+  cardio: "Удалить кардио",
+};
+
 export function HistoryCard({ item }: { item: HistoryItem }) {
   const href = `${FORMAT_HREF[item.kind]}/${item.id}`;
+  const deleteLabel = DELETE_LABEL[item.kind];
 
   return (
-    <Link
-      href={href}
-      className="interactive-surface bg-card hover:bg-accent/40 border-border hover:border-primary/25 focus-visible:ring-ring block rounded-2xl border p-4 focus-visible:ring-2 focus-visible:outline-none"
-    >
-      <div className="flex items-start justify-between gap-3">
+    <div className="interactive-surface bg-card border-border hover:border-primary/25 flex items-start rounded-2xl border">
+      <Link
+        href={href}
+        className="focus-visible:ring-ring flex min-w-0 flex-1 items-start justify-between gap-2 rounded-2xl py-4 pl-4 pr-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none"
+      >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
@@ -48,21 +57,23 @@ export function HistoryCard({ item }: { item: HistoryItem }) {
           </h3>
           <HistoryMetrics item={item} />
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {(item.kind === "strength" || item.kind === "circuit") &&
-          item.hasAnalysis ? (
-            <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
-              <Sparkles className="size-3" />
-              AI
-            </span>
-          ) : null}
-          <ChevronRight
-            className="text-muted-foreground size-4"
-            aria-hidden="true"
-          />
-        </div>
-      </div>
-    </Link>
+        {(item.kind === "strength" || item.kind === "circuit") && item.hasAnalysis ? (
+          <span className="bg-primary/10 text-primary inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+            <Sparkles className="size-3" />
+            AI
+          </span>
+        ) : null}
+      </Link>
+      <ConfirmDeleteButton
+        action={deleteHistoryItemAction}
+        hidden={{ kind: item.kind, id: item.id }}
+        title={`${deleteLabel}?`}
+        description={`«${item.name}» удалится безвозвратно вместе с подходами и AI-разбором.`}
+        triggerLabel={deleteLabel}
+        iconOnly
+        className="mr-2 mt-2 min-w-11 shrink-0"
+      />
+    </div>
   );
 }
 

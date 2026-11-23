@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,22 +20,32 @@ class TestPointerEvent extends MouseEvent {
   }
 }
 
-function swipe(target: Element, dx: number, dy = 0) {
-  const point = { pointerId: 1, pointerType: "touch", isPrimary: true, button: 0 };
+function swipe(target: Element, dx: number, dy = 0, pointerType = "touch") {
+  const point = { pointerId: 1, pointerType, isPrimary: true, button: 0, buttons: 1 };
   fireEvent.pointerDown(target, { ...point, clientX: 200, clientY: 200 });
   fireEvent.pointerMove(target, { ...point, clientX: 200 + dx, clientY: 200 + dy });
-  fireEvent.pointerUp(target, { ...point, clientX: 200 + dx, clientY: 200 + dy });
+  fireEvent.pointerUp(target, { ...point, buttons: 0, clientX: 200 + dx, clientY: 200 + dy });
 }
 
-function fixture() {
-  return render(createElement(SectionNavigation, null,
+function page() {
+  return createElement(SectionNavigation, null,
     createElement("main", { "data-section-content": true },
       createElement("a", { href: "/create", "data-testid": "link" }, "Начать тренировку"),
       createElement("div", { "data-swipe-block": true, "data-testid": "model" }, "3D"),
       createElement("input", { "data-testid": "input" }),
     ),
     createElement("nav", { "data-section-tabs": true, "data-testid": "tabs" }, "Разделы"),
-  ));
+  );
+}
+
+function fixture() {
+  return render(page());
+}
+
+function wheel(target: Element, deltaX: number, deltaY: number, timeStamp: number) {
+  const event = createEvent.wheel(target, { deltaX, deltaY, cancelable: true });
+  Object.defineProperty(event, "timeStamp", { value: timeStamp });
+  return fireEvent(target, event);
 }
 
 describe("section swipe integration", () => {
@@ -59,6 +69,48 @@ describe("section swipe integration", () => {
     swipe(link, -90);
     expect(route.push).toHaveBeenCalledExactlyOnceWith("/workouts", { scroll: false });
     expect(fireEvent.click(link)).toBe(false);
+  });
+
+  it.each([
+    ["/dashboard", -100, "/workouts"],
+    ["/workouts", -100, "/stats"],
+    ["/stats", 100, "/workouts"],
+    ["/workouts", 100, "/dashboard"],
+  ])("accepts a mouse drag over the content of %s", (from, dx, to) => {
+    route.pathname = from;
+    const view = fixture();
+    swipe(view.getByTestId("link"), dx, 0, "mouse");
+    expect(route.push).toHaveBeenCalledExactlyOnceWith(to, { scroll: false });
+  });
+
+  it("lets the page swipe handle win over a browser link drag", () => {
+    const view = fixture();
+    const link = view.getByTestId("link");
+    fireEvent.pointerDown(link, { pointerType: "mouse", buttons: 1, clientX: 200 });
+    expect(fireEvent.dragStart(link)).toBe(false);
+  });
+
+  it("moves one section per horizontal wheel gesture even after the route changes", () => {
+    const view = fixture();
+    const link = view.getByTestId("link");
+    wheel(link, 35, 3, 1000);
+    expect(route.push).not.toHaveBeenCalled();
+    wheel(link, 45, 3, 1030);
+    expect(route.push).toHaveBeenCalledExactlyOnceWith("/workouts", { scroll: false });
+
+    route.pathname = "/workouts";
+    view.rerender(page());
+    wheel(link, 120, 0, 1080);
+    expect(route.push).toHaveBeenCalledTimes(1);
+    wheel(link, -100, 0, 1350);
+    expect(route.push).toHaveBeenLastCalledWith("/dashboard", { scroll: false });
+  });
+
+  it("keeps vertical scrolling and wheel gestures inside protected content", () => {
+    const view = fixture();
+    expect(wheel(view.getByTestId("link"), 35, 100, 1000)).toBe(true);
+    expect(wheel(view.getByTestId("model"), 120, 0, 1250)).toBe(true);
+    expect(route.push).not.toHaveBeenCalled();
   });
 
   it("leaves vertical scroll, form controls and the model alone", () => {
@@ -86,6 +138,16 @@ describe("section swipe integration", () => {
     fireEvent.pointerCancel(link);
     fireEvent.pointerUp(link, { clientX: 90, clientY: 200 });
     expect(route.push).not.toHaveBeenCalled();
+  });
+
+  it("keeps a touch gesture when a child gives up implicit pointer capture", () => {
+    const view = fixture();
+    const link = view.getByTestId("link");
+    fireEvent.pointerDown(link, { clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(link, { clientX: 90, clientY: 200 });
+    fireEvent.lostPointerCapture(link, { bubbles: true });
+    fireEvent.pointerUp(link, { clientX: 80, clientY: 200 });
+    expect(route.push).toHaveBeenCalledExactlyOnceWith("/workouts", { scroll: false });
   });
 
   it("leaves browser Back restoration alone when the root was not visited", () => {
