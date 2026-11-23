@@ -12,8 +12,8 @@ android {
         applicationId = "app.leadgenerator.fitness"
         minSdk = 23
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.3.1"
+        versionCode = 13
+        versionName = "1.3.2"
         manifestPlaceholders["appLabel"] = "Vibe-trainer"
     }
 

@@ -1,10 +1,9 @@
-import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import {
   presetToBlocks,
-  resumeCutoff,
   type CardioPresetKind,
   type CustomParams,
 } from "@/lib/domain";
@@ -40,6 +39,15 @@ export async function startCardioFromPreset(
 ): Promise<{ id: string }> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`cardio-start:${userId}`}, 0))`);
+    if (options?.clientWorkoutId) {
+      const [replay] = await tx.select({ id: schema.cardioWorkouts.id }).from(schema.cardioWorkouts)
+        .where(and(eq(schema.cardioWorkouts.id, options.clientWorkoutId), eq(schema.cardioWorkouts.userId, userId))).limit(1);
+      if (replay) return replay;
+    }
+    const [active] = await tx.select({ id: schema.cardioWorkouts.id }).from(schema.cardioWorkouts)
+      .where(and(eq(schema.cardioWorkouts.userId, userId), eq(schema.cardioWorkouts.status, "active")))
+      .orderBy(desc(schema.cardioWorkouts.startedAt)).limit(1);
+    if (active) return active;
     const blocks = presetToBlocks(input.preset, input.params);
     if (blocks.length === 0) {
       throw new Error("Preset не дал ни одного блока");
@@ -68,15 +76,6 @@ export async function startCardioFromPreset(
       if (existing) return existing;
       throw new FormatWriteError("workout_status_conflict", "Не удалось начать кардио");
     }
-
-    // Повтор мобильного старта возвращается выше и не трогает активный сеанс.
-    await tx.update(schema.cardioWorkouts)
-      .set({ status: "cancelled", finishedAt: new Date() })
-      .where(and(
-        eq(schema.cardioWorkouts.userId, userId),
-        eq(schema.cardioWorkouts.status, "active"),
-        ne(schema.cardioWorkouts.id, cardioId),
-      ));
 
     await tx.insert(schema.cardioBlocks).values(
       blocks.map((b, i) => ({
@@ -120,7 +119,7 @@ export async function getCardioForUser(
 /** G7b re-run: клонирует прошлое кардио юзера в НОВЫЙ активный сеанс — копирует
  *  план (имя, preset, planJson, блоки с плановой длительностью), но НЕ фактические
  *  результаты (свежий старт). Копируем блоки напрямую, не пере-выводя из preset
- *  (точнее для custom-параметров). G2-инвариант: отменяем прошлую active-кардио.
+ *  (точнее для custom-параметров). Незавершённая сессия сначала возобновляется.
  *  R-7: getCardioForUser фильтрует по userId, чужую не клонируем. */
 export async function cloneCardio(
   userId: string,
@@ -132,15 +131,10 @@ export async function cloneCardio(
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`cardio-start:${userId}`}, 0))`);
-    await tx
-      .update(schema.cardioWorkouts)
-      .set({ status: "cancelled", finishedAt: new Date() })
-      .where(
-        and(
-          eq(schema.cardioWorkouts.userId, userId),
-          eq(schema.cardioWorkouts.status, "active"),
-        ),
-      );
+    const [active] = await tx.select({ id: schema.cardioWorkouts.id }).from(schema.cardioWorkouts)
+      .where(and(eq(schema.cardioWorkouts.userId, userId), eq(schema.cardioWorkouts.status, "active")))
+      .orderBy(desc(schema.cardioWorkouts.startedAt)).limit(1);
+    if (active) return active;
 
     const cardioId = crypto.randomUUID();
     await tx.insert(schema.cardioWorkouts).values({
@@ -274,8 +268,6 @@ export async function getActiveCardioId(
       and(
         eq(schema.cardioWorkouts.userId, userId),
         eq(schema.cardioWorkouts.status, "active"),
-        // H2.2b: брошенная сессия старше окна не всплывает как resume-фантом.
-        gte(schema.cardioWorkouts.startedAt, resumeCutoff(new Date())),
       ),
     )
     .orderBy(desc(schema.cardioWorkouts.startedAt))

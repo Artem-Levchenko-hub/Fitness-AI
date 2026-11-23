@@ -64,7 +64,7 @@ export function OfflineBanner() {
         recordSet: async (m) => {
           const state = await recordSetAction(
             { status: "idle" },
-            recordSetFormData(m.payload),
+            recordSetFormData(m.payload, m.queuedAt),
           );
           // Успех = idle; ошибка валидации (error) → оставить (не зацикливаем:
           // дренаж бьёт лишь на online-событие/маунт/повтор, не в тугом цикле).

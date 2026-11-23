@@ -302,6 +302,13 @@
       "when": 1786491180057,
       "tag": "0042_strength_records",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1795438800000,
+      "tag": "0043_workout_set_saved_at",
+      "breakpoints": true
     }
   ]
 }

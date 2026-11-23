@@ -84,7 +84,7 @@ export function ProfileAvatar({
           crossOrigin="anonymous"
         />
       ) : null}
-      <div className="bg-card/40 border-border relative aspect-[4/5] max-h-[32rem] w-full overflow-hidden rounded-3xl border">
+      <div data-swipe-block className="bg-card/40 border-border relative aspect-[4/5] max-h-[32rem] w-full overflow-hidden rounded-3xl border">
         <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 p-3">
           <span className="bg-card/90 rounded-full px-3 py-2 text-xs font-medium">Нагрузка за 7 дней</span>
           <div role="group" aria-label="Вид модели" className="bg-card/90 flex rounded-full p-1">

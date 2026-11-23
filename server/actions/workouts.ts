@@ -67,6 +67,7 @@ const recordSetSchema = z.object({
   setIndex: z.coerce.number().int().min(0).max(50),
   weightKg: z.coerce.number().min(0).max(1000),
   reps: z.coerce.number().int().min(1).max(100),
+  completedAt: z.iso.datetime().optional(),
   rpe: z
     .union([z.coerce.number().min(1).max(10), z.literal("")])
     .optional()
@@ -92,6 +93,7 @@ export async function recordSetAction(
     setIndex: formData.get("setIndex"),
     weightKg: formData.get("weightKg"),
     reps: formData.get("reps"),
+    completedAt: formData.get("completedAt") || undefined,
     rpe: formData.get("rpe") ?? undefined,
     restSeconds: formData.get("restSeconds") ?? undefined,
   });
@@ -118,6 +120,9 @@ export async function recordSetAction(
     rpe: parsed.data.rpe,
     restSeconds: parsed.data.restSeconds,
     clientSetId,
+    completedAt: parsed.data.completedAt
+      ? new Date(Math.min(Date.parse(parsed.data.completedAt), Date.now()))
+      : undefined,
   });
   revalidatePath(`/workouts/${parsed.data.workoutId}`);
   return { status: "idle" };

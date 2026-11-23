@@ -39,13 +39,13 @@ export function SleepForm({
           defaultValue={defaultHours != null ? String(defaultHours) : ""}
           placeholder="7.5"
           required
-          className="mt-1"
+          className="mt-2 h-12"
         />
       </div>
 
       <fieldset>
         <legend className="text-sm font-medium">Качество сна (1–5, опционально)</legend>
-        <div className="mt-1 flex gap-2">
+        <div className="mt-2 flex gap-2">
           {[1, 2, 3, 4, 5].map((n) => (
             <label
               key={n}
@@ -78,13 +78,13 @@ export function SleepForm({
       </div>
 
       {state.status === "error" ? (
-        <p className="text-destructive text-sm" role="alert">{state.message}</p>
+        <p className="bg-destructive/10 text-destructive border-destructive/20 rounded-xl border px-3 py-3 text-sm" role="alert">{state.message}</p>
       ) : null}
       {state.status === "success" ? (
-        <p className="text-success text-sm" role="status" aria-live="polite">{state.message}</p>
+        <p className="bg-success/10 text-success border-success/20 rounded-xl border px-3 py-3 text-sm" role="status" aria-live="polite">{state.message}</p>
       ) : null}
 
-      <Button type="submit" disabled={pending} size="xl" className="w-full">
+      <Button type="submit" disabled={pending} aria-busy={pending} size="xl" className="w-full">
         {pending ? "Сохраняю…" : "Сохранить"}
       </Button>
     </form>

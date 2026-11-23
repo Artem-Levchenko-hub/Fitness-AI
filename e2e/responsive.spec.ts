@@ -25,12 +25,23 @@ test("mobile: exercises, Мио-репсы and quick activity fit the viewport",
   await expect(page.getByRole("heading", { name: "Упражнения", level: 1 })).toBeVisible();
   await expectNoPageOverflow(page);
 
-  // Фильтры должны переноситься, а не превращать весь экран в горизонтальную ленту.
-  const filterButtons = page.locator('button[aria-pressed]');
+  // Скролл остаётся внутри одной строки фильтров, весь экран не растягивается.
+  const muscleFilters = page.getByRole("group", { name: "Фильтр по мышцам" });
+  const filterButtons = muscleFilters.getByRole("button");
   expect(await filterButtons.count()).toBeGreaterThan(3);
   const firstTop = await filterButtons.first().evaluate((el) => el.getBoundingClientRect().top);
   const lastTop = await filterButtons.last().evaluate((el) => el.getBoundingClientRect().top);
-  expect(lastTop).toBeGreaterThan(firstTop);
+  expect(lastTop).toBe(firstTop);
+  expect(
+    await muscleFilters.evaluate((el) => {
+      return el.scrollWidth > el.clientWidth && getComputedStyle(el).overflowX === "auto";
+    }),
+  ).toBe(true);
+  await filterButtons.last().scrollIntoViewIfNeeded();
+  await filterButtons.last().click();
+  await expect(filterButtons.last()).toHaveAttribute("aria-pressed", "true");
+  expect(await muscleFilters.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  await expectNoPageOverflow(page);
 
   await page.goto("/templates");
   const myoTemplate = page.locator(

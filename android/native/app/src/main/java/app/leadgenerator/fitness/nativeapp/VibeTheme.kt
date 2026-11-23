@@ -64,9 +64,9 @@ private val DarkColors = darkColorScheme(
 
 private val Defaults = Typography()
 private val VibeTypography = Defaults.copy(
-    headlineLarge = Defaults.headlineLarge.copy(fontFamily = FontFamily.Serif, fontSize = 40.sp, lineHeight = 45.sp),
-    headlineMedium = Defaults.headlineMedium.copy(fontFamily = FontFamily.Serif, lineHeight = 36.sp),
-    headlineSmall = Defaults.headlineSmall.copy(fontFamily = FontFamily.Serif),
+    headlineLarge = Defaults.headlineLarge.copy(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 34.sp, lineHeight = 39.sp),
+    headlineMedium = Defaults.headlineMedium.copy(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 29.sp, lineHeight = 35.sp),
+    headlineSmall = Defaults.headlineSmall.copy(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold),
     titleMedium = Defaults.titleMedium.copy(fontWeight = FontWeight.SemiBold),
 )
 

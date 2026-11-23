@@ -2,15 +2,16 @@ import { revalidatePath } from "next/cache";
 
 import { getTrainingReadiness } from "@/lib/repos/recovery.repo";
 import { adaptTemplateAfterWorkout } from "@/lib/repos/training-programs.repo";
-import { finishWorkout, getActiveWorkoutForUser, type WorkoutFinishNote } from "@/lib/repos/workouts.repo";
+import { finishWorkout, getActiveWorkoutForUser, type WorkoutFinishNote, type WorkoutFinishOptions } from "@/lib/repos/workouts.repo";
 
 /** Завершение с сайта и из приложения использует одну очередь анализа и адаптацию шаблона. */
 export async function finishStrengthWorkout(
   userId: string,
   workoutId: string,
   note?: WorkoutFinishNote,
+  options?: WorkoutFinishOptions,
 ) {
-  const transition = await finishWorkout(userId, workoutId, note);
+  const transition = await finishWorkout(userId, workoutId, note, options);
   if (transition !== "changed") return transition;
 
   try {

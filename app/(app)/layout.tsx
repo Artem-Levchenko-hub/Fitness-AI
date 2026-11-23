@@ -2,6 +2,7 @@ import { BottomTabBar } from "@/components/app/BottomTabBar";
 import { GlobalResumeBar } from "@/components/app/GlobalResumeBar";
 import { OfflineBanner } from "@/components/app/OfflineBanner";
 import { SessionRefreshSync } from "@/components/auth/SessionRefreshSync";
+import { SectionNavigation, SectionPages } from "@/components/app/SectionNavigation";
 import { requireUser } from "@/lib/auth/require-user";
 import { getActiveResumes } from "@/server/actions/active-resumes";
 
@@ -18,12 +19,12 @@ export default async function AppLayout({
   const initialResumes = await getActiveResumes();
 
   return (
-    <div className="app-shell flex min-h-dvh min-w-0 flex-col overflow-x-clip">
+    <SectionNavigation>
       <SessionRefreshSync />
       <OfflineBanner />
-      <div className="flex-1 pb-36">{children}</div>
+      <SectionPages>{children}</SectionPages>
       <GlobalResumeBar initial={initialResumes} />
       <BottomTabBar />
-    </div>
+    </SectionNavigation>
   );
 }

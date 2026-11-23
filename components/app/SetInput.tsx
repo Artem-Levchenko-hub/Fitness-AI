@@ -166,6 +166,7 @@ export function SetInput({
         rpe: String(rpeRaw ?? ""),
         restSeconds: String(fd.get("restSeconds") ?? ""),
         clientSetId,
+        completedAt: completedAt.toISOString(),
       },
       queuedAt: completedAt.getTime(),
     });
@@ -202,6 +203,7 @@ export function SetInput({
     setLocalError("");
     const fd = new FormData(e.currentTarget);
     fd.set("restSeconds", measuredRestSeconds());
+    fd.set("completedAt", new Date().toISOString());
 
     // H15.3b-2 — офлайн (navigator.onLine=false) идёт в outbox, не на сервер.
     if (typeof navigator !== "undefined" && navigator.onLine === false) {

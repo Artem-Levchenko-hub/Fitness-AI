@@ -64,7 +64,7 @@ export function BodyMeasurementForm() {
               name={f.name}
               decimal
               placeholder="—"
-              className="tabular h-10"
+              className="tabular h-12"
             />
           </div>
         ))}
@@ -93,7 +93,7 @@ export function BodyMeasurementForm() {
         </p>
       ) : null}
       {state.status === "success" ? (
-        <p className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
+        <p role="status" aria-live="polite" className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
           Замер сохранён
         </p>
       ) : null}

@@ -1,29 +1,19 @@
 "use client";
 
 import { Activity, ChartNoAxesCombined, Home, User } from "lucide-react";
-import Link, { useLinkStatus } from "next/link";
-import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { motion, useTransform } from "framer-motion";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { MAIN_TABS } from "@/lib/navigation/main-tabs";
+import { useSectionNavigation } from "./SectionNavigation";
 
-const TABS = [
-  { href: "/dashboard", icon: Home, label: "Главная" },
-  {
-    href: "/workouts", icon: Activity, label: "Тренировки",
-    relatedPaths: ["/create", "/templates", "/programs", "/library", "/circuits", "/cardio", "/exercises"],
-  },
-  { href: "/stats", icon: ChartNoAxesCombined, label: "Прогресс", relatedPaths: ["/body", "/sleep", "/nutrition"] },
-  {
-    href: "/profile",
-    icon: User,
-    label: "Профиль",
-    relatedPaths: ["/records", "/settings", "/billing", "/friends", "/admin", "/schedule", "/notes"],
-  },
-] as const;
+const TAB_ICONS = [Home, Activity, ChartNoAxesCombined, User];
 
 export function BottomTabBar() {
-  const pathname = usePathname();
+  const navigation = useSectionNavigation();
+  const indicatorLeft = useTransform(navigation.position, value => `${value * 25}%`);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -38,22 +28,24 @@ export function BottomTabBar() {
       hidden={keyboardOpen}
       className="app-tab-bar bg-card/95 border-border fixed inset-x-0 bottom-0 z-50 border-t backdrop-blur-xl"
       aria-label="Главная навигация"
+      data-section-tabs
+      style={{ touchAction: "pan-y pinch-zoom" }}
     >
-      <ul className="mx-auto grid max-w-2xl grid-cols-4 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        {TABS.map((tab) => {
-          const active =
-            pathname === tab.href ||
-            pathname.startsWith(`${tab.href}/`) ||
-            ("relatedPaths" in tab &&
-              tab.relatedPaths.some(
-                (path) => pathname === path || pathname.startsWith(`${path}/`),
-              ));
-          const Icon = tab.icon;
+      <ul className="relative mx-auto grid max-w-2xl grid-cols-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <motion.li aria-hidden="true" className="pointer-events-none absolute top-3 w-1/4" style={{ left: indicatorLeft }}>
+          <span className="bg-primary/10 mx-auto block h-7 w-12 rounded-full" />
+        </motion.li>
+        {MAIN_TABS.map((tab, index) => {
+          const active = navigation.selected === index;
+          const Icon = TAB_ICONS[index];
           return (
             <li key={tab.href} className="flex">
               <Link
                 href={tab.href}
-                aria-current={active ? "page" : undefined}
+                draggable={false}
+                onNavigate={event => { event.preventDefault(); navigation.navigate(tab.href); }}
+                aria-current={navigation.index === index ? "page" : undefined}
+                aria-busy={active && navigation.pending || undefined}
                 className={cn(
                   "group/tab focus-visible:ring-ring relative flex w-full flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium tracking-tight transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
                   "min-h-14 text-[11px]",
@@ -65,14 +57,13 @@ export function BottomTabBar() {
                 <span
                   className={cn(
                     "relative flex h-7 min-w-10 items-center justify-center rounded-full px-2 transition-[background-color,box-shadow,transform] duration-200 ease-out group-active/tab:scale-95 motion-reduce:transform-none",
-                    active && "bg-primary/10 shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_10%,transparent)]",
                   )}
                 >
                   <Icon
                     className="size-5 transition-transform duration-200 group-hover/tab:-translate-y-0.5 motion-reduce:transform-none"
                     aria-hidden="true"
                   />
-                  <TabPendingIndicator />
+                  <span aria-hidden="true" data-pending={active && navigation.pending} className="nav-pending-indicator bg-primary absolute top-0 right-1 size-1.5 rounded-full" />
                 </span>
                 <span>{tab.label}</span>
               </Link>
@@ -81,17 +72,5 @@ export function BottomTabBar() {
         })}
       </ul>
     </nav>
-  );
-}
-
-function TabPendingIndicator() {
-  const { pending } = useLinkStatus();
-
-  return (
-    <span
-      aria-hidden="true"
-      data-pending={pending}
-      className="nav-pending-indicator bg-primary absolute top-0 right-1 size-1.5 rounded-full"
-    />
   );
 }

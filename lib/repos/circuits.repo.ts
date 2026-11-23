@@ -1,8 +1,7 @@
-import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import { resumeCutoff } from "@/lib/domain";
 import { FormatWriteError, type FormatStartOptions, type FormatTransition } from "./training-format-write";
 
 export type CircuitSummary = {
@@ -61,6 +60,15 @@ export async function startCircuit(
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`circuit-start:${userId}`}, 0))`);
+    if (options?.clientWorkoutId) {
+      const [replay] = await tx.select({ id: schema.circuitWorkouts.id }).from(schema.circuitWorkouts)
+        .where(and(eq(schema.circuitWorkouts.id, options.clientWorkoutId), eq(schema.circuitWorkouts.userId, userId))).limit(1);
+      if (replay) return replay;
+    }
+    const [active] = await tx.select({ id: schema.circuitWorkouts.id }).from(schema.circuitWorkouts)
+      .where(and(eq(schema.circuitWorkouts.userId, userId), eq(schema.circuitWorkouts.status, "active")))
+      .orderBy(desc(schema.circuitWorkouts.startedAt)).limit(1);
+    if (active) return active;
     const id = options?.clientWorkoutId ?? crypto.randomUUID();
     const [inserted] = await tx.insert(schema.circuitWorkouts).values({
       id,
@@ -80,15 +88,6 @@ export async function startCircuit(
       if (existing) return existing;
       throw new FormatWriteError("workout_status_conflict", "Не удалось начать круговую");
     }
-
-    // Повтор мобильного старта возвращается выше и не трогает активный сеанс.
-    await tx.update(schema.circuitWorkouts)
-      .set({ status: "cancelled", finishedAt: new Date() })
-      .where(and(
-        eq(schema.circuitWorkouts.userId, userId),
-        eq(schema.circuitWorkouts.status, "active"),
-        ne(schema.circuitWorkouts.id, id),
-      ));
 
     await tx.insert(schema.circuitExercises).values(
       input.exercises.map((e, idx) => ({
@@ -110,8 +109,8 @@ export async function startCircuit(
 
 /** G7b re-run: клонирует прошлую круговую юзера в НОВЫЙ активный сеанс — копирует
  *  план (имя, раунды, отдыхи, упражнения с целями), но НЕ логи раундов (свежий
- *  старт). Делегирует в startCircuit → тот же G2-инвариант (отменяет прошлую
- *  active-круговую). R-7: getCircuitForUser фильтрует по userId, чужую не клонируем. */
+ *  старт). Незавершённая круговая сначала возобновляется.
+ *  R-7: getCircuitForUser фильтрует по userId, чужую не клонируем. */
 export async function cloneCircuit(
   userId: string,
   sourceId: string,
@@ -270,8 +269,6 @@ export async function getActiveCircuitId(
       and(
         eq(schema.circuitWorkouts.userId, userId),
         eq(schema.circuitWorkouts.status, "active"),
-        // H2.2b: брошенная сессия старше окна не всплывает как resume-фантом.
-        gte(schema.circuitWorkouts.startedAt, resumeCutoff(new Date())),
       ),
     )
     .orderBy(desc(schema.circuitWorkouts.startedAt))

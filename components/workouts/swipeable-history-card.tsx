@@ -59,7 +59,7 @@ export function SwipeableHistoryCard({ item }: { item: HistoryItem }) {
   const label = KIND_ACCUSATIVE[item.kind];
 
   return (
-    <div className="relative overflow-hidden rounded-2xl">
+    <div data-swipe-block className="relative overflow-hidden rounded-2xl">
       {/* Красная зона под карточкой — проступает по мере свайпа влево. */}
       <div className="absolute inset-y-0 right-0 flex">
         <button

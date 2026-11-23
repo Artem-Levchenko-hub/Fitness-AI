@@ -119,6 +119,8 @@ export const workoutSets = pgTable(
      *  partial-unique ниже отвергает дубль ТОЛЬКО среди non-null значений —
      *  legacy-строки не трогаются (столп 4). */
     clientSetId: text("client_set_id"),
+    /** Когда сервер принял подход: офлайн completedAt не сдвигает таймер назад. */
+    savedAt: timestamp("saved_at", { mode: "date", withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", {
       mode: "date",
       withTimezone: true,

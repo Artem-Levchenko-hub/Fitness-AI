@@ -114,9 +114,9 @@ export default async function SchedulePage() {
             {schedules.map((s) => (
               <li
                 key={s.id}
-                className="bg-card border-border flex items-center gap-3 rounded-2xl border p-4"
+                className="bg-card border-border flex flex-wrap items-center gap-3 rounded-2xl border p-4"
               >
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
                   <p className="truncate text-sm font-semibold tracking-tight">
                     {s.label}
                   </p>
@@ -136,14 +136,14 @@ export default async function SchedulePage() {
                   ) : null}
                 </div>
 
-                <form action={toggleScheduleAction}>
+                <form action={toggleScheduleAction} className="flex-1 sm:flex-none">
                   <input type="hidden" name="id" value={s.id} />
                   <input
                     type="hidden"
                     name="enabled"
                     value={s.enabled ? "false" : "true"}
                   />
-                  <Button type="submit" variant="outline" size="sm">
+                  <Button type="submit" variant="outline" size="sm" className="min-h-11 w-full px-4">
                     {s.enabled ? "Выключить" : "Включить"}
                   </Button>
                 </form>
@@ -155,6 +155,7 @@ export default async function SchedulePage() {
                     variant="ghost"
                     size="icon"
                     aria-label={`Удалить расписание «${s.label}»`}
+                    className="size-11"
                   >
                     <Trash2 className="text-muted-foreground size-4" />
                   </Button>

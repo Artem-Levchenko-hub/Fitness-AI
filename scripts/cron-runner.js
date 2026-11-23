@@ -5,6 +5,7 @@
  *
  *  - process-ai-jobs: каждую минуту
  *  - ai-billing:      каждую минуту (stale single-flight recovery)
+ *  - finish-inactive: каждую минуту (полный план + час без новых подходов)
  *  - daily-trainer:   каждый час (роут сам решит, у кого локально 22:00)
  *  - weekly-trainer:  каждый час (роут сам решит, у кого локально Вс 20:00)
  *  - push-reminders:  каждый час
@@ -69,6 +70,7 @@ console.log(`[cron-runner] started, base=${BASE}`);
 // process-ai-jobs дергаем чаще всего — обрабатывает свежие aiJobs.
 scheduleEveryMinute("/api/cron/process-ai-jobs");
 scheduleEveryMinute("/api/cron/ai-billing-reconcile");
+scheduleEveryMinute("/api/cron/finish-inactive-workouts");
 
 // Hourly:
 scheduleEveryHour("/api/cron/daily-trainer");

@@ -31,13 +31,14 @@ export function PeriodPills() {
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div role="group" aria-label="Период статистики" className="grid grid-cols-5 gap-1.5">
       {PERIODS.map((p) => {
         const active = current === p.v;
         return (
           <motion.button
             key={p.v}
             type="button"
+            aria-pressed={active}
             onClick={() => set(p.v)}
             whileTap={reduced ? undefined : { scale: 0.94 }}
             transition={
@@ -46,7 +47,7 @@ export function PeriodPills() {
                 : { type: "spring", stiffness: 500, damping: 28 }
             }
             className={cn(
-              "relative rounded-full border px-3.5 py-2 text-xs font-medium whitespace-nowrap transition-colors",
+              "relative min-h-11 rounded-xl border px-2 py-2 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               active
                 ? "text-primary-foreground border-transparent"
                 : "border-border bg-card text-muted-foreground hover:text-foreground",
@@ -84,13 +85,14 @@ export function GranularityPills() {
   }
 
   return (
-    <div className="flex gap-1.5">
+    <div role="group" aria-label="Группировка статистики" className="flex gap-1.5">
       {GRANULARITY.map((p) => {
         const active = current === p.v;
         return (
           <motion.button
             key={p.v}
             type="button"
+            aria-pressed={active}
             onClick={() => set(p.v)}
             whileTap={reduced ? undefined : { scale: 0.94 }}
             transition={
@@ -99,7 +101,7 @@ export function GranularityPills() {
                 : { type: "spring", stiffness: 500, damping: 28 }
             }
             className={cn(
-              "relative rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+              "relative min-h-11 rounded-xl border px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               active
                 ? "text-primary-foreground border-transparent"
                 : "border-border bg-card text-muted-foreground hover:text-foreground",
@@ -144,9 +146,10 @@ export function ExerciseSelector({
 
   return (
     <select
+      aria-label="Упражнение для графика прогресса"
       value={current}
       onChange={(e) => set(e.target.value)}
-      className="bg-card border-border text-foreground hover:border-primary/40 h-9 rounded-md border px-3 text-sm transition-colors"
+      className="bg-card border-border text-foreground hover:border-primary/40 h-11 w-full min-w-0 rounded-lg border px-3 text-sm transition-colors sm:max-w-64 sm:shrink-0"
     >
       {exercises.map((e) => (
         <option key={e.id} value={e.id}>

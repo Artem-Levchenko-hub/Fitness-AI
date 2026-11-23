@@ -18,6 +18,7 @@ internal data class Workout(
     val exercises: List<Exercise>,
     val startedAt: String = "",
     val status: String = "active",
+    val autoFinishAt: String? = null,
 ) {
     companion object {
         fun fromJson(workout: JSONObject) = Workout(
@@ -25,6 +26,7 @@ internal data class Workout(
             name = workout.getString("name"),
             startedAt = workout.optString("startedAt"),
             status = workout.optString("status", "active"),
+            autoFinishAt = if (workout.isNull("autoFinishAt")) null else workout.optString("autoFinishAt").ifBlank { null },
             exercises = workout.objects("exercises").map { exercise ->
                 Exercise(
                     id = exercise.getString("id"),

@@ -53,22 +53,22 @@ internal fun HomeScreen(
         item { VibeHeading("Сегодня", today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", RussianLocale))) }
         item {
             val colors = MaterialTheme.colorScheme
-            Surface(shape = MaterialTheme.shapes.large, color = colors.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+            Surface(shape = MaterialTheme.shapes.large, color = colors.primary, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         if (workout == null) "Время тренироваться" else workout.name,
                         style = MaterialTheme.typography.headlineMedium,
-                        color = colors.onPrimaryContainer,
+                        color = colors.onPrimary,
                     )
                     Text(
                         if (workout != null) "Упражнений: ${workout.exercises.size}"
                         else if (journal.templates.isNotEmpty()) "Готовых шаблонов: ${journal.templates.size}"
                         else "Откройте дневник и выберите тренировку.",
-                        color = colors.onPrimaryContainer,
+                        color = colors.onPrimary,
                     )
                     Button(
                         onClick = onTraining, modifier = Modifier.heightIn(min = 48.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.onPrimary, contentColor = colors.primary),
                     ) { Text(if (workout == null) "Открыть тренировки" else "Продолжить") }
                 }
             }

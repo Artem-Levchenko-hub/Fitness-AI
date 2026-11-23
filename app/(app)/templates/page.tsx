@@ -63,22 +63,25 @@ export default async function TemplatesPage() {
 
       {/* Входы уровнем выше шаблона: «Мои планы» (собрать программу из своих
           тренировок + оценка тренера) и Библиотека готовых. */}
-      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <nav
+        aria-label="Планы и библиотека"
+        className="mb-5 grid grid-cols-2 gap-2"
+      >
         <Link
           href="/programs"
-          className="text-primary hover:text-primary/80 inline-flex items-center gap-1.5 text-xs font-semibold transition-colors"
+          className="bg-card border-border text-primary hover:bg-accent inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-center text-sm font-medium transition-colors"
         >
-          <Layers className="size-3.5" aria-hidden="true" />
+          <Layers className="size-4 shrink-0" aria-hidden="true" />
           Мои планы
         </Link>
         <Link
           href="/library"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
+          className="bg-card border-border text-muted-foreground hover:bg-accent hover:text-foreground inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-center text-sm font-medium transition-colors"
         >
-          <Library className="size-3.5" aria-hidden="true" />
+          <Library className="size-4 shrink-0" aria-hidden="true" />
           Библиотека силовых
         </Link>
-      </div>
+      </nav>
 
       {templates.length === 0 ? (
         <EmptyState />
@@ -148,8 +151,8 @@ export default async function TemplatesPage() {
 function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
   return (
     <div className="min-w-0 flex-1">
-      <h2 className="truncate text-sm font-semibold">{tpl.name}</h2>
-      <p className="text-muted-foreground mt-0.5 text-xs">
+      <h2 className="line-clamp-2 text-sm leading-snug font-semibold">{tpl.name}</h2>
+      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
         {formatTemplateMeta(tpl)}
         {tpl.description ? ` · ${tpl.description}` : ""}
       </p>
@@ -159,7 +162,7 @@ function TemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
       {tpl.adapted ? (
         // Тренер подогнал шаблон под факт последней тренировки (R-41 — не только
         // цвет: иконка + текст).
-        <span className="text-primary mt-1 inline-flex items-center gap-1 text-[10px] font-medium">
+        <span className="text-primary mt-1 inline-flex items-center gap-1 text-xs font-medium">
           <Wand2 className="size-3" aria-hidden="true" />
           обновлён тренером
         </span>
@@ -172,7 +175,7 @@ function TemplateMyoStatus({ count }: { count: number }) {
   return (
     <span
       className={cn(
-        "mt-1 inline-flex items-center gap-1 text-[10px] font-medium",
+        "mt-1 inline-flex items-center gap-1 text-xs font-medium",
         count > 0 ? "text-primary" : "text-muted-foreground",
       )}
     >

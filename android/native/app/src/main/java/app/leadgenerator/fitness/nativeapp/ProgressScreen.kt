@@ -56,7 +56,7 @@ private enum class ProgressTab(val label: String) {
 }
 
 @Composable
-internal fun ProgressScreen(request: suspend (String, JSONObject?) -> JSONObject) {
+internal fun ProgressScreen(request: suspend (String, JSONObject?) -> JSONObject, active: Boolean = true) {
     val currentRequest by rememberUpdatedState(request)
     var snapshot by remember { mutableStateOf<ProgressSnapshot?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
@@ -81,7 +81,10 @@ internal fun ProgressScreen(request: suspend (String, JSONObject?) -> JSONObject
         refresh++
     }
 
-    LaunchedEffect(refresh) {
+    LaunchedEffect(refresh, active) {
+        if (!active) return@LaunchedEffect
+        loading = true
+        loadError = null
         try {
             val next = ProgressSnapshot.read(currentRequest(PROGRESS_PATH, null))
             if (editorAccount != null && editorAccount != next.accountId) closeEditor()

@@ -6,7 +6,7 @@ import {
   dedupInsightInputs,
   type InsightQueryInput,
 } from "@/lib/ai/insight-query";
-import { resumeCutoff } from "@/lib/domain";
+import { AUTO_FINISH_IDLE_MS, strengthAutoFinishAt } from "@/lib/domain/workouts/active-session";
 import { extractOverallScore } from "@/lib/domain/friends/friend-score";
 
 type WorkoutStatusLiteral = (typeof schema.workoutStatus.enumValues)[number];
@@ -22,6 +22,7 @@ export type ActiveWorkoutSet = {
   rpe: number | null;
   restSeconds: number | null;
   completedAt: Date;
+  savedAt: Date;
 };
 
 export type ActiveWorkoutExercise = {
@@ -120,18 +121,12 @@ async function startStrengthWorkout(
     if (!tpl) return { error: "template_not_found" };
 
     const active = and(eq(schema.workouts.userId, userId), eq(schema.workouts.status, "active"));
-    if (activeWorkout === "keep") {
-      const [existing] = await tx.select({ id: schema.workouts.id })
-        .from(schema.workouts)
-        .where(active)
-        .limit(1);
-      if (existing) return { error: "active_workout_exists" };
-    } else {
-      // Сайт закрывает брошенные сессии при старте нового шаблона.
-      await tx.update(schema.workouts)
-        .set({ status: "cancelled", finishedAt: new Date() })
-        .where(active);
-    }
+    const [existingActive] = await tx.select({ id: schema.workouts.id })
+      .from(schema.workouts).where(active)
+      .orderBy(desc(schema.workouts.startedAt)).limit(1);
+    if (existingActive) return activeWorkout === "keep"
+      ? { error: "active_workout_exists" }
+      : { id: existingActive.id };
 
     const tplItems = await tx
       .select()
@@ -178,8 +173,9 @@ async function startStrengthWorkout(
 export async function getActiveWorkoutForUser(
   userId: string,
   workoutId: string,
+  database: Pick<Db, "select"> = db,
 ): Promise<ActiveWorkout | null> {
-  const [w] = await db
+  const [w] = await database
     .select()
     .from(schema.workouts)
     .where(
@@ -191,7 +187,7 @@ export async function getActiveWorkoutForUser(
     .limit(1);
   if (!w) return null;
 
-  const exerciseRows = await db
+  const exerciseRows = await database
     .select({
       id: schema.workoutExercises.id,
       exerciseId: schema.workoutExercises.exerciseId,
@@ -220,7 +216,7 @@ export async function getActiveWorkoutForUser(
   const weIds = exerciseRows.map((r) => r.id);
 
   const setsRows = weIds.length
-    ? await db
+    ? await database
         .select()
         .from(schema.workoutSets)
         .where(inArray(schema.workoutSets.workoutExerciseId, weIds))
@@ -253,7 +249,7 @@ export async function getActiveWorkoutForUser(
     }
   >();
   if (w.templateId) {
-    const tplItems = await db
+    const tplItems = await database
       .select({
         exerciseId: schema.templateExercises.exerciseId,
         targetSets: schema.templateExercises.targetSets,
@@ -331,7 +327,7 @@ export async function recordSet(
 ): Promise<number> {
   return db.transaction(async (tx) => {
     const [w] = await tx
-      .select({ id: schema.workouts.id })
+      .select({ id: schema.workouts.id, status: schema.workouts.status, startedAt: schema.workouts.startedAt, finishedAt: schema.workouts.finishedAt })
       .from(schema.workouts)
       .where(
         and(
@@ -339,8 +335,10 @@ export async function recordSet(
           eq(schema.workouts.userId, userId),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!w) throw new Error("Workout not found or not yours");
+    if (w.status === "cancelled") throw new Error("Workout was cancelled");
 
     const [we] = await tx
       .select({ id: schema.workoutExercises.id })
@@ -363,7 +361,8 @@ export async function recordSet(
       ? (order?.last ?? -1) + 1
       : input.setIndex;
 
-    await tx
+    const completedAt = input.completedAt ?? new Date();
+    const inserted = await tx
       .insert(schema.workoutSets)
       .values({
         workoutExerciseId: input.workoutExerciseId,
@@ -374,7 +373,8 @@ export async function recordSet(
         rpe: input.rpe ?? null,
         restSeconds: input.restSeconds ?? null,
         clientSetId: input.clientSetId ?? null,
-        completedAt: input.completedAt ?? new Date(),
+        savedAt: sql`clock_timestamp()`,
+        completedAt,
       })
       // Реплей одного и того же офлайн-подхода (тот же clientSetId) — no-op:
       // дренаж outbox идемпотентен (H15.4). Онлайн-путь даёт clientSetId=null,
@@ -382,7 +382,16 @@ export async function recordSet(
       .onConflictDoNothing({
         target: schema.workoutSets.clientSetId,
         where: sql`${schema.workoutSets.clientSetId} is not null`,
-      });
+      }).returning({ id: schema.workoutSets.id });
+    // Поздняя синхронизация не теряет подход уже завершённой сессии и не
+    // создаёт повторный анализ. Повтор того же clientSetId остаётся no-op.
+    if (inserted.length && w.status === "completed" && w.finishedAt && completedAt > w.finishedAt) {
+      const finishedAt = new Date(Math.max(w.startedAt.getTime(), Math.min(Date.now(), completedAt.getTime())));
+      await tx.update(schema.workouts).set({
+        finishedAt,
+        totalDurationSeconds: Math.max(0, Math.round((finishedAt.getTime() - w.startedAt.getTime()) / 1000)),
+      }).where(eq(schema.workouts.id, workoutId));
+    }
     return setIndex;
   });
 }
@@ -393,6 +402,11 @@ export async function deleteSet(
   setId: string,
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    // Все изменения подходов и завершение берут одну и ту же блокировку.
+    const [owned] = await tx.select({ id: schema.workouts.id }).from(schema.workouts)
+      .where(and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId)))
+      .limit(1).for("update");
+    if (!owned) throw new Error("Workout not found or not yours");
     const [chk] = await tx
       .select({
         workoutId: schema.workoutExercises.workoutId,
@@ -452,17 +466,21 @@ export async function deleteSet(
   });
 }
 
-type WorkoutTransition = "changed" | "already_applied" | "workout_not_found" | "workout_status_conflict";
+type WorkoutTransition = "changed" | "already_applied" | "workout_not_found" | "workout_status_conflict" | "not_ready";
+
+export type WorkoutFinishOptions = { inactiveBefore?: Date };
 
 async function transitionActiveWorkout(
   database: Pick<Db, "update" | "select">,
   userId: string,
   workoutId: string,
   status: "completed" | "cancelled",
+  finishedAt = new Date(),
+  totalDurationSeconds?: number,
 ): Promise<WorkoutTransition> {
   const owned = and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId));
   const [changed] = await database.update(schema.workouts)
-    .set({ status, finishedAt: new Date() })
+    .set({ status, finishedAt, ...(totalDurationSeconds === undefined ? {} : { totalDurationSeconds }) })
     .where(and(owned, eq(schema.workouts.status, "active")))
     .returning({ id: schema.workouts.id });
   if (changed) return "changed";
@@ -485,9 +503,29 @@ export async function finishWorkout(
   userId: string,
   workoutId: string,
   note?: WorkoutFinishNote,
+  options?: WorkoutFinishOptions,
 ): Promise<WorkoutTransition> {
   return db.transaction(async (tx) => {
-    const result = await transitionActiveWorkout(tx, userId, workoutId, "completed");
+    const [locked] = await tx.select({ status: schema.workouts.status, startedAt: schema.workouts.startedAt })
+      .from(schema.workouts)
+      .where(and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId)))
+      .limit(1).for("update");
+    if (!locked) return "workout_not_found";
+    if (locked.status !== "active") return locked.status === "completed" ? "already_applied" : "workout_status_conflict";
+
+    let finishedAt = new Date();
+    if (options?.inactiveBefore) {
+      const workout = await getActiveWorkoutForUser(userId, workoutId, tx);
+      const sets = workout?.exercises.flatMap((exercise) => exercise.sets) ?? [];
+      const savedAt = sets.length ? new Date(Math.max(...sets.map((set) => set.savedAt.getTime()))) : null;
+      const deadline = strengthAutoFinishAt(workout?.exercises ?? [], savedAt);
+      if (!deadline || deadline.getTime() > options.inactiveBefore.getTime() + AUTO_FINISH_IDLE_MS) return "not_ready";
+      // Час ожидания не считается временем тренировки. completedAt сохраняет
+      // реальное время подхода, даже если офлайн-клиент загрузил его позднее.
+      finishedAt = new Date(Math.max(locked.startedAt.getTime(), Math.min(Date.now(), Math.max(...sets.map((set) => set.completedAt.getTime())))));
+    }
+    const duration = Math.max(0, Math.round((finishedAt.getTime() - locked.startedAt.getTime()) / 1000));
+    const result = await transitionActiveWorkout(tx, userId, workoutId, "completed", finishedAt, duration);
     if (result !== "changed") return result;
 
     if (note) {
@@ -522,7 +560,23 @@ export async function cancelWorkout(
   userId: string,
   workoutId: string,
 ): Promise<WorkoutTransition> {
-  return transitionActiveWorkout(db, userId, workoutId, "cancelled");
+  return db.transaction(async (tx) => {
+    await tx.select({ id: schema.workouts.id }).from(schema.workouts)
+      .where(and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId)))
+      .limit(1).for("update");
+    return transitionActiveWorkout(tx, userId, workoutId, "cancelled");
+  });
+}
+
+/** Кандидаты повторно проверяются под блокировкой в finishWorkout. */
+export async function listInactiveStrengthWorkouts(inactiveBefore: Date) {
+  return db.select({ id: schema.workouts.id, userId: schema.workouts.userId })
+    .from(schema.workouts)
+    .innerJoin(schema.workoutExercises, eq(schema.workoutExercises.workoutId, schema.workouts.id))
+    .innerJoin(schema.workoutSets, eq(schema.workoutSets.workoutExerciseId, schema.workoutExercises.id))
+    .where(eq(schema.workouts.status, "active"))
+    .groupBy(schema.workouts.id, schema.workouts.userId)
+    .having(sql`max(${schema.workoutSets.savedAt}) <= ${inactiveBefore}`);
 }
 
 /** Удаляет тренировку целиком. Дочерние строки (упражнения, подходы,
@@ -989,7 +1043,7 @@ export async function getSharedAnalysis(token: string): Promise<{
 
 export async function getActiveWorkoutId(
   userId: string,
-  options?: { includeStale?: boolean },
+  _options?: { includeStale?: boolean },
 ): Promise<string | null> {
   const [row] = await db
     .select({ id: schema.workouts.id })
@@ -998,8 +1052,6 @@ export async function getActiveWorkoutId(
       and(
         eq(schema.workouts.userId, userId),
         eq(schema.workouts.status, "active"),
-        // H2.2b: брошенная сессия старше окна не всплывает как resume-фантом.
-        options?.includeStale ? undefined : gte(schema.workouts.startedAt, resumeCutoff(new Date())),
       ),
     )
     .orderBy(desc(schema.workouts.startedAt))

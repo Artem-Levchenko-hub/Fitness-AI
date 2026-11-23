@@ -72,12 +72,12 @@ export default async function NutritionPage() {
             {recent.map((r) => (
               <li
                 key={r.id}
-                className="flex items-center justify-between px-4 py-3 text-sm"
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 text-sm"
               >
                 <span className="text-muted-foreground tabular text-xs">
                   {formatDateRu(r.date)}
                 </span>
-                <span className="tabular text-xs">
+                <span className="tabular text-xs leading-relaxed">
                   {r.kcal ?? "—"} ккал · Б {r.proteinG ?? "—"} · Ж{" "}
                   {r.fatG ?? "—"} · У {r.carbsG ?? "—"}
                 </span>

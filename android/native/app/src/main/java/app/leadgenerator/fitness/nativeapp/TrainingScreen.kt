@@ -122,6 +122,12 @@ internal fun TrainingScreen(
                     Text(workout.name, style = MaterialTheme.typography.headlineMedium)
                     val setCount = workout.exercises.sumOf { state.entries(workout, it).size }
                     Text("Упражнений: ${workout.exercises.size} · Подходов: $setCount", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (workout.autoFinishAt != null) "Все плановые подходы записаны. Тренировка завершится автоматически через час после последнего сохранённого подхода."
+                        else "Можно продолжить позже. Записанные подходы сохраняются.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     if (restDeadline > 0) RestClock(restDeadline, onResetRest)
                 }
             }

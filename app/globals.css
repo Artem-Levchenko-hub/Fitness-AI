@@ -229,6 +229,31 @@ body {
   scroll-padding-block: 1rem 10rem;
 }
 
+.app-shell .font-serif {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.app-shell h1 {
+  font-size: clamp(1.65rem, 5.5vw, 2.125rem);
+  font-weight: 650;
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.app-shell h2.font-serif {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.app-shell [data-slot="button"]:where([data-size="default"], [data-size="sm"], [data-size="icon"], [data-size="icon-sm"], [data-size="icon-lg"]) {
+  min-height: 2.75rem;
+}
+
+.app-shell :is(input, select):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+  min-height: 2.75rem;
+}
+
 @media (max-width: 639px) {
   .app-shell main {
     padding-inline: 1rem;
@@ -259,6 +284,10 @@ body {
 
 .route-transition {
   min-width: 0;
+}
+
+.section-content .route-transition {
+  animation: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {

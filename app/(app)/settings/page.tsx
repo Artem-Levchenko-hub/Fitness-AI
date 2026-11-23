@@ -35,7 +35,7 @@ export default async function SettingsPage() {
       <section className="bg-card text-card-foreground border-border mb-6 space-y-3 rounded-2xl border p-5">
         <div>
           <p className="text-muted-foreground text-xs">Email</p>
-          <p className="text-sm font-medium">{user.email}</p>
+          <p className="text-sm font-medium break-all">{user.email}</p>
         </div>
         {user.name ? (
           <div>
@@ -94,7 +94,7 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link href="/admin" className="flex items-center justify-between">
               <span>Пользователи (активность и траты)</span>
@@ -108,11 +108,11 @@ export default async function SettingsPage() {
         <h2 className="mb-2 text-sm font-semibold tracking-tight">
           Связанные разделы
         </h2>
-        <div className="space-y-2">
+        <div className="divide-border divide-y">
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link href="/friends" className="flex items-center justify-between">
               <span>Друзья (сообщество)</span>
@@ -122,7 +122,7 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link href="/schedule" className="flex items-center justify-between">
               <span>Расписание тренировок (напоминания)</span>
@@ -132,7 +132,7 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link href="/sleep" className="flex items-center justify-between">
               <span>Сон (восстановление)</span>
@@ -142,7 +142,7 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link
               href="/nutrition"
@@ -155,7 +155,7 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link href="/body" className="flex items-center justify-between">
               <span>Замеры тела (вес, % жира, обхваты)</span>
@@ -165,7 +165,7 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link href="/billing" className="flex items-center justify-between">
               <span>Баланс и пополнение</span>
@@ -175,7 +175,7 @@ export default async function SettingsPage() {
           <Button
             asChild
             variant="ghost"
-            className="text-foreground h-auto w-full justify-start py-3"
+            className="text-foreground h-auto min-h-12 w-full justify-between py-3 text-left whitespace-normal"
           >
             <Link href="/stats" className="flex items-center justify-between">
               <span>Статистика и графики</span>

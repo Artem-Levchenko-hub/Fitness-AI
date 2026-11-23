@@ -166,6 +166,7 @@ export function ActiveWorkoutView({
           <span className="tabular font-semibold">{completedExercises} из {workout.exercises.length}</span>
         </div>
         <progress aria-label="Прогресс тренировки" max={Math.max(1, workout.exercises.length)} value={completedExercises} className="workout-progress block h-1.5 w-full overflow-hidden rounded-full" />
+        <p className="text-muted-foreground mt-3 text-xs leading-relaxed">Можно продолжить позже — записанные подходы сохраняются.</p>
       </div>
 
       <ul className="space-y-3">
@@ -208,6 +209,14 @@ export function ActiveWorkoutView({
             className="space-y-3 pt-2"
           >
             <input type="hidden" name="workoutId" value={workout.id} />
+            {workout.exercises.length > 0 && completedExercises === workout.exercises.length ? (
+              <div role="status" className="border-primary/15 bg-primary/5 rounded-2xl border px-4 py-3 text-sm leading-relaxed">
+                <p className="text-primary font-semibold">Все плановые подходы записаны</p>
+                <p className="text-muted-foreground mt-1 text-xs">{pending.length > 0
+                  ? "После синхронизации тренировка завершится автоматически через час после последнего сохранённого подхода."
+                  : "Можно завершить сейчас. Иначе тренировка завершится автоматически через час после последнего сохранённого подхода."}</p>
+              </div>
+            ) : null}
             <FeelingPicker />
             <div className="space-y-1.5">
               <label

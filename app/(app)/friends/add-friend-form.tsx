@@ -30,6 +30,9 @@ export function AddFriendForm() {
           id="email"
           name="email"
           type="email"
+          inputMode="email"
+          autoCapitalize="none"
+          spellCheck={false}
           required
           autoComplete="off"
           placeholder="friend@example.com"
@@ -46,7 +49,7 @@ export function AddFriendForm() {
         </p>
       ) : null}
       {state.status === "success" ? (
-        <p className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
+        <p role="status" aria-live="polite" className="bg-success/10 text-success border-success/20 rounded-md border px-3 py-2 text-sm">
           {state.message}
         </p>
       ) : null}

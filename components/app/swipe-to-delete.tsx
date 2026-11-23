@@ -66,7 +66,7 @@ export function SwipeToDelete({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div data-swipe-block className="relative overflow-hidden rounded-xl">
       {/* Красная зона под слоем — проступает по мере свайпа влево. */}
       <div className="absolute inset-y-0 right-0 flex">
         <button

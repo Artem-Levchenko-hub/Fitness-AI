@@ -59,7 +59,7 @@ export default async function BodyPage() {
               year: "numeric",
             })}
           </p>
-          <div className="tabular mt-2 grid grid-cols-3 gap-3">
+          <div className="tabular mt-3 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3">
             {latest.weightKg ? (
               <Stat label="Вес" value={`${latest.weightKg.toFixed(1)} кг`} />
             ) : null}
@@ -136,7 +136,7 @@ export default async function BodyPage() {
                     variant="ghost"
                     size="icon"
                     aria-label="Удалить замер"
-                    className="text-muted-foreground hover:text-destructive size-8"
+                    className="text-muted-foreground hover:text-destructive size-11"
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -161,14 +161,14 @@ function Stat({
 }) {
   return (
     <div>
-      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+      <p className="text-muted-foreground text-xs font-medium">
         {label}
       </p>
       <p className="tabular text-foreground mt-0.5 text-lg font-semibold">
         {value}
       </p>
       {hint ? (
-        <p className="text-muted-foreground/80 text-[10px]">{hint}</p>
+        <p className="text-muted-foreground text-xs">{hint}</p>
       ) : null}
     </div>
   );

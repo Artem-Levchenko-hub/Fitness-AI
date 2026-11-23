@@ -58,20 +58,25 @@ export function ExercisesExplorer({ exercises, muscleKeys }: Props) {
         <Input
           type="search"
           inputMode="search"
+          aria-label="Поиск упражнений по названию"
           placeholder="Поиск по названию"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
+          className="h-12 pl-9"
         />
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div
+        role="group"
+        aria-label="Фильтр по мышцам"
+        className="-mx-1 flex gap-2 overflow-x-auto px-1 pt-1 pb-2 [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]"
+      >
         <button
           type="button"
           aria-pressed={muscle === null}
           onClick={() => setMuscle(null)}
           className={cn(
-            "rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
+            "min-h-11 shrink-0 rounded-xl border px-3.5 py-2 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             muscle === null
               ? "bg-primary text-primary-foreground border-transparent"
               : "border-border bg-card text-muted-foreground hover:text-foreground",
@@ -86,7 +91,7 @@ export function ExercisesExplorer({ exercises, muscleKeys }: Props) {
             aria-pressed={muscle === k}
             onClick={() => setMuscle(muscle === k ? null : k)}
             className={cn(
-              "rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
+              "min-h-11 shrink-0 rounded-xl border px-3.5 py-2 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               muscle === k
                 ? "bg-primary text-primary-foreground border-transparent"
                 : "border-border bg-card text-muted-foreground hover:text-foreground",
@@ -98,7 +103,7 @@ export function ExercisesExplorer({ exercises, muscleKeys }: Props) {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-3 group-data-[orientation=horizontal]/tabs:h-12">
           <TabsTrigger value="all">Все</TabsTrigger>
           <TabsTrigger value="system">
             <Sparkles className="size-3.5" />
@@ -149,7 +154,7 @@ function ExerciseList({ items }: { items: ExerciseListItem[] }) {
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="truncate text-sm font-semibold">
+                  <h3 className="line-clamp-2 text-sm leading-snug font-semibold">
                     {ex.nameRu}
                   </h3>
                   {ex.isCustom ? (

@@ -43,6 +43,13 @@ function finishMutation(workoutId: string): OutboxMutation {
 }
 
 describe("recordSetFormData", () => {
+  it("preserves captured time and recovers it from older queue entries", () => {
+    const captured = "2026-11-23T10:00:00.000Z";
+    expect(recordSetFormData({ completedAt: captured }, Date.parse(captured) + 1000).get("completedAt")).toBe(captured);
+    expect(recordSetFormData({}, Date.parse(captured)).get("completedAt")).toBe(captured);
+    expect(recordSetFormData({}).has("completedAt")).toBe(false);
+  });
+
   it("кладёт все поля recordSet, включая clientSetId", () => {
     const fd = recordSetFormData(recordSetMutation("cid-1").payload);
     expect(fd.get("workoutId")).toBe("w1");

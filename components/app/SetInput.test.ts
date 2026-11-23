@@ -59,5 +59,7 @@ describe("mobile set entry", () => {
     await waitFor(() => expect(onOfflineRecord).toHaveBeenCalledOnce());
     expect(onOfflineRecord).toHaveBeenCalledWith(expect.objectContaining({ weightKg: 40, reps: 8 }));
     expect(storage.clearSetDraft).toHaveBeenCalledWith("exercise");
+    const [queued] = storage.enqueue.mock.calls[0];
+    expect(Date.parse(queued.payload.completedAt)).toBe(queued.queuedAt);
   });
 });

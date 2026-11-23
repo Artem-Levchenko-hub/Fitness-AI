@@ -127,8 +127,9 @@ export function TopupForm() {
       <Button
         type="button"
         size="xl"
-        className="w-full"
+        className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug whitespace-normal"
         disabled={!validAmount || pending}
+        aria-busy={pending}
         onClick={handleCheckout}
       >
         {pending ? (

@@ -49,17 +49,14 @@ export default async function AiPlanPage() {
 function AiOffNotice() {
   return (
     <div className="bg-card border-border space-y-3 rounded-2xl border p-6">
+      <h2 className="text-base font-semibold">ИИ-тренер временно недоступен</h2>
       <p className="text-muted-foreground text-sm leading-relaxed">
-        ИИ-тренер пока выключен. Чтобы он заработал, владельцу проекта нужно
-        добавить ключ{" "}
-        <code className="bg-muted rounded px-1 py-0.5">AI_API_KEY</code> или{" "}
-        <code className="bg-muted rounded px-1 py-0.5">GEMINI_API_KEY</code> в{" "}
-        <code className="bg-muted rounded px-1 py-0.5">.env.production</code> и
-        перезапустить процесс.
+        Можно собрать план из своих шаблонов. Сохранённые программы доступны в библиотеке планов.
       </p>
-      <Button asChild variant="outline" size="sm">
-        <Link href="/dashboard">На главную</Link>
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="lg"><Link href="/programs/new">Собрать план</Link></Button>
+        <Button asChild variant="outline" size="lg"><Link href="/programs">Мои планы</Link></Button>
+      </div>
     </div>
   );
 }

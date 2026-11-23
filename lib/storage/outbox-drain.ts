@@ -29,11 +29,14 @@ const RECORD_SET_FIELDS = [
 ] as const;
 
 /** payload recordSet → FormData для реплея через recordSetAction. */
-export function recordSetFormData(payload: Record<string, unknown>): FormData {
+export function recordSetFormData(payload: Record<string, unknown>, queuedAt?: number): FormData {
   const fd = new FormData();
   for (const field of RECORD_SET_FIELDS) {
     fd.set(field, String(payload[field] ?? ""));
   }
+  const capturedAt = payload.completedAt ?? (queuedAt != null && Number.isFinite(new Date(queuedAt).getTime())
+    ? new Date(queuedAt).toISOString() : null);
+  if (capturedAt != null) fd.set("completedAt", String(capturedAt));
   return fd;
 }
 
