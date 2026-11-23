@@ -576,7 +576,7 @@ export async function listInactiveStrengthWorkouts(inactiveBefore: Date) {
     .innerJoin(schema.workoutSets, eq(schema.workoutSets.workoutExerciseId, schema.workoutExercises.id))
     .where(eq(schema.workouts.status, "active"))
     .groupBy(schema.workouts.id, schema.workouts.userId)
-    .having(sql`max(${schema.workoutSets.savedAt}) <= ${inactiveBefore}`);
+    .having(sql`max(${schema.workoutSets.savedAt}) <= ${inactiveBefore.toISOString()}::timestamptz`);
 }
 
 /** Удаляет тренировку целиком. Дочерние строки (упражнения, подходы,

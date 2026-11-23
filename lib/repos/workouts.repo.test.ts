@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import * as schema from "@/db/schema";
 
@@ -12,7 +13,7 @@ const db = vi.hoisted(() => ({
 
 vi.mock("@/db/client", () => ({ db }));
 
-import { finishWorkout, recordSet, startMobileWorkoutFromTemplate, startWorkoutFromTemplate } from "./workouts.repo";
+import { finishWorkout, listInactiveStrengthWorkouts, recordSet, startMobileWorkoutFromTemplate, startWorkoutFromTemplate } from "./workouts.repo";
 
 function selectRows(rows: unknown[]) {
   const query = {
@@ -37,6 +38,23 @@ function updateRows(rows: unknown[]) {
 beforeEach(() => {
   vi.resetAllMocks();
   db.transaction.mockImplementation((operation) => operation(db));
+});
+
+it("encodes the inactivity deadline as a PostgreSQL timestamp parameter", async () => {
+  const having = vi.fn().mockResolvedValue([]);
+  const query = {
+    from: () => query,
+    innerJoin: () => query,
+    where: () => query,
+    groupBy: () => ({ having }),
+  };
+  db.select.mockReturnValueOnce(query);
+  const cutoff = new Date("2026-11-23T12:00:00.000Z");
+
+  await expect(listInactiveStrengthWorkouts(cutoff)).resolves.toEqual([]);
+
+  const compiled = new PgDialect().sqlToQuery(having.mock.calls[0][0]);
+  expect(compiled.params).toEqual([cutoff.toISOString()]);
 });
 
 describe("strength workout starts", () => {
