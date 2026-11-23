@@ -284,20 +284,14 @@ test("H12.2 item-c — /dashboard: один канонический вход п
   await expect(page.getByRole("link", { name: "Мои шаблоны" })).toHaveCount(0);
 });
 
-test("/dashboard: мини-аватар-витрина (H9.2) показывает heat-силуэт и ведёт на /profile", async ({
-  page,
-}) => {
-  // H9.2 — крючок столпа 2 на главной: статичный heat-силуэт, тап → полный 3D
-  // на /profile. Силуэт — инлайновый SVG (не WebGL) → надёжно проверяется в
-  // headless: тайл виден, ведёт на /profile, реальный нагрев = хотя бы один
-  // регион закрашен НЕ серым-dormant (#5b626b) у атлета с тренировками.
+test("/dashboard: карта мышц убрана, профиль доступен через навигацию", async ({ page }) => {
   await page.goto("/dashboard");
-  const tile = page.getByTestId("dashboard-avatar-tile");
-  await expect(tile).toBeVisible();
-  await expect(tile).toHaveAttribute("href", "/profile");
-  await expect(tile.locator("svg [data-muscle]").first()).toBeVisible();
-
-  await tile.click();
+  await expect(page.getByText("Доп. активность", { exact: true })).toBeVisible();
+  await expect(page.getByText("Карта мышц", { exact: true })).toHaveCount(0);
+  await page
+    .getByRole("navigation", { name: "Главная навигация" })
+    .getByRole("link", { name: "Профиль" })
+    .click();
   await expect(page).toHaveURL(/\/profile/);
 });
 

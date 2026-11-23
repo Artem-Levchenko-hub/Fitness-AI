@@ -14,8 +14,6 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { DashboardNavTile } from "@/components/dashboard/DashboardNavTile";
-import { DashboardAvatarTile } from "@/components/dashboard/DashboardAvatarTile";
-import { buildAvatarData } from "@/components/avatar/build-avatar-data";
 import { FriendsActivityPreview } from "@/components/dashboard/FriendsActivityPreview";
 import { NutritionTile } from "@/components/dashboard/NutritionTile";
 import { QuickActivityTile } from "@/components/dashboard/QuickActivityTile";
@@ -37,7 +35,7 @@ import { getUserProfile } from "@/lib/repos/body.repo";
 import { listFriendsActivity } from "@/lib/repos/friends.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
-import { dailyVolume, muscleHeatProfile, workoutFrequency } from "@/lib/repos/stats.repo";
+import { dailyVolume, workoutFrequency } from "@/lib/repos/stats.repo";
 import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "Главная" };
@@ -59,7 +57,6 @@ export default async function DashboardPage() {
     daily,
     frequency,
     friendsActivity,
-    heat,
   ] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     listRecentCardio(user.id, 10),
@@ -72,7 +69,6 @@ export default async function DashboardPage() {
     // Лента активности друзей — тот же источник, что /friends (H3.2). Превью
     // тайла берёт ровно её топ, чтобы строка не разошлась с верхней карточкой.
     listFriendsActivity(user.id),
-    muscleHeatProfile(user.id, now),
   ]);
 
   // Понедельник текущей ISO-недели в TZ юзера — общая граница для week-strip
@@ -155,10 +151,6 @@ export default async function DashboardPage() {
             <FriendsActivityPreview activity={topFriendActivity} />
           ) : null}
         </DashboardNavTile>
-      </section>
-
-      <section oai-annotatable="Карта мышц" className="mt-3">
-        <DashboardAvatarTile data={buildAvatarData(heat, now)} />
       </section>
 
       {/* Доп. активность — быстрый лог подхода/тотала между делом без создания
