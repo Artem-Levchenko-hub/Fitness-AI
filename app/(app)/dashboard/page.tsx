@@ -1,7 +1,5 @@
 import {
   ArrowRight,
-  BarChart3,
-  ChevronRight,
   Dumbbell,
   Plus,
   Settings2,
@@ -20,22 +18,18 @@ import { QuickActivityTile } from "@/components/dashboard/QuickActivityTile";
 import { SleepTile } from "@/components/dashboard/SleepTile";
 import { TodayScheduleCard } from "@/components/dashboard/TodayScheduleCard";
 import { TrainerTrigger } from "@/components/dashboard/TrainerTrigger";
-import { WeekStripPreview } from "@/components/dashboard/WeekStripPreview";
 import {
   buildHistory,
   countWeekSessions,
-  HistoryCard,
   LastSessionMini,
 } from "@/components/workouts/workout-history";
 import { requireUser } from "@/lib/auth/require-user";
 import { isoWeekStartIso } from "@/lib/datetime/iso-week";
 import { selectTopFriendActivity } from "@/lib/domain/friends/friend-activity";
-import { buildWeekStrip } from "@/lib/domain/stats/week-strip";
 import { getUserProfile } from "@/lib/repos/body.repo";
 import { listFriendsActivity } from "@/lib/repos/friends.repo";
 import { listRecentCardio } from "@/lib/repos/cardio.repo";
 import { listCircuits } from "@/lib/repos/circuits.repo";
-import { dailyVolume, workoutFrequency } from "@/lib/repos/stats.repo";
 import { listRecentWorkouts } from "@/lib/repos/workouts.repo";
 
 export const metadata: Metadata = { title: "Главная" };
@@ -50,46 +44,22 @@ export default async function DashboardPage() {
   const profile = await getUserProfile(user.id);
   const tz = profile?.timezone ?? "Europe/Moscow";
 
-  const [
-    recent,
-    recentCardio,
-    recentCircuits,
-    daily,
-    frequency,
-    friendsActivity,
-  ] = await Promise.all([
+  const [recent, recentCardio, recentCircuits, friendsActivity] = await Promise.all([
     listRecentWorkouts(user.id, 30),
     listRecentCardio(user.id, 10),
     listCircuits(user.id, 10),
-    // Те же источники, что рисуют графики /stats (силовые working-подходы,
-    // бакет по TZ) → tile-превью совпадает со /stats (гейт H4.1). "30d"
-    // покрывает текущую + прошлую ISO-неделю.
-    dailyVolume(user.id, "30d", tz),
-    workoutFrequency(user.id, "30d", tz),
     // Лента активности друзей — тот же источник, что /friends (H3.2). Превью
     // тайла берёт ровно её топ, чтобы строка не разошлась с верхней карточкой.
     listFriendsActivity(user.id),
   ]);
 
-  // Понедельник текущей ISO-недели в TZ юзера — общая граница для week-strip
-  // tile и честного счётчика WeekCard (тот же ключ, что группирует /workouts).
+  // Граница ISO-недели для счётчика совпадает с группировкой в «Тренировках».
   const weekStartIso = isoWeekStartIso(now, tz);
 
-  // Снимок «эта неделя» для tile-входа /stats (H4.1): 7 дней + тоннаж + дельта.
-  const weekStrip = buildWeekStrip(daily, frequency, weekStartIso);
-
-  const completed = recent.filter((w) => w.status === "completed");
-  // `last` = последняя СИЛОВАЯ — нужна для AI-тренера (анализирует силовые).
-  const last = completed[0] ?? null;
-  // Единый поток: «Недавние» и тайл «Последняя» сливают силовые + круговые +
-  // кардио (как /workouts), а не показывают только силовые — иначе круговая/
-  // кардио-сессия «пропадает» и форматы живут в разных мирах.
+  // Для разбора тренеру нужна последняя силовая сессия.
+  const last = recent.find((workout) => workout.status === "completed");
   const history = buildHistory(recent, recentCircuits, recentCardio);
-  // «Эта неделя» = завершённые сессии ВСЕХ форматов за текущую ISO-неделю в TZ
-  // юзера (H12.0). Раньше считались только силовые в серверной TZ — круговая/
-  // кардио выпадали и граница недели врала вне TZ сервера.
   const weekCount = countWeekSessions(history, weekStartIso, tz);
-  const recentHistory = history.slice(0, 3);
   const latestSession = history[0] ?? null;
 
   // Превью тайла «Друзья» (H3.1): самое свежее событие среди всех друзей,
@@ -133,14 +103,7 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* Бюджет компоновки (H9.1): входы «Статистика»/«Друзья» — один ряд
-          компактных tile-вход, не отдельные секции. Тут же материализуются
-          C1: week-strip /stats (H4.1) и превью последнего события друга в тайле
-          (H3.1) — лента самих друзей живёт на /friends (H3.2). */}
-      <section className="mt-3 grid grid-cols-2 gap-3">
-        <DashboardNavTile href="/stats" label="Статистика" icon={BarChart3}>
-          <WeekStripPreview strip={weekStrip} />
-        </DashboardNavTile>
+      <div className="mt-3">
         <DashboardNavTile
           href="/friends"
           label="Друзья"
@@ -151,7 +114,7 @@ export default async function DashboardPage() {
             <FriendsActivityPreview activity={topFriendActivity} />
           ) : null}
         </DashboardNavTile>
-      </section>
+      </div>
 
       {/* Доп. активность — быстрый лог подхода/тотала между делом без создания
           тренировки; учитывается в /stats, нагреве аватара и недельном разборе. */}
@@ -170,30 +133,6 @@ export default async function DashboardPage() {
       <section oai-annotatable="Спросить тренера" className="mt-6">
         <TrainerTrigger lastWorkoutId={last?.id ?? null} />
       </section>
-
-      {recentHistory.length > 0 ? (
-        <section oai-annotatable="Недавние тренировки" className="mt-8">
-          <div className="mb-3 flex items-center justify-between px-1">
-            <h2 className="font-serif text-2xl font-normal tracking-tight">
-              Недавние
-            </h2>
-            <Link
-              href="/workouts"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium tracking-wide uppercase"
-            >
-              Все
-              <ChevronRight className="size-3" />
-            </Link>
-          </div>
-          <ul className="space-y-2">
-            {recentHistory.map((it) => (
-              <li key={`${it.kind}-${it.id}`}>
-                <HistoryCard item={it} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </main>
   );
 }
@@ -245,13 +184,7 @@ function StartCard() {
   );
 }
 
-// «Эта неделя» — число завершённых сессий (всех форматов) недели. Тоннаж
-// недели СОЗНАТЕЛЬНО НЕ показываем здесь (H4.3): он живёт ровно в одном
-// носителе — week-strip превью tile «Статистика», чьи цифры по построению
-// совпадают со /stats (dailyVolume). Прежний тоннаж WeekCard считался иначе
-// (все форматы, локальная граница недели) и расходился со /stats — убран как
-// дублирующий divergent-носитель. Ноль потери: тоннаж остаётся, теперь из
-// канонического источника; число тренировок нигде не дублируется (столп 3+4).
+// «Эта неделя» считает завершённые тренировки всех форматов.
 function WeekCard({ workouts }: { workouts: number }) {
   return (
     <div oai-annotatable="Эта неделя" className="bg-card border-border rounded-2xl border p-4">

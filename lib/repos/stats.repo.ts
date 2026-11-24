@@ -213,7 +213,7 @@ async function quickVolumeBuckets(
 /** Объём по дням за период — силовые working-подходы, круговые раунды И
  *  доп. активность, слитые по дню (`mergeVolumeBuckets`). Дни бакетятся в
  *  `timeZone` юзера — РОВНО как история `/workouts` (G1). Раньше круговая
- *  тренировка не давала столбика на графике объёма (и на week-strip дашборда). */
+ *  тренировка не давала столбика на графике объёма. */
 export async function dailyVolume(
   userId: string,
   range: StatsRange,

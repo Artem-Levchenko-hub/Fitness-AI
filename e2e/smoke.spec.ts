@@ -119,41 +119,22 @@ test("/profile: аватар рендерится и его легенда та�
   await expect(chip).toBeEnabled();
 });
 
-test("/dashboard: tile-входы «Статистика» и «Друзья» ведут на /stats и /friends", async ({
+test("/dashboard: компактная главная и отдельные вкладки статистики и истории", async ({
   page,
 }) => {
-  // H9.1 — бюджет компоновки: входы «Статистика»/«Друзья» выведены на главную
-  // одним рядом компактных tile (consolidation C1, фундамент H4.1/H3.1).
-  // Главное действие старта остаётся выше — проверяем сами tile-входы.
   await page.goto("/dashboard");
-  await expect(page).toHaveURL(/\/dashboard/);
 
-  const statsTile = page.locator('main a[href="/stats"]').first();
-  const friendsTile = page.locator('main a[href="/friends"]').first();
-  await expect(statsTile).toBeVisible();
-  await expect(statsTile).toContainText("Статистика");
+  const main = page.locator("main");
+  const friendsTile = main.locator('a[href="/friends"]');
   await expect(friendsTile).toBeVisible();
   await expect(friendsTile).toContainText("Друзья");
+  await expect(main.locator('a[href="/stats"]')).toHaveCount(0);
+  await expect(main.locator('section[oai-annotatable="Недавние тренировки"]')).toHaveCount(0);
+  await expect(main.getByText("Последняя", { exact: true })).toBeVisible();
 
-  // H4.1 — tile «Статистика» несёт week-strip-превью (7 дней + тоннаж + дельта),
-  // не статичный hint. Снимок тех же данных, что графики /stats (тяжёлый
-  // Recharts остаётся за тапом).
-  const weekStrip = statsTile.getByTestId("dashboard-week-strip");
-  await expect(weekStrip).toBeVisible();
-
-  // H4.3 — ровно ОДИН носитель тоннажа недели на дашборде: тоннаж («кг·повт»)
-  // несёт week-strip tile (совпадает со /stats); карточка «Эта неделя»
-  // (WeekCard) теперь только число тренировок, без тоннажа.
-  await expect(weekStrip).toContainText("кг·повт");
-  const weekCard = page
-    .locator("main div", { hasText: "Эта неделя" })
-    .last();
-  await expect(weekCard).not.toContainText("кг·повт");
-  await expect(weekCard).not.toContainText("kg·reps");
-
-  // Tile реально проваливается в /stats.
-  await statsTile.click();
-  await expect(page).toHaveURL(/\/stats/);
+  const tabs = page.locator('nav[aria-label="Главная навигация"]');
+  await expect(tabs.locator('a[href="/stats"]')).toHaveText("Прогресс");
+  await expect(tabs.locator('a[href="/workouts"]')).toHaveText("Тренировки");
 });
 
 test("H12.0 — WeekCard «Эта неделя» считает ВСЕ форматы и совпадает с /workouts", async ({
