@@ -25,6 +25,20 @@ beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Date, "now").mockReturnValue(now
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe("web set capture time", () => {
+  it.each(["near_failure", "failure"])("stores the %s effort independently of RPE", async (effort) => {
+    const form = entry();
+    form.set("effort", effort);
+    await expect(recordSetAction({ status: "idle" }, form)).resolves.toEqual({ status: "idle" });
+    expect(mocks.recordSet).toHaveBeenCalledWith("user", expect.any(String), expect.objectContaining({ effort, rpe: null }));
+  });
+
+  it("rejects an unknown effort instead of silently dropping it", async () => {
+    const form = entry();
+    form.set("effort", "both");
+    expect((await recordSetAction({ status: "idle" }, form)).status).toBe("error");
+    expect(mocks.recordSet).not.toHaveBeenCalled();
+  });
+
   it("keeps the actual offline time when replayed hours later", async () => {
     const captured = "2026-11-23T10:00:00.000Z";
     await expect(recordSetAction({ status: "idle" }, entry(captured))).resolves.toEqual({ status: "idle" });

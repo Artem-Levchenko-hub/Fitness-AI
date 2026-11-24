@@ -40,6 +40,7 @@ export const bodyMeasurementSchema = z
   );
 
 export const profileSchema = z.object({
+  name: z.string().trim().max(80, "Имя — не длиннее 80 символов").nullable().transform((v) => v || null).optional(),
   birthDate: z
     .string()
     .optional()

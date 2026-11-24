@@ -15,6 +15,11 @@ describe("setDraftKey", () => {
 });
 
 describe("parseSetDraft", () => {
+  it("retains an effort-only draft over reload", () => {
+    expect(parseSetDraft(serializeSetDraft({ weight: "", reps: "", rpe: "", effort: "near_failure" })))
+      .toEqual({ weight: "", reps: "", rpe: "", effort: "near_failure" });
+  });
+
   it("null/пустая строка → null", () => {
     expect(parseSetDraft(null)).toBeNull();
     expect(parseSetDraft("")).toBeNull();

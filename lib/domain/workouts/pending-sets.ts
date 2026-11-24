@@ -11,6 +11,7 @@
  */
 
 import type { OutboxMutation } from "../../storage/outbox";
+import { parseSetEffort, type SetEffort } from "./effort";
 
 export type PendingSet = {
   /** Канонический client-UUID — он же ключ строки и идемпотентности. */
@@ -20,6 +21,7 @@ export type PendingSet = {
   weightKg: number;
   reps: number;
   rpe: number | null;
+  effort?: SetEffort | null;
   completedAt: Date;
 };
 
@@ -59,6 +61,7 @@ function toPendingSet(
     weightKg,
     reps,
     rpe: num(p.rpe),
+    ...(parseSetEffort(p.effort) ? { effort: parseSetEffort(p.effort) } : {}),
     completedAt: new Date(mutation.queuedAt),
   };
 }

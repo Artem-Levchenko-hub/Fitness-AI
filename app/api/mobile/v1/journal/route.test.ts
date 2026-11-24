@@ -56,6 +56,16 @@ beforeEach(() => {
 });
 
 describe("mobile strength journal", () => {
+  it("retains a marked offline set from a retired exercise without changing its identity", async () => {
+    expect((await submit({ ...set, effort: "failure" })).status).toBe(200);
+    expect(mocks.recordSet).toHaveBeenCalledWith(userId, workoutId, expect.objectContaining({ workoutExerciseId, effort: "failure" }));
+  });
+
+  it("rejects unknown effort values in native uploads", async () => {
+    expect((await submit({ ...set, effort: "invalid" })).status).toBe(400);
+    expect(mocks.recordSet).not.toHaveBeenCalled();
+  });
+
   it("returns an account-scoped active workout", async () => {
     const response = await GET();
     expect(response.status).toBe(200);

@@ -26,6 +26,17 @@ beforeEach(() => {
 });
 
 describe("mobile strength workout details", () => {
+  it("includes effort marks and retirement metadata in history", async () => {
+    mocks.getActiveWorkoutForUser.mockResolvedValue({
+      id: workoutId, name: "Ноги", status: "completed", startedAt: new Date(startedAt),
+      exercises: [{ id: "old", exerciseNameRu: "Приседания", targetRestSeconds: 120,
+        replacedAt: new Date("2026-11-17T10:15:00Z"), sets: [{ id: "set", setIndex: 0, weightKg: 60, reps: 10, effort: "near_failure" }] }],
+    });
+    const { workout } = await (await getWorkout()).json();
+    expect(workout.exercises[0].replacedAt).toBe("2026-11-17T10:15:00.000Z");
+    expect(workout.exercises[0].sets[0]).toMatchObject({ id: "set", effort: "near_failure" });
+  });
+
   it("returns an owned completed workout with its recorded sets", async () => {
     mocks.getActiveWorkoutForUser.mockResolvedValue({
       id: workoutId,

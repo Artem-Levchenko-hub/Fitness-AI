@@ -2,14 +2,11 @@ import { Apple, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { localDateIso } from "@/lib/datetime/local-day";
 import { getNutritionForDate } from "@/lib/repos/nutrition.repo";
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export async function NutritionTile({ userId }: { userId: string }) {
-  const row = await getNutritionForDate(userId, todayIso());
+export async function NutritionTile({ userId, timeZone }: { userId: string; timeZone: string }) {
+  const row = await getNutritionForDate(userId, localDateIso(new Date(), timeZone));
 
   return (
     <div oai-annotatable="КБЖУ сегодня" className="bg-card border-border flex items-center justify-between gap-4 rounded-2xl border p-4">

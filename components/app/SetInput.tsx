@@ -5,6 +5,7 @@ import { startTransition, useActionState, useEffect, useRef, useState } from "re
 
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
+import { SetEffortPicker } from "@/components/app/SetEffortPicker";
 import { recordSetAction, type RecordSetState } from "@/server/actions/workouts";
 import {
   clearSetDraft,
@@ -14,6 +15,7 @@ import {
 import { enqueue, listPending, makeClientId } from "@/lib/storage/outbox";
 import type { PendingSet } from "@/lib/domain/workouts/pending-sets";
 import { elapsedRestSeconds } from "@/lib/domain/workouts/myo";
+import { parseSetEffort, type SetEffort } from "@/lib/domain/workouts/effort";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -25,6 +27,8 @@ type Props = {
   restStartedAt: Date | null;
   /** H15.3b-2 — офлайн-сабвмит кладёт подход сюда (оптимистичный стейт). */
   onOfflineRecord: (set: PendingSet) => void;
+  disabled?: boolean;
+  onSavingChange?: (value: boolean) => void;
 };
 
 export function SetInput({
@@ -35,12 +39,15 @@ export function SetInput({
   defaultRepsMax,
   restStartedAt,
   onOfflineRecord,
+  disabled = false,
+  onSavingChange,
 }: Props) {
   const [weight, setWeight] = useState<string>(
     defaultWeightKg ? String(defaultWeightKg) : "",
   );
   const [reps, setReps] = useState<string>(String(defaultRepsMax));
   const [rpe, setRpe] = useState<string>("");
+  const [effort, setEffort] = useState<SetEffort | null>(null);
   const [localError, setLocalError] = useState("");
   const [savingOffline, setSavingOffline] = useState(false);
   const offlineSavingRef = useRef(false);
@@ -52,6 +59,7 @@ export function SetInput({
     recordSetAction,
     { status: "idle" },
   );
+  useEffect(() => { onSavingChange?.(pending || savingOffline); }, [onSavingChange, pending, savingOffline]);
 
   // H10.4: восстановить НЕсабмитнутый черновик на маунте. Эффект, а не
   // useState-инициализатор — на сервере localStorage нет, первый клиентский
@@ -66,6 +74,7 @@ export function SetInput({
     setWeight(draft.weight);
     setReps(draft.reps);
     setRpe(draft.rpe);
+    setEffort(draft.effort ?? null);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [workoutExerciseId]);
 
@@ -78,6 +87,7 @@ export function SetInput({
     setWeight(defaultWeightKg ? String(defaultWeightKg) : "");
     setReps(String(defaultRepsMax));
     setRpe("");
+    setEffort(null);
   }, [defaultRepsMax, defaultWeightKg, nextSetIndex, workoutExerciseId]);
 
   useEffect(() => {
@@ -98,11 +108,12 @@ export function SetInput({
 
   // H10.4: сохраняем черновик ТОЛЬКО при реальном вводе пользователя (не на
   // маунте) — иначе нетронутые defaults (reps=defaultRepsMax) клобберят слой.
-  function persistDraft(next: { weight?: string; reps?: string; rpe?: string }) {
+  function persistDraft(next: { weight?: string; reps?: string; rpe?: string; effort?: SetEffort | null }) {
     saveSetDraft(workoutExerciseId, {
       weight: next.weight ?? weight,
       reps: next.reps ?? reps,
       rpe: next.rpe ?? rpe,
+      effort: next.effort === undefined ? effort : next.effort,
     });
   }
   function changeWeight(value: string) {
@@ -116,6 +127,10 @@ export function SetInput({
   function changeRpe(value: string) {
     setRpe(value);
     persistDraft({ rpe: value });
+  }
+  function changeEffort(value: SetEffort | null) {
+    setEffort(value);
+    persistDraft({ effort: value });
   }
 
   function adjustWeight(delta: number) {
@@ -132,6 +147,7 @@ export function SetInput({
     setWeight(defaultWeightKg ? String(defaultWeightKg) : "");
     setReps(String(defaultRepsMax));
     setRpe("");
+    setEffort(null);
     if (window.matchMedia("(pointer: fine)").matches) weightRef.current?.focus({ preventScroll: true });
   }
 
@@ -164,6 +180,7 @@ export function SetInput({
         weightKg: String(fd.get("weightKg") ?? ""),
         reps: String(fd.get("reps") ?? ""),
         rpe: String(rpeRaw ?? ""),
+        effort: String(fd.get("effort") ?? ""),
         restSeconds: String(fd.get("restSeconds") ?? ""),
         clientSetId,
         completedAt: completedAt.toISOString(),
@@ -193,13 +210,14 @@ export function SetInput({
       weightKg,
       reps,
       rpe: rpe != null && Number.isFinite(rpe) ? rpe : null,
+      effort: parseSetEffort(fd.get("effort")),
       completedAt,
     });
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (pending || offlineSavingRef.current) return;
+    if (disabled || pending || offlineSavingRef.current) return;
     setLocalError("");
     const fd = new FormData(e.currentTarget);
     fd.set("restSeconds", measuredRestSeconds());
@@ -232,6 +250,7 @@ export function SetInput({
       <input type="hidden" name="workoutExerciseId" value={workoutExerciseId} />
       <input type="hidden" name="setIndex" value={nextSetIndex} />
       <input type="hidden" name="restSeconds" value="" />
+      <input type="hidden" name="effort" value={effort ?? ""} />
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -315,6 +334,8 @@ export function SetInput({
         </div>
       </div>
 
+      <SetEffortPicker value={effort} onChange={changeEffort} disabled={disabled || pending || savingOffline} />
+
       <details className="group rounded-xl bg-muted/40 px-3">
         <summary className="text-muted-foreground flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-xs [&::-webkit-details-marker]:hidden">
           Ощущение нагрузки · RPE
@@ -351,7 +372,7 @@ export function SetInput({
         type="submit"
         size="xl"
         className={cn("w-full rounded-2xl")}
-        disabled={pending || savingOffline || !weight || !reps}
+        disabled={disabled || pending || savingOffline || !weight || !reps}
         aria-busy={pending || savingOffline}
       >
         {pending || savingOffline ? (

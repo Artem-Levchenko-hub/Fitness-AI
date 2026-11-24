@@ -10,6 +10,7 @@ import {
   deleteSet,
   deleteWorkout,
   recordSet,
+  replaceWorkoutExercise,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
 import { getOrCreateNextWorkoutTemplate } from "@/lib/repos/plan-from-history.repo";
@@ -17,6 +18,7 @@ import { feelingNoteLine } from "@/lib/domain/workouts/feeling";
 import { parseClientSetId } from "@/lib/domain/workouts/client-set-id";
 import { parseClientWorkoutId } from "@/lib/domain/workouts/client-workout-id";
 import { finishStrengthWorkout } from "@/server/finish-strength-workout";
+import { SET_EFFORTS } from "@/lib/domain/workouts/effort";
 
 const startSchema = z.object({
   templateId: z.string().uuid(),
@@ -67,6 +69,7 @@ const recordSetSchema = z.object({
   setIndex: z.coerce.number().int().min(0).max(50),
   weightKg: z.coerce.number().min(0).max(1000),
   reps: z.coerce.number().int().min(1).max(100),
+  effort: z.enum(SET_EFFORTS).nullable().optional(),
   completedAt: z.iso.datetime().optional(),
   rpe: z
     .union([z.coerce.number().min(1).max(10), z.literal("")])
@@ -93,6 +96,7 @@ export async function recordSetAction(
     setIndex: formData.get("setIndex"),
     weightKg: formData.get("weightKg"),
     reps: formData.get("reps"),
+    effort: formData.get("effort") || null,
     completedAt: formData.get("completedAt") || undefined,
     rpe: formData.get("rpe") ?? undefined,
     restSeconds: formData.get("restSeconds") ?? undefined,
@@ -117,6 +121,7 @@ export async function recordSetAction(
     setIndex: parsed.data.setIndex,
     weightKg: parsed.data.weightKg,
     reps: parsed.data.reps,
+    effort: parsed.data.effort ?? null,
     rpe: parsed.data.rpe,
     restSeconds: parsed.data.restSeconds,
     clientSetId,
@@ -126,6 +131,34 @@ export async function recordSetAction(
   });
   revalidatePath(`/workouts/${parsed.data.workoutId}`);
   return { status: "idle" };
+}
+
+const replaceExerciseSchema = z.object({
+  workoutId: z.string().uuid(),
+  workoutExerciseId: z.string().uuid(),
+  replacementExerciseId: z.string().uuid(),
+});
+
+export async function replaceWorkoutExerciseAction(formData: FormData): Promise<{ status: "success" } | { status: "error"; message: string }> {
+  const user = await requireUser();
+  const parsed = replaceExerciseSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "error", message: "Выберите упражнение для замены" };
+  const result = await replaceWorkoutExercise(user.id, parsed.data.workoutId, parsed.data.workoutExerciseId, parsed.data.replacementExerciseId);
+  if (result.status !== "replaced") {
+    const messages = {
+      workout_not_found: "Тренировка не найдена",
+      workout_not_active: "Заменять упражнение можно только в активной тренировке",
+      exercise_not_found: "Упражнение не найдено в этой тренировке",
+      exercise_unavailable: "Это упражнение больше недоступно. Выберите другое",
+      already_replaced: "Упражнение уже заменено. Обновите страницу",
+      same_exercise: "Выберите другое упражнение",
+      no_remaining_sets: "Все плановые подходы уже выполнены",
+      myo_started: "Myo-серия уже начата. Замена доступна до активационного подхода",
+    };
+    return { status: "error", message: messages[result.status] };
+  }
+  revalidatePath(`/workouts/${parsed.data.workoutId}`);
+  return { status: "success" };
 }
 
 const deleteSetSchema = z.object({

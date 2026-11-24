@@ -1,6 +1,6 @@
 import { and, between, desc, eq } from "drizzle-orm";
 
-import { db } from "@/db/client";
+import { db, type Db } from "@/db/client";
 import * as schema from "@/db/schema";
 import type { NewSleepLog, SleepLog } from "@/db/schema";
 
@@ -73,6 +73,21 @@ export async function upsertSleep(
     .returning();
   if (!row) throw new Error("upsertSleep вернул пустой результат");
   return row;
+}
+
+/** Field-only upsert: do not read/merge a stale snapshot over quality or notes. */
+export async function upsertSleepHours(
+  userId: string,
+  date: string,
+  hours: number,
+  connection: Pick<Db, "insert"> = db,
+): Promise<void> {
+  await connection.insert(schema.sleepLogs)
+    .values({ userId, date, hours })
+    .onConflictDoUpdate({
+      target: [schema.sleepLogs.userId, schema.sleepLogs.date],
+      set: { hours, updatedAt: new Date() },
+    });
 }
 
 export async function deleteSleepForDate(

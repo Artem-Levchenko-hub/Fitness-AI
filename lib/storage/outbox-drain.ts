@@ -24,6 +24,7 @@ const RECORD_SET_FIELDS = [
   "weightKg",
   "reps",
   "rpe",
+  "effort",
   "restSeconds",
   "clientSetId",
 ] as const;

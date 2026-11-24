@@ -9,10 +9,13 @@
  * защищён от SSR/quota (fail-soft R-10) — его проверяет рантайм, не юнит.
  */
 
+import { parseSetEffort, type SetEffort } from "@/lib/domain/workouts/effort";
+
 export type SetInputDraft = {
   weight: string;
   reps: string;
   rpe: string;
+  effort?: SetEffort | null;
 };
 
 const KEY_PREFIX = "fit:set-draft:";
@@ -22,13 +25,13 @@ export function setDraftKey(workoutExerciseId: string): string {
 }
 
 export function isEmptySetDraft(draft: SetInputDraft): boolean {
-  return !draft.weight && !draft.reps && !draft.rpe;
+  return !draft.weight && !draft.reps && !draft.rpe && !draft.effort;
 }
 
 export function serializeSetDraft(draft: SetInputDraft): string {
   // Короткие ключи — localStorage не безразмерен, а на активной тренировке
   // черновиков может быть по строке на упражнение.
-  return JSON.stringify({ w: draft.weight, r: draft.reps, e: draft.rpe });
+  return JSON.stringify({ w: draft.weight, r: draft.reps, e: draft.rpe, ...(draft.effort ? { f: draft.effort } : {}) });
 }
 
 export function parseSetDraft(raw: string | null): SetInputDraft | null {
@@ -39,6 +42,7 @@ export function parseSetDraft(raw: string | null): SetInputDraft | null {
       weight: typeof obj.w === "string" ? obj.w : "",
       reps: typeof obj.r === "string" ? obj.r : "",
       rpe: typeof obj.e === "string" ? obj.e : "",
+      ...(parseSetEffort(obj.f) ? { effort: parseSetEffort(obj.f) } : {}),
     };
     // Пустой черновик восстанавливать нечего — как будто его и нет.
     return isEmptySetDraft(draft) ? null : draft;

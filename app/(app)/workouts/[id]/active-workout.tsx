@@ -16,6 +16,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
+import { SetEffortBadge } from "@/components/app/SetEffortBadge";
+import { WorkoutExerciseReplacement } from "@/components/app/WorkoutExerciseReplacement";
+import type { PickerExercise } from "@/components/app/ExercisePicker";
 import {
   myoPhaseLabel,
   plannedSetCount,
@@ -54,6 +57,7 @@ type Props = {
   workout: ActiveWorkout;
   previousByExerciseId: Map<string, PreviousSessionSummary>;
   goalByExerciseId: Map<string, GoalProgressView>;
+  replacementExercises: readonly PickerExercise[];
 };
 
 /** Стабильная пустая ссылка — не плодим новый [] на каждый рендер. */
@@ -63,6 +67,7 @@ export function ActiveWorkoutView({
   workout,
   previousByExerciseId,
   goalByExerciseId,
+  replacementExercises,
 }: Props) {
   // H15.3b-2 — оптимистичный слой офлайн-подходов. Активная тренировка
   // рендерится сервером, но офлайн-записи лежат в IndexedDB-outbox; на маунте
@@ -105,13 +110,15 @@ export function ActiveWorkoutView({
 
   const completedExercises = useMemo(
     () =>
-      workout.exercises.filter(
+      workout.exercises.filter((exercise) => !exercise.replacedAt).filter(
         (e) =>
           e.sets.length + (pendingByExerciseId.get(e.id)?.length ?? 0) >=
           plannedSetCount(e.targetSets, e),
       ).length,
     [workout.exercises, pendingByExerciseId],
   );
+  const plannedExerciseCount = workout.exercises.filter((exercise) => !exercise.replacedAt).length;
+  const visibleExercises = workout.exercises.filter((exercise) => !exercise.replacedAt || exercise.sets.length > 0 || (pendingByExerciseId.get(exercise.id)?.length ?? 0) > 0);
 
   /** H12.4 — «Прервать» прямо из активной сессии (зеркало круговой/кардио:
    *  active-circuit.tsx / active-cardio.tsx). Раньше отменить зависшую силовую
@@ -163,14 +170,14 @@ export function ActiveWorkoutView({
       <div className="bg-card border-border rounded-2xl border p-4">
         <div className="mb-3 flex items-center justify-between gap-3 text-sm">
           <span className="text-muted-foreground">Упражнения выполнены</span>
-          <span className="tabular font-semibold">{completedExercises} из {workout.exercises.length}</span>
+          <span className="tabular font-semibold">{completedExercises} из {plannedExerciseCount}</span>
         </div>
-        <progress aria-label="Прогресс тренировки" max={Math.max(1, workout.exercises.length)} value={completedExercises} className="workout-progress block h-1.5 w-full overflow-hidden rounded-full" />
+        <progress aria-label="Прогресс тренировки" max={Math.max(1, plannedExerciseCount)} value={completedExercises} className="workout-progress block h-1.5 w-full overflow-hidden rounded-full" />
         <p className="text-muted-foreground mt-3 text-xs leading-relaxed">Можно продолжить позже — записанные подходы сохраняются.</p>
       </div>
 
       <ul className="space-y-3">
-        {workout.exercises.map((ex, idx) => (
+        {visibleExercises.map((ex, idx) => (
           <ExerciseCard
             key={ex.id}
             workoutId={workout.id}
@@ -180,6 +187,8 @@ export function ActiveWorkoutView({
             goal={goalByExerciseId.get(ex.exerciseId) ?? null}
             pending={pendingByExerciseId.get(ex.id) ?? EMPTY_PENDING}
             onOfflineRecord={handleOfflineRecord}
+            replacementExercises={replacementExercises}
+            finishedOffline={finishedOffline}
           />
         ))}
       </ul>
@@ -209,7 +218,7 @@ export function ActiveWorkoutView({
             className="space-y-3 pt-2"
           >
             <input type="hidden" name="workoutId" value={workout.id} />
-            {workout.exercises.length > 0 && completedExercises === workout.exercises.length ? (
+            {plannedExerciseCount > 0 && completedExercises === plannedExerciseCount ? (
               <div role="status" className="border-primary/15 bg-primary/5 rounded-2xl border px-4 py-3 text-sm leading-relaxed">
                 <p className="text-primary font-semibold">Все плановые подходы записаны</p>
                 <p className="text-muted-foreground mt-1 text-xs">{pending.length > 0
@@ -317,6 +326,8 @@ function ExerciseCard({
   goal,
   pending,
   onOfflineRecord,
+  replacementExercises,
+  finishedOffline,
 }: {
   workoutId: string;
   exercise: ActiveWorkout["exercises"][number];
@@ -325,8 +336,13 @@ function ExerciseCard({
   goal: GoalProgressView | null;
   pending: PendingSet[];
   onOfflineRecord: (set: PendingSet) => void;
+  replacementExercises: readonly PickerExercise[];
+  finishedOffline: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [savingSet, setSavingSet] = useState(false);
+  const [replacing, setReplacing] = useState(false);
+  const retired = !!exercise.replacedAt;
   // Офлайн-подходы (pending) считаются наравне с серверными: прогресс,
   // завершённость и следующий индекс монотонны (line H15.3b-2 sharpen — иначе
   // N офлайн-подходов слились бы на одном setIndex).
@@ -334,7 +350,7 @@ function ExerciseCard({
   // Миорепсы: план = активационный + мини-сеты (targetSets игнорируется),
   // отдых/повторы следующего подхода зависят от фазы (см. domain/workouts/myo).
   const planned = plannedSetCount(exercise.targetSets, exercise);
-  const completed = totalDone >= planned;
+  const completed = retired || totalDone >= planned;
   const activationReps =
     exercise.sets[0]?.reps ?? pending[0]?.reps ?? null;
   const lastSet = exercise.sets[exercise.sets.length - 1];
@@ -392,7 +408,9 @@ function ExerciseCard({
             {exercise.exerciseNameRu}
           </h3>
           <p className="text-muted-foreground tabular mt-0.5 text-xs">
-            {exercise.myoReps ? (
+            {retired ? (
+              <span>{totalDone} подх. · заменено</span>
+            ) : exercise.myoReps ? (
               <span>
                 {totalDone}/{planned} · Myo: {exercise.targetRepsMin}–
                 {exercise.targetRepsMax} + {exercise.myoMiniSets}×30%
@@ -432,6 +450,7 @@ function ExerciseCard({
                   </span>
                   <span className="tabular flex-1 text-sm font-medium">
                     {s.weightKg} кг × {s.reps}
+                    <SetEffortBadge effort={s.effort} />
                     {s.rpe != null ? (
                       <span className="text-muted-foreground ml-2 text-xs font-normal">
                         RPE {s.rpe}
@@ -441,7 +460,7 @@ function ExerciseCard({
                   {/* У Myo можно удалить только последний подтверждённый сет:
                       иначе удалённая активация сделала бы первый мини-сет
                       новой «активацией» и исказила бы 30%-цель. */}
-                  {(!exercise.myoReps ||
+                  {!retired && (!exercise.myoReps ||
                     (pending.length === 0 && s.id === lastSet?.id)) ? (
                     <form action={deleteSetAction}>
                       <input type="hidden" name="workoutId" value={workoutId} />
@@ -472,6 +491,7 @@ function ExerciseCard({
                   </span>
                   <span className="tabular flex-1 text-sm font-medium">
                     {s.weightKg} кг × {s.reps}
+                    <SetEffortBadge effort={s.effort} />
                     {s.rpe != null ? (
                       <span className="text-muted-foreground ml-2 text-xs font-normal">
                         RPE {s.rpe}
@@ -490,7 +510,7 @@ function ExerciseCard({
             </ul>
           ) : null}
 
-          {!completed ? (
+          {!retired && !completed ? (
             <>
               {/* H12.1 — «Прошлый раз» в точке решения: подходы последней
                   завершённой сессии этого упражнения. Нет истории → строки
@@ -560,13 +580,20 @@ function ExerciseCard({
                 }
                 restStartedAt={lastCompletedAt}
                 onOfflineRecord={onOfflineRecord}
+                disabled={replacing || finishedOffline}
+                onSavingChange={setSavingSet}
               />
             </>
           ) : (
             <p className="bg-success/10 text-success rounded-lg p-3 text-center text-xs font-medium">
-              Все целевые подходы выполнены
+              {retired ? "Упражнение заменено. Записанные подходы сохранены" : "Все целевые подходы выполнены"}
             </p>
           )}
+          {!completed ? (
+            <WorkoutExerciseReplacement workoutId={workoutId} workoutExerciseId={exercise.id} exerciseId={exercise.exerciseId}
+              exercises={replacementExercises} savingSet={savingSet} replacing={replacing} onReplacingChange={setReplacing}
+              disabledReason={finishedOffline ? "Тренировка ожидает синхронизации завершения" : pending.length > 0 ? "Дождитесь синхронизации записанных подходов перед заменой" : exercise.myoReps && totalDone > 0 ? "Myo-серия уже начата. Замена доступна до активационного подхода" : undefined} />
+          ) : null}
         </div>
       ) : null}
     </li>

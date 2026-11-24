@@ -74,6 +74,22 @@ export async function updateProfileAction(
   await updateUserProfile(user.id, parsed.data);
   revalidatePath("/settings");
   revalidatePath("/stats");
+  revalidatePath("/profile");
+  return { status: "success" };
+}
+
+/** A name-only form must not reset the separate body profile fields. */
+export async function updateDisplayNameAction(
+  _prev: BodyState,
+  formData: FormData,
+): Promise<BodyState> {
+  const user = await requireUser();
+  const parsed = profileSchema.pick({ name: true }).required().safeParse({ name: formData.get("name") ?? undefined });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Проверьте имя" };
+  }
+  await updateUserProfile(user.id, parsed.data);
+  revalidatePath("/", "layout");
   return { status: "success" };
 }
 

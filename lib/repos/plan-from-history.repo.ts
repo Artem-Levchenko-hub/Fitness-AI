@@ -171,6 +171,7 @@ export async function buildNextWorkoutPlan(
   const items: NextWorkoutPreviewItem[] = [];
   let progressed = false;
   for (const ex of w.exercises) {
+    if (ex.replacedAt && ex.sets.length === 0) continue;
     const { item, fromReal } = await nextItemForExercise(
       userId,
       ex.exerciseId,
@@ -196,7 +197,7 @@ export async function buildNextWorkoutPlan(
       myoMiniRestSeconds: item.myoMiniRestSeconds,
     });
   }
-  return { name: w.name, progressed, items };
+  return items.length > 0 ? { name: w.name, progressed, items } : null;
 }
 
 /** Get-or-create шаблон «следующая тренировка от тренера» по завершённой:

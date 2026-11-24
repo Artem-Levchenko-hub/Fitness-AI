@@ -309,6 +309,13 @@
       "when": 1795438800000,
       "tag": "0043_workout_set_saved_at",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795506000000,
+      "tag": "0044_workout_replacement_effort",
+      "breakpoints": true
     }
   ]
 }

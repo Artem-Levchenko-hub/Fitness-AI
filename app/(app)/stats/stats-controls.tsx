@@ -1,8 +1,11 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
+import { LoaderCircle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useOptimistic, useTransition } from "react";
 
+import type { StatsRange } from "@/lib/domain/stats/range";
 import { cn } from "@/lib/utils";
 
 const PERIODS = [
@@ -18,57 +21,50 @@ const GRANULARITY = [
   { v: "week", label: "По неделям" },
 ] as const;
 
-export function PeriodPills() {
-  const reduced = useReducedMotion() ?? false;
+export function PeriodPills({ range }: { range: StatsRange }) {
   const router = useRouter();
   const params = useSearchParams();
-  const current = params.get("range") ?? "30d";
+  const [pending, startTransition] = useTransition();
+  const [selected, selectPeriod] = useOptimistic(range);
 
-  function set(value: string) {
+  function set(value: StatsRange) {
+    if (value === selected) return;
     const next = new URLSearchParams(params);
     next.set("range", value);
-    router.push(`?${next.toString()}`, { scroll: false });
+    startTransition(() => {
+      selectPeriod(value);
+      router.push(`/stats?${next.toString()}`, { scroll: false });
+    });
   }
 
   return (
-    <div role="group" aria-label="Период статистики" className="grid grid-cols-5 gap-1.5">
-      {PERIODS.map((p) => {
-        const active = current === p.v;
-        return (
-          <motion.button
-            key={p.v}
-            type="button"
-            aria-pressed={active}
-            onClick={() => set(p.v)}
-            whileTap={reduced ? undefined : { scale: 0.94 }}
-            transition={
-              reduced
-                ? { duration: 0 }
-                : { type: "spring", stiffness: 500, damping: 28 }
-            }
-            className={cn(
-              "relative min-h-11 rounded-xl border px-2 py-2 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              active
-                ? "text-primary-foreground border-transparent"
-                : "border-border bg-card text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {active ? (
-              <motion.span
-                layoutId="period-pill-bg"
-                className="bg-primary absolute inset-0 -z-0 rounded-full"
-                transition={
-                  reduced
-                    ? { duration: 0 }
-                    : { type: "spring", stiffness: 380, damping: 32 }
-                }
-              />
-            ) : null}
-            <span className="relative z-10">{p.label}</span>
-          </motion.button>
-        );
-      })}
-    </div>
+    <>
+      <div role="group" aria-label="Период статистики" className="grid grid-cols-5 gap-1.5">
+        {PERIODS.map(({ v, label }) => {
+          const active = selected === v;
+          return (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={active}
+              onClick={() => set(v)}
+              className={cn(
+                "relative min-h-11 rounded-xl border px-1 py-2 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {pending && active ? (
+                <LoaderCircle className="absolute top-0.5 right-0.5 size-3 motion-safe:animate-spin" aria-hidden />
+              ) : null}
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      <span className="sr-only" role="status">{pending ? "Обновляем статистику…" : ""}</span>
+    </>
   );
 }
 

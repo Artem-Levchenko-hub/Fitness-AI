@@ -31,6 +31,12 @@ function mut(over: Partial<OutboxMutation> & { payload?: Record<string, unknown>
 }
 
 describe("pendingSetsFromOutbox", () => {
+  it("restores an offline effort mark without attributing it to a replacement", () => {
+    const [set] = pendingSetsFromOutbox([mut({ payload: { effort: "failure" } })], WORKOUT);
+    expect(set.workoutExerciseId).toBe(EX_A);
+    expect(set.effort).toBe("failure");
+  });
+
   it("маппит валидную recordSet-мутацию этой тренировки в PendingSet", () => {
     const [s] = pendingSetsFromOutbox([mut({ clientId: "cid-1" })], WORKOUT);
     expect(s).toEqual({

@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -87,6 +88,8 @@ export const workoutExercises = pgTable(
     myoMiniSets: integer("myo_mini_sets"),
     myoMiniReps: integer("myo_mini_reps"),
     myoMiniRestSeconds: integer("myo_mini_rest_seconds"),
+    /** Замена завершает назначение этой строки; подходы остаются у исходного упражнения. */
+    replacedAt: timestamp("replaced_at", { mode: "date", withTimezone: true }),
   },
   (t) => [
     index("workout_exercises_workout_idx").on(t.workoutId, t.position),
@@ -112,6 +115,7 @@ export const workoutSets = pgTable(
     setType: setType("set_type").notNull().default("working"),
     weightKg: doublePrecision("weight_kg").notNull(),
     reps: integer("reps").notNull(),
+    effort: text("effort", { enum: ["near_failure", "failure"] }),
     rpe: doublePrecision("rpe"),
     restSeconds: integer("rest_seconds"),
     /** Стабильный client-generated UUID офлайн-подхода (H15.3 outbox). NULL для
@@ -129,6 +133,7 @@ export const workoutSets = pgTable(
   (t) => [
     index("workout_sets_we_idx").on(t.workoutExerciseId, t.setIndex),
     index("workout_sets_completed_idx").on(t.completedAt),
+    check("workout_sets_effort_check", sql`${t.effort} in ('near_failure', 'failure')`),
     uniqueIndex("workout_sets_client_set_id_uq")
       .on(t.clientSetId)
       .where(sql`${t.clientSetId} is not null`),

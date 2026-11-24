@@ -29,6 +29,13 @@ describe("isResumable", () => {
 const exercise = (done = 3) => ({ targetSets: 3, myoReps: false, myoMiniSets: 3, sets: Array.from({ length: done }) });
 
 describe("strengthAutoFinishAt", () => {
+  it("counts only the remaining replacement plan and preserves the last server save", () => {
+    const retired = { ...exercise(1), replacedAt: new Date("2026-06-12T11:00:00Z") };
+    const replacement = { ...exercise(2), targetSets: 2 };
+    expect(strengthAutoFinishAt([retired, replacement], NOW)?.toISOString()).toBe("2026-06-12T13:00:00.000Z");
+    expect(strengthAutoFinishAt([retired, { ...replacement, sets: [] }], NOW)).toBeNull();
+  });
+
   it("waits for every exercise and never finishes an empty workout", () => {
     expect(strengthAutoFinishAt([], NOW)).toBeNull();
     expect(strengthAutoFinishAt([exercise(), exercise(2)], NOW)).toBeNull();

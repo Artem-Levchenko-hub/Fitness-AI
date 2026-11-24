@@ -1,4 +1,4 @@
-import { Activity, ChevronLeft, Dumbbell, Sparkles, Wand2 } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Dumbbell, Sparkles, Wand2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -140,9 +140,11 @@ export default async function FriendWorkoutsPage({ params }: Props) {
             {sharedTemplates.map((tpl) => (
               <li
                 key={`${tpl.format}-${tpl.id}`}
-                className="bg-card border-border rounded-xl border p-4"
               >
-                <FriendTemplateMeta tpl={tpl} />
+                <Link href={`/friends/${friendId}/templates/${tpl.format}/${tpl.id}`} className="bg-card border-border hover:border-foreground/20 flex items-center gap-3 rounded-xl border p-4 transition-colors">
+                  <FriendTemplateMeta tpl={tpl} />
+                  <ChevronRight className="text-muted-foreground ml-auto size-4 shrink-0" aria-hidden="true" />
+                </Link>
               </li>
             ))}
           </ul>
@@ -168,8 +170,7 @@ export default async function FriendWorkoutsPage({ params }: Props) {
   );
 }
 
-/** Read-only мета шаблона друга — без ссылки (detail-роуты закрыты по userId).
- *  Бейдж «обновлён тренером» (R-41 иконка + текст). */
+/** Read-only мета шаблона друга. Бейдж «обновлён тренером» (R-41 иконка + текст). */
 function FriendTemplateMeta({ tpl }: { tpl: UnifiedTemplateItem }) {
   return (
     <div className="min-w-0">

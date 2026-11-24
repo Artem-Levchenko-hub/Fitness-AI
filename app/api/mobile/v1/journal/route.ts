@@ -4,6 +4,7 @@ import { getUser } from "@/lib/auth/require-user";
 import { isUserAdmin } from "@/lib/repos/admin.repo";
 import { getUserProfile } from "@/lib/repos/body.repo";
 import { listTemplates } from "@/lib/repos/templates.repo";
+import { SET_EFFORTS } from "@/lib/domain/workouts/effort";
 import {
   getActiveWorkoutForUser,
   getActiveWorkoutId,
@@ -21,6 +22,7 @@ const setSchema = z.object({
   completedAt: z.iso.datetime(),
   weightKg: z.number().min(0).max(1000),
   reps: z.number().int().min(1).max(100),
+  effort: z.enum(SET_EFFORTS).nullish(),
 });
 
 export async function GET() {

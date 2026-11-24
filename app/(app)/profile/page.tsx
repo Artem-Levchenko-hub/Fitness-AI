@@ -8,6 +8,7 @@ import {
   hasTrainingData,
 } from "@/components/avatar/build-avatar-data";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
+import { ProfileNameEditor } from "@/components/profile/ProfileNameEditor";
 import { parseMuscleParam } from "@/lib/domain/avatar/muscle-param";
 import { requireUser } from "@/lib/auth/require-user";
 import { getLatestMeasurement, getUserProfile } from "@/lib/repos/body.repo";
@@ -62,7 +63,8 @@ export default async function ProfilePage({
   );
   const hasData = hasTrainingData(heat);
 
-  const displayName = user.name?.trim() || user.email;
+  const currentName = profile ? profile.name : user.name;
+  const displayName = currentName?.trim() || user.email;
   const heightCm = profile?.heightCm ?? null;
   const weightKg = measurement?.weightKg ?? null;
 
@@ -76,6 +78,7 @@ export default async function ProfilePage({
           <h1 className="font-serif mt-1 truncate text-3xl font-normal tracking-tight md:text-4xl">
             {displayName}
           </h1>
+          <ProfileNameEditor initialName={currentName} />
         </div>
         <Link
           href="/settings"

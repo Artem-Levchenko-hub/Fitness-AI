@@ -12,6 +12,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ConfirmDeleteButton } from "@/components/app/confirm-delete-button";
+import { SetEffortBadge } from "@/components/app/SetEffortBadge";
 import {
   TrainerResultCard,
   type TrainerResultData,
@@ -42,6 +43,7 @@ import {
   type ActiveWorkoutExercise,
 } from "@/lib/repos/workouts.repo";
 import { getExerciseGoal } from "@/lib/repos/goals.repo";
+import { listExercises } from "@/lib/repos/exercises.repo";
 import { exerciseSetHistory } from "@/lib/repos/stats.repo";
 import { saveWorkoutAsTemplateAction } from "@/server/actions/templates";
 import {
@@ -94,6 +96,7 @@ export default async function WorkoutPage({ params }: Props) {
   // цели = точка решения; урок H4.3 — один компонент). Полную историю тянем
   // ТОЛЬКО при наличии цели; goalSeries — тот же источник, что /exercises/[id].
   const goalByExerciseId = new Map<string, GoalProgressView>();
+  const replacementExercises = await listExercises(user.id);
   await Promise.all(
     workout.exercises.map(async (ex) => {
       const [latest] = await exerciseSetHistory(user.id, ex.exerciseId, 1);
@@ -133,6 +136,7 @@ export default async function WorkoutPage({ params }: Props) {
         workout={workout}
         previousByExerciseId={previousByExerciseId}
         goalByExerciseId={goalByExerciseId}
+        replacementExercises={replacementExercises.map(({ id, nameRu, nameEn, isCustom }) => ({ id, nameRu, nameEn, isCustom }))}
       />
 
       <div className="border-border mt-8 border-t pt-5">
@@ -330,7 +334,7 @@ function CompletedView({
           Что делали
         </h2>
         <ul className="space-y-3">
-          {workout.exercises.map((ex) => (
+          {workout.exercises.filter((ex) => !ex.replacedAt || ex.sets.length > 0).map((ex) => (
             <li key={ex.id}>
               <ExerciseBlock exercise={ex} />
             </li>
@@ -415,6 +419,7 @@ function ExerciseBlock({ exercise }: { exercise: ActiveWorkoutExercise }) {
             <span className="flex-1 tabular">
               {formatNum(s.weightKg)} <span className="text-muted-foreground">кг</span>{" "}
               × {s.reps}{" "}
+              <SetEffortBadge effort={s.effort} />
               <span className="text-muted-foreground text-xs">
                 {s.setType !== "working" ? `· ${labelSetType(s.setType)}` : ""}
               </span>

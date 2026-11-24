@@ -2,14 +2,11 @@ import { Moon, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { localDateIso } from "@/lib/datetime/local-day";
 import { getSleepForDate } from "@/lib/repos/sleep.repo";
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export async function SleepTile({ userId }: { userId: string }) {
-  const row = await getSleepForDate(userId, todayIso());
+export async function SleepTile({ userId, timeZone }: { userId: string; timeZone: string }) {
+  const row = await getSleepForDate(userId, localDateIso(new Date(), timeZone));
 
   return (
     <div oai-annotatable="Сон сегодня" className="bg-card border-border flex items-center justify-between gap-4 rounded-2xl border p-4">

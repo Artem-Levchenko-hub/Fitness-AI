@@ -8,6 +8,8 @@ import {
 } from "@/lib/ai/insight-query";
 import { AUTO_FINISH_IDLE_MS, strengthAutoFinishAt } from "@/lib/domain/workouts/active-session";
 import { extractOverallScore } from "@/lib/domain/friends/friend-score";
+import type { SetEffort } from "@/lib/domain/workouts/effort";
+import { plannedSetCount } from "@/lib/domain/workouts/myo";
 
 type WorkoutStatusLiteral = (typeof schema.workoutStatus.enumValues)[number];
 type SetTypeLiteral = (typeof schema.setType.enumValues)[number];
@@ -19,6 +21,7 @@ export type ActiveWorkoutSet = {
   setType: SetTypeLiteral;
   weightKg: number;
   reps: number;
+  effort?: SetEffort | null;
   rpe: number | null;
   restSeconds: number | null;
   completedAt: Date;
@@ -42,6 +45,7 @@ export type ActiveWorkoutExercise = {
   myoMiniSets: number;
   myoMiniReps: number;
   myoMiniRestSeconds: number;
+  replacedAt?: Date | null;
   sets: ActiveWorkoutSet[];
 };
 
@@ -204,6 +208,7 @@ export async function getActiveWorkoutForUser(
       myoMiniSets: schema.workoutExercises.myoMiniSets,
       myoMiniReps: schema.workoutExercises.myoMiniReps,
       myoMiniRestSeconds: schema.workoutExercises.myoMiniRestSeconds,
+      replacedAt: schema.workoutExercises.replacedAt,
     })
     .from(schema.workoutExercises)
     .innerJoin(
@@ -310,6 +315,7 @@ export type RecordSetInput = {
   setIndex?: number;
   weightKg: number;
   reps: number;
+  effort?: SetEffort | null;
   rpe?: number | null;
   restSeconds?: number | null;
   setType?: SetTypeLiteral;
@@ -370,6 +376,7 @@ export async function recordSet(
         setType: input.setType ?? "working",
         weightKg: input.weightKg,
         reps: input.reps,
+        effort: input.effort ?? null,
         rpe: input.rpe ?? null,
         restSeconds: input.restSeconds ?? null,
         clientSetId: input.clientSetId ?? null,
@@ -393,6 +400,60 @@ export async function recordSet(
       }).where(eq(schema.workouts.id, workoutId));
     }
     return setIndex;
+  });
+}
+
+export type ReplaceWorkoutExerciseStatus =
+  | "replaced" | "workout_not_found" | "workout_not_active" | "exercise_not_found"
+  | "exercise_unavailable" | "already_replaced" | "same_exercise" | "no_remaining_sets" | "myo_started";
+
+/** A fresh row keeps completed and delayed offline sets attached to the movement actually performed. */
+export async function replaceWorkoutExercise(
+  userId: string,
+  workoutId: string,
+  workoutExerciseId: string,
+  replacementExerciseId: string,
+): Promise<{ status: ReplaceWorkoutExerciseStatus }> {
+  return db.transaction(async (tx) => {
+    // Same lock order as recordSet/deleteSet/finishWorkout prevents a split racing a saved set.
+    const [owned] = await tx.select({ id: schema.workouts.id, status: schema.workouts.status })
+      .from(schema.workouts)
+      .where(and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId)))
+      .limit(1).for("update");
+    if (!owned) return { status: "workout_not_found" };
+    if (owned.status !== "active") return { status: "workout_not_active" };
+
+    // Resolve legacy target/protocol fallbacks before changing the exercise identity.
+    const workout = await getActiveWorkoutForUser(userId, workoutId, tx);
+    const original = workout?.exercises.find((exercise) => exercise.id === workoutExerciseId);
+    if (!original) return { status: "exercise_not_found" };
+    if (original.replacedAt) return { status: "already_replaced" };
+    if (original.exerciseId === replacementExerciseId) return { status: "same_exercise" };
+    if (original.myoReps && original.sets.length > 0) return { status: "myo_started" };
+    const remaining = plannedSetCount(original.targetSets, original) - original.sets.length;
+    if (remaining <= 0) return { status: "no_remaining_sets" };
+
+    const [available] = await tx.select({ id: schema.exercises.id }).from(schema.exercises)
+      .where(and(eq(schema.exercises.id, replacementExerciseId), or(
+        isNull(schema.exercises.ownerUserId), eq(schema.exercises.ownerUserId, userId),
+      ))).limit(1);
+    if (!available) return { status: "exercise_unavailable" };
+
+    await tx.update(schema.workoutExercises)
+      .set({ position: sql`${schema.workoutExercises.position} + 1` })
+      .where(and(eq(schema.workoutExercises.workoutId, workoutId), gt(schema.workoutExercises.position, original.position)));
+    await tx.update(schema.workoutExercises).set({ replacedAt: new Date() })
+      .where(eq(schema.workoutExercises.id, original.id));
+    await tx.insert(schema.workoutExercises).values({
+      id: crypto.randomUUID(), workoutId, exerciseId: replacementExerciseId, position: original.position + 1,
+      targetSets: original.myoReps ? original.targetSets : remaining,
+      targetRepsMin: original.targetRepsMin, targetRepsMax: original.targetRepsMax,
+      // Weight belongs to the movement; the replacement needs a fresh choice.
+      targetWeightKg: null, targetRestSeconds: original.targetRestSeconds,
+      myoReps: original.myoReps, myoMiniSets: original.myoMiniSets,
+      myoMiniReps: original.myoMiniReps, myoMiniRestSeconds: original.myoMiniRestSeconds,
+    });
+    return { status: "replaced" };
   });
 }
 

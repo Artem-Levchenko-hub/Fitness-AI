@@ -163,8 +163,8 @@ export default async function DashboardPage() {
         <h2 className="text-muted-foreground mb-2 px-1 text-xs font-medium tracking-wide uppercase">
           Восстановление
         </h2>
-        <SleepTile userId={user.id} />
-        <NutritionTile userId={user.id} />
+        <SleepTile userId={user.id} timeZone={tz} />
+        <NutritionTile userId={user.id} timeZone={tz} />
       </section>
 
       <section oai-annotatable="Спросить тренера" className="mt-6">

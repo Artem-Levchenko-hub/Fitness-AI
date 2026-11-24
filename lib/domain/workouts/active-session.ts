@@ -12,6 +12,7 @@ type PlannedExercise = {
   myoReps: boolean;
   myoMiniSets: number;
   sets: readonly unknown[];
+  replacedAt?: Date | null;
 };
 
 /** Час отсчитывается от записи на сервере, а не от часов офлайн-клиента.
@@ -21,7 +22,9 @@ export function strengthAutoFinishAt(
   lastSavedAt: Date | null,
 ): Date | null {
   if (!lastSavedAt || !Number.isFinite(lastSavedAt.getTime()) || exercises.length === 0) return null;
-  const complete = exercises.every((exercise) => {
+  const planned = exercises.filter((exercise) => !exercise.replacedAt);
+  if (planned.length === 0) return null;
+  const complete = planned.every((exercise) => {
     const count = plannedSetCount(exercise.targetSets, {
       ...exercise, myoMiniReps: 5, myoMiniRestSeconds: 20,
     });

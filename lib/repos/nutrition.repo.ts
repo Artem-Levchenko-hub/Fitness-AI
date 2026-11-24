@@ -1,6 +1,6 @@
 import { and, between, desc, eq } from "drizzle-orm";
 
-import { db } from "@/db/client";
+import { db, type Db } from "@/db/client";
 import * as schema from "@/db/schema";
 import type { NewNutritionEntry, NutritionEntry } from "@/db/schema";
 
@@ -71,6 +71,21 @@ export async function upsertNutrition(
     .returning();
   if (!row) throw new Error("upsertNutrition вернул пустой результат");
   return row;
+}
+
+/** Field-only upsert preserves calorie, fat, carb and note edits made elsewhere. */
+export async function upsertNutritionProtein(
+  userId: string,
+  date: string,
+  proteinG: number,
+  connection: Pick<Db, "insert"> = db,
+): Promise<void> {
+  await connection.insert(schema.nutritionEntries)
+    .values({ userId, date, proteinG })
+    .onConflictDoUpdate({
+      target: [schema.nutritionEntries.userId, schema.nutritionEntries.date],
+      set: { proteinG, updatedAt: new Date() },
+    });
 }
 
 export async function deleteNutritionForDate(

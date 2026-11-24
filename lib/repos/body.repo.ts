@@ -97,6 +97,7 @@ export async function deleteMeasurement(
 }
 
 export type UserProfileUpdate = {
+  name?: string | null;
   birthDate?: Date | null;
   heightCm?: number | null;
   sex?: string | null;
@@ -111,6 +112,7 @@ export async function updateUserProfile(
 ): Promise<void> {
   // Drizzle требует не-undefined keys; собираем только изменённые
   const set: Record<string, unknown> = {};
+  if (patch.name !== undefined) set.name = patch.name;
   if (patch.birthDate !== undefined)
     set.birthDate = patch.birthDate
       ? patch.birthDate.toISOString().slice(0, 10)

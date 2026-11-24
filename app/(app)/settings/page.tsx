@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { ProfileNameForm } from "@/components/profile/ProfileNameEditor";
 import { PushPrompt } from "@/components/push/PushPrompt";
 import { env } from "@/lib/env";
 import { requireUser } from "@/lib/auth/require-user";
@@ -37,12 +38,7 @@ export default async function SettingsPage() {
           <p className="text-muted-foreground text-xs">Email</p>
           <p className="text-sm font-medium break-all">{user.email}</p>
         </div>
-        {user.name ? (
-          <div>
-            <p className="text-muted-foreground text-xs">Имя</p>
-            <p className="text-sm font-medium">{user.name}</p>
-          </div>
-        ) : null}
+        <ProfileNameForm initialName={profile ? profile.name : user.name} />
       </section>
 
       <section className="bg-card border-border mb-6 rounded-2xl border p-5">

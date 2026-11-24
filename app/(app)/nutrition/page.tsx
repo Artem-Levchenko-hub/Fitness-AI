@@ -4,6 +4,8 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/require-user";
+import { localDateIso } from "@/lib/datetime/local-day";
+import { getUserProfile } from "@/lib/repos/body.repo";
 import {
   getNutritionForDate,
   listRecentNutrition,
@@ -13,10 +15,6 @@ import { NutritionForm } from "./nutrition-form";
 
 export const metadata: Metadata = { title: "КБЖУ" };
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function formatDateRu(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
@@ -24,7 +22,8 @@ function formatDateRu(iso: string): string {
 
 export default async function NutritionPage() {
   const user = await requireUser();
-  const date = todayIso();
+  const profile = await getUserProfile(user.id);
+  const date = localDateIso(new Date(), profile?.timezone ?? "Europe/Moscow");
   const [today, recent] = await Promise.all([
     getNutritionForDate(user.id, date),
     listRecentNutrition(user.id, 7),

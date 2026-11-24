@@ -17,9 +17,11 @@ export function serializeJournalWorkout(workout: ActiveWorkout) {
     exercises: workout.exercises.map((exercise) => ({
       id: exercise.id,
       name: exercise.exerciseNameRu,
+      ...(exercise.replacedAt ? { replacedAt: exercise.replacedAt } : {}),
       targetRestSeconds: exercise.targetRestSeconds,
-      sets: exercise.sets.map(({ id, clientSetId, setIndex, weightKg, reps }) => ({
+      sets: exercise.sets.map(({ id, clientSetId, setIndex, weightKg, reps, effort }) => ({
         id, clientSetId, setIndex, weightKg, reps,
+        ...(effort ? { effort } : {}),
       })),
     })),
   };

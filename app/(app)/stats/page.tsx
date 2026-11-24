@@ -9,6 +9,7 @@ import { OneRmTrendChart } from "@/components/charts/OneRmTrendChart";
 import { VolumeBarChart } from "@/components/charts/VolumeChart";
 import { StatsOverview } from "@/components/stats/StatsOverview";
 import { MonthlyAchievements } from "@/components/stats/MonthlyAchievements";
+import { WellnessStats } from "@/components/stats/WellnessStats";
 import { WeeklyReviewButton } from "@/components/stats/WeeklyReviewButton";
 import { buildExerciseLinkMap } from "@/lib/ai/exercise-links";
 import { parseWeeklyReviewResult } from "@/lib/ai/weekly-review-display";
@@ -184,12 +185,7 @@ export default async function StatsPage({ searchParams }: Props) {
         </h1>
       </header>
 
-      <PeriodPills />
-
-      <MonthlyAchievements
-        monthly={monthlyAchievements.monthly}
-        facts={monthlyAchievements.facts}
-      />
+      <PeriodPills range={range} />
 
       <StatsOverview
         range={range}
@@ -200,6 +196,8 @@ export default async function StatsPage({ searchParams }: Props) {
         totalTonnageKg={kpi.totalTonnageKg}
         loadInsight={periodInsight}
       />
+
+      <WellnessStats userId={user.id} timeZone={tz} range={range} />
 
       <section className="bg-card border-border mt-6 rounded-2xl border p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -330,6 +328,11 @@ export default async function StatsPage({ searchParams }: Props) {
           </section>
         </div>
       </details>
+
+      <MonthlyAchievements
+        monthly={monthlyAchievements.monthly}
+        facts={monthlyAchievements.facts}
+      />
 
       <WeeklyReviewButton
         initial={weeklyAuto}
