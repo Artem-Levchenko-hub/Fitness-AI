@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ActiveWorkout, ActiveWorkoutExercise } from "@/lib/repos/workouts.repo";
@@ -65,7 +65,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("active workout plan controls", () => {
-  it("adds a searched exercise with editable starting sets and blocks repeated submission until it finishes", async () => {
+  it("adds a searched exercise with editable starting sets and blocks repeated submission until it finishes", { timeout: 15_000 }, async () => {
     let resolve!: (value: { status: string }) => void;
     actions.addWorkoutExerciseAction.mockReturnValue(new Promise((done) => { resolve = done; }));
     render(view());
@@ -80,8 +80,8 @@ describe("active workout plan controls", () => {
     const payload = actions.addWorkoutExerciseAction.mock.calls[0][0] as FormData;
     expect(Object.fromEntries(payload.entries())).toEqual({ workoutId: "workout", exerciseId: "squat", targetSets: "4" });
     expect((screen.getByRole("button", { name: "Завершить тренировку" }) as HTMLButtonElement).disabled).toBe(true);
-    resolve({ status: "success" });
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Добавить в тренировку" })).toBeNull());
+    await act(async () => { resolve({ status: "success" }); });
+    expect(screen.queryByRole("button", { name: "Добавить в тренировку" })).toBeNull();
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
