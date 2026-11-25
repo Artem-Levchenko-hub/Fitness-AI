@@ -32,13 +32,14 @@ import {
 import { MAIN_TABS, mainTabIndex, rootTabIndex, swipeOffset, swipeTarget } from "@/lib/navigation/main-tabs";
 
 type PageFrame = { element: HTMLDivElement; x: MotionValue<number>; stopFollowing: () => void };
-type PageSlide = { entry: number; exit: number; top: number; duration: number; progress: MotionValue<number> | null };
+type PageSlide = { entry: number; exit: number; top: number; duration: number; fromSwipe: boolean; progress: MotionValue<number> };
 type NavigationIntent = { from: string; href: string; slide: PageSlide | null };
 type SwipeRelease = { width: number; velocity: number };
 
 const RETURN_SPRING = { type: "spring", stiffness: 410, damping: 38, mass: 0.9 } as const;
 const TAB_SPRING = { type: "spring", stiffness: 400, damping: 35 } as const;
-const SLIDE_EASE: [number, number, number, number] = [0.2, 0.78, 0.23, 1];
+const SWIPE_EASE: [number, number, number, number] = [0.2, 0.78, 0.23, 1];
+const TAB_EASE: [number, number, number, number] = [0.32, 0, 0.24, 1];
 
 type Navigation = {
   index: number;
@@ -120,7 +121,7 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
   const requestedTab = useRef<string | null>(null);
   const selected = pending && intent?.from === pathname ? mainTabIndex(intent.href) : index;
   const slide = intent?.href === pathname ? intent.slide : null;
-  const preview = hint ?? (pending && intent?.from === pathname && intent.slide?.progress ? selected : null);
+  const preview = hint ?? (pending && intent?.from === pathname && intent.slide?.fromSwipe ? selected : null);
   const registerFrame = useCallback((frame: PageFrame) => {
     activeFrame.current = frame;
     return () => {
@@ -130,7 +131,9 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const historyNavigation = () => {
-      activeFrame.current?.x.jump(0);
+      const frame = activeFrame.current;
+      frame?.stopFollowing();
+      frame?.x.jump(0);
       setIntent(null);
       setHint(null);
     };
@@ -143,7 +146,7 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
     return () => animation.stop();
   }, [position, reduced, selected]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Each mounted page owns its translation. Keep the outgoing value until it slides out.
     gesture.current = null;
     shellRef.current?.removeAttribute("data-dragging-section");
@@ -174,12 +177,12 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
     window.addEventListener("pointerdown", stop, { passive: true });
     window.addEventListener("wheel", stop, { passive: true });
     window.addEventListener("keydown", stop);
-    const scrollFrame = requestAnimationFrame(restore);
+    // The new page and its remembered scroll must reach the same first paint.
+    restore();
     const timeout = window.setTimeout(stop, 5000);
     return () => {
       stop();
       cancelAnimationFrame(frame);
-      cancelAnimationFrame(scrollFrame);
       clearTimeout(timeout);
     };
   }, [pathname]);
@@ -192,7 +195,7 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
     if (x && x.get() !== 0) void animate(x, 0, RETURN_SPRING);
   }, [intent, pathname, pending]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (rootTabIndex(pathname) < 0) return;
     const rememberScroll = () => scrollPositions.current.set(pathname, window.scrollY);
     window.addEventListener("scroll", rememberScroll, { passive: true });
@@ -247,12 +250,14 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
     if (rootTabIndex(pathname) >= 0) scrollPositions.current.set(pathname, window.scrollY);
     const direction = Math.sign(next - index);
     const frame = activeFrame.current;
-    const distance = release?.width ?? 48;
+    frame?.stopFollowing();
+    frame?.x.stop();
+    const distance = release?.width ?? (document.documentElement.clientWidth || window.innerWidth);
     const currentX = frame?.x.get() ?? 0;
     const entry = direction * distance + currentX;
     const duration = release
       ? Math.max(0.2, Math.min(0.34, Math.abs(entry) / (1450 + Math.abs(release.velocity) * 500)))
-      : 0.2;
+      : 0.26;
     requestedTab.current = href;
     setIntent({
       from: pathname,
@@ -262,7 +267,8 @@ export function SectionNavigation({ children }: { children: ReactNode }) {
         exit: -direction * distance,
         top: frame.element.getBoundingClientRect().top,
         duration,
-        progress: release ? motionValue(0) : null,
+        fromSwipe: release !== undefined,
+        progress: motionValue(0),
       },
     });
     startNavigation(() => router.push(href, { scroll: false }));
@@ -401,8 +407,10 @@ export function SectionPages({ children }: { children: ReactNode }) {
   const { slide } = useSectionNavigation();
 
   useLayoutEffect(() => {
-    if (!slide?.progress || slide.progress.get() !== 0 || slide.progress.isAnimating()) return;
-    void animate(slide.progress, 1, { type: "tween", duration: slide.duration, ease: SLIDE_EASE });
+    if (!slide || slide.progress.get() !== 0 || slide.progress.isAnimating()) return;
+    void animate(slide.progress, 1, {
+      type: "tween", duration: slide.duration, ease: slide.fromSwipe ? SWIPE_EASE : TAB_EASE,
+    });
   }, [slide]);
 
   return (
@@ -415,16 +423,13 @@ export function SectionPages({ children }: { children: ReactNode }) {
 }
 
 const PAGE_VARIANTS: Variants = {
-  enter: (slide: PageSlide | null) => slide?.progress ? { opacity: 1 } : {
-    x: slide?.entry ?? 0, opacity: 0.86,
+  enter: (slide: PageSlide | null) => ({ opacity: slide ? 1 : 0.86 }),
+  visible: (slide: PageSlide | null) => slide ? { opacity: 1 } : {
+    opacity: 1,
+    transition: { type: "tween", duration: 0.14, ease: SWIPE_EASE },
   },
-  visible: (slide: PageSlide | null) => slide?.progress ? { opacity: 1 } : {
-    x: 0, opacity: 1,
-    transition: { type: "tween", duration: slide?.duration ?? 0.14, ease: SLIDE_EASE },
-  },
-  leave: (slide: PageSlide | null) => slide?.progress ? { opacity: 1 } : {
-    x: slide?.exit ?? 0, opacity: 0,
-    transition: { type: "tween", duration: slide?.duration ?? 0, ease: SLIDE_EASE },
+  leave: (slide: PageSlide | null) => slide ? { opacity: 1 } : {
+    opacity: 0, transition: { duration: 0 },
   },
 };
 
@@ -438,7 +443,7 @@ function SectionFrame({ children, slide }: { children: ReactNode; slide: PageSli
   });
   const reduced = useReducedMotion() === true;
   const element = useRef<HTMLDivElement>(null);
-  const x = useMotionValue(slide?.progress ? slide.entry : 0);
+  const x = useMotionValue(slide?.entry ?? 0);
   const stopFollowing = useRef<(() => void) | null>(null);
   const transition = present ? frameState.arrival : frameState.exitSlide;
   const remove = useEffectEvent(() => safeToRemove?.());
@@ -461,7 +466,7 @@ function SectionFrame({ children, slide }: { children: ReactNode; slide: PageSli
   }, [present, registerFrame, x]);
 
   useLayoutEffect(() => {
-    if (!transition?.progress) {
+    if (!transition) {
       if (!present) remove();
       return;
     }

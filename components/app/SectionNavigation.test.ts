@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, createEvent, fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -193,7 +193,7 @@ describe("section swipe integration", () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 
-  it("remembers root scrolling even when a normal detail link is used", async () => {
+  it("restores root scrolling during the commit after visiting a detail link", () => {
     const view = fixture();
     vi.spyOn(window, "scrollY", "get").mockReturnValue(320);
     fireEvent.scroll(window);
@@ -201,6 +201,6 @@ describe("section swipe integration", () => {
     view.rerender(createElement(SectionNavigation, null, createElement("main", null, "Настройки")));
     route.pathname = "/dashboard";
     view.rerender(createElement(SectionNavigation, null, createElement("main", { "data-section-content": true }, "Главная")));
-    await waitFor(() => expect(window.scrollTo).toHaveBeenCalledWith({ top: 320, behavior: "instant" }));
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 320, behavior: "instant" });
   });
 });
