@@ -42,6 +42,7 @@ export function BottomTabBar() {
             <li key={tab.href} className="flex">
               <Link
                 href={tab.href}
+                prefetch={true}
                 draggable={false}
                 onNavigate={event => { event.preventDefault(); navigation.navigate(tab.href); }}
                 aria-current={navigation.index === index ? "page" : undefined}
