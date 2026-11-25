@@ -3,8 +3,11 @@ import { cleanup, createEvent, fireEvent, render, waitFor } from "@testing-libra
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const route = vi.hoisted(() => ({ pathname: "/dashboard", push: vi.fn() }));
-vi.mock("next/navigation", () => ({ usePathname: () => route.pathname, useRouter: () => ({ push: route.push }) }));
+const route = vi.hoisted(() => ({ pathname: "/dashboard", push: vi.fn(), prefetch: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => route.pathname,
+  useRouter: () => ({ push: route.push, prefetch: route.prefetch }),
+}));
 
 import { SectionNavigation } from "./SectionNavigation";
 
@@ -48,10 +51,17 @@ function wheel(target: Element, deltaX: number, deltaY: number, timeStamp: numbe
   return fireEvent(target, event);
 }
 
+function timedPointer(target: Element, type: string, x: number, at: number) {
+  const event = new TestPointerEvent(type, { bubbles: true, cancelable: true, buttons: type === "pointerup" ? 0 : 1, clientX: x, clientY: 180 });
+  Object.defineProperty(event, "timeStamp", { value: at });
+  fireEvent(target, event);
+}
+
 describe("section swipe integration", () => {
   beforeEach(() => {
     route.pathname = "/dashboard";
     route.push.mockClear();
+    route.prefetch.mockClear();
     vi.stubGlobal("PointerEvent", TestPointerEvent);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0));
     vi.stubGlobal("cancelAnimationFrame", clearTimeout);
@@ -68,7 +78,32 @@ describe("section swipe integration", () => {
     const link = view.getByTestId("link");
     swipe(link, -90);
     expect(route.push).toHaveBeenCalledExactlyOnceWith("/workouts", { scroll: false });
-    expect(fireEvent.click(link)).toBe(false);
+    expect(fireEvent.click(link, { detail: 1 })).toBe(false);
+  });
+
+  it("uses the last movement for a flick that begins after a hold", () => {
+    const link = fixture().getByTestId("link");
+    timedPointer(link, "pointerdown", 200, 1000);
+    timedPointer(link, "pointermove", 190, 1460);
+    timedPointer(link, "pointermove", 160, 1480);
+    timedPointer(link, "pointerup", 160, 1490);
+    expect(route.prefetch).toHaveBeenCalledExactlyOnceWith("/workouts");
+    expect(route.push).toHaveBeenCalledExactlyOnceWith("/workouts", { scroll: false });
+  });
+
+  it("settles a short swipe when the finger has stopped before release", () => {
+    const link = fixture().getByTestId("link");
+    timedPointer(link, "pointerdown", 200, 1000);
+    timedPointer(link, "pointermove", 160, 1030);
+    timedPointer(link, "pointerup", 160, 1160);
+    expect(route.push).not.toHaveBeenCalled();
+  });
+
+  it("leaves keyboard activation available after a drag without a click", () => {
+    const link = fixture().getByTestId("link");
+    link.setAttribute("href", "#start");
+    swipe(link, -90);
+    expect(fireEvent.click(link, { detail: 0 })).toBe(true);
   });
 
   it.each([
