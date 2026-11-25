@@ -12,6 +12,7 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { LayoutRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
@@ -425,9 +426,23 @@ function SectionFrame({ children, slide }: { children: ReactNode; slide: PageSli
   const { registerFrame } = useSectionNavigation();
   const present = useIsPresent();
   const leaving = usePresenceData() as PageSlide | null;
+  const routerContext = useContext(LayoutRouterContext);
+  const [frameState, setFrameState] = useState({
+    present, routerContext, exitTop: undefined as number | undefined,
+  });
   const reduced = useReducedMotion() === true;
   const element = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
+
+  // App Router updates its live slot tree at commit, including inside retained
+  // elements. Keep the source slot and its viewport position through the exit.
+  if (present !== frameState.present || (present && routerContext !== frameState.routerContext)) {
+    setFrameState({
+      present,
+      routerContext: present ? routerContext : frameState.routerContext,
+      exitTop: present ? undefined : leaving?.top,
+    });
+  }
 
   useLayoutEffect(() => {
     if (present && element.current) return registerFrame({ element: element.current, x });
@@ -440,14 +455,16 @@ function SectionFrame({ children, slide }: { children: ReactNode; slide: PageSli
       aria-hidden={!present || undefined}
       inert={!present || undefined}
       className={present ? "relative min-w-0" : "pointer-events-none fixed inset-x-0 z-10 min-w-0"}
-      style={{ x, top: present ? undefined : leaving?.top }}
+      style={{ x, top: frameState.exitTop }}
       custom={slide}
       variants={PAGE_VARIANTS}
       initial={reduced ? false : "enter"}
       animate="visible"
       exit="leave"
     >
-      {children}
+      <LayoutRouterContext.Provider value={present ? routerContext : frameState.routerContext}>
+        {children}
+      </LayoutRouterContext.Provider>
     </motion.div>
   );
 }
