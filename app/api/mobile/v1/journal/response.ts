@@ -14,7 +14,9 @@ export function serializeJournalWorkout(workout: ActiveWorkout) {
     name: workout.name,
     startedAt: workout.startedAt,
     autoFinishAt: workout.status === "active" ? strengthAutoFinishAt(workout.exercises, lastSavedAt)?.toISOString() ?? null : null,
-    exercises: workout.exercises.map((exercise) => ({
+    // Older native clients ignore replacedAt, so expose only loggable active assignments.
+    // Completed history retains every row and its performed sets.
+    exercises: workout.exercises.filter((exercise) => workout.status !== "active" || !exercise.replacedAt).map((exercise) => ({
       id: exercise.id,
       name: exercise.exerciseNameRu,
       ...(exercise.replacedAt ? { replacedAt: exercise.replacedAt } : {}),

@@ -6,10 +6,12 @@ import { z } from "zod";
 
 import { requireUser } from "@/lib/auth/require-user";
 import {
+  addWorkoutExercise,
   cancelWorkout,
   deleteSet,
   deleteWorkout,
   recordSet,
+  removeWorkoutExercise,
   replaceWorkoutExercise,
   startWorkoutFromTemplate,
 } from "@/lib/repos/workouts.repo";
@@ -131,6 +133,53 @@ export async function recordSetAction(
   });
   revalidatePath(`/workouts/${parsed.data.workoutId}`);
   return { status: "idle" };
+}
+
+const addExerciseSchema = z.object({
+  workoutId: z.string().uuid(),
+  exerciseId: z.string().uuid(),
+  targetSets: z.coerce.number().int().min(1).max(20).default(3),
+});
+
+export async function addWorkoutExerciseAction(formData: FormData): Promise<{ status: "success" } | { status: "error"; message: string }> {
+  const user = await requireUser();
+  const parsed = addExerciseSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "error", message: "Выберите упражнение и от 1 до 20 подходов" };
+  const result = await addWorkoutExercise(user.id, parsed.data.workoutId, parsed.data.exerciseId, parsed.data.targetSets);
+  if (result.status !== "added") {
+    const messages = {
+      workout_not_found: "Тренировка не найдена",
+      workout_not_active: "Добавлять упражнения можно только в активной тренировке",
+      exercise_unavailable: "Это упражнение больше недоступно. Выберите другое",
+      already_added: "Это упражнение уже есть в плане тренировки",
+      invalid_target_sets: "Укажите от 1 до 20 подходов",
+    };
+    return { status: "error", message: messages[result.status] };
+  }
+  revalidatePath(`/workouts/${parsed.data.workoutId}`);
+  return { status: "success" };
+}
+
+const removeExerciseSchema = z.object({
+  workoutId: z.string().uuid(),
+  workoutExerciseId: z.string().uuid(),
+});
+
+export async function removeWorkoutExerciseAction(formData: FormData): Promise<{ status: "success" } | { status: "error"; message: string }> {
+  const user = await requireUser();
+  const parsed = removeExerciseSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "error", message: "Выберите упражнение в этой тренировке" };
+  const result = await removeWorkoutExercise(user.id, parsed.data.workoutId, parsed.data.workoutExerciseId);
+  if (result.status !== "removed" && result.status !== "already_removed") {
+    const messages = {
+      workout_not_found: "Тренировка не найдена",
+      workout_not_active: "Убирать упражнения можно только в активной тренировке",
+      exercise_not_found: "Упражнение не найдено в этой тренировке",
+    };
+    return { status: "error", message: messages[result.status] };
+  }
+  revalidatePath(`/workouts/${parsed.data.workoutId}`);
+  return { status: "success" };
 }
 
 const replaceExerciseSchema = z.object({

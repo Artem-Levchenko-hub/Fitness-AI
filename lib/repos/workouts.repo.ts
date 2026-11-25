@@ -407,6 +407,85 @@ export type ReplaceWorkoutExerciseStatus =
   | "replaced" | "workout_not_found" | "workout_not_active" | "exercise_not_found"
   | "exercise_unavailable" | "already_replaced" | "same_exercise" | "no_remaining_sets" | "myo_started";
 
+export type AddWorkoutExerciseStatus =
+  | "added" | "workout_not_found" | "workout_not_active" | "exercise_unavailable"
+  | "already_added" | "invalid_target_sets";
+
+/** Changes only this session's plan; retired assignments and template targets stay intact. */
+export async function addWorkoutExercise(
+  userId: string,
+  workoutId: string,
+  exerciseId: string,
+  targetSets = 3,
+): Promise<{ status: AddWorkoutExerciseStatus }> {
+  if (!Number.isInteger(targetSets) || targetSets < 1 || targetSets > 20) {
+    return { status: "invalid_target_sets" };
+  }
+
+  return db.transaction(async (tx) => {
+    // Serialize plan changes with replacement, set writes, and workout completion.
+    const [owned] = await tx.select({ id: schema.workouts.id, status: schema.workouts.status })
+      .from(schema.workouts)
+      .where(and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId)))
+      .limit(1).for("update");
+    if (!owned) return { status: "workout_not_found" };
+    if (owned.status !== "active") return { status: "workout_not_active" };
+
+    const [available] = await tx.select({ id: schema.exercises.id }).from(schema.exercises)
+      .where(and(eq(schema.exercises.id, exerciseId), or(
+        isNull(schema.exercises.ownerUserId), eq(schema.exercises.ownerUserId, userId),
+      ))).limit(1);
+    if (!available) return { status: "exercise_unavailable" };
+
+    const [existing] = await tx.select({ id: schema.workoutExercises.id }).from(schema.workoutExercises)
+      .where(and(
+        eq(schema.workoutExercises.workoutId, workoutId),
+        eq(schema.workoutExercises.exerciseId, exerciseId),
+        isNull(schema.workoutExercises.replacedAt),
+      )).limit(1);
+    if (existing) return { status: "already_added" };
+
+    const [order] = await tx.select({ last: max(schema.workoutExercises.position) })
+      .from(schema.workoutExercises).where(eq(schema.workoutExercises.workoutId, workoutId));
+    await tx.insert(schema.workoutExercises).values({
+      id: crypto.randomUUID(), workoutId, exerciseId, position: (order?.last ?? -1) + 1,
+      targetSets, targetRepsMin: 8, targetRepsMax: 12, targetWeightKg: null, targetRestSeconds: 120,
+      myoReps: false, myoMiniSets: 3, myoMiniReps: 5, myoMiniRestSeconds: 20,
+    });
+    return { status: "added" };
+  });
+}
+
+export type RemoveWorkoutExerciseStatus =
+  | "removed" | "already_removed" | "workout_not_found" | "workout_not_active" | "exercise_not_found";
+
+/** Retirement preserves saved and late offline sets under the exercise actually performed. */
+export async function removeWorkoutExercise(
+  userId: string,
+  workoutId: string,
+  workoutExerciseId: string,
+): Promise<{ status: RemoveWorkoutExerciseStatus }> {
+  return db.transaction(async (tx) => {
+    const [owned] = await tx.select({ id: schema.workouts.id, status: schema.workouts.status })
+      .from(schema.workouts)
+      .where(and(eq(schema.workouts.id, workoutId), eq(schema.workouts.userId, userId)))
+      .limit(1).for("update");
+    if (!owned) return { status: "workout_not_found" };
+    if (owned.status !== "active") return { status: "workout_not_active" };
+
+    const [exercise] = await tx.select({ id: schema.workoutExercises.id, replacedAt: schema.workoutExercises.replacedAt })
+      .from(schema.workoutExercises)
+      .where(and(eq(schema.workoutExercises.id, workoutExerciseId), eq(schema.workoutExercises.workoutId, workoutId)))
+      .limit(1);
+    if (!exercise) return { status: "exercise_not_found" };
+    if (exercise.replacedAt) return { status: "already_removed" };
+
+    await tx.update(schema.workoutExercises).set({ replacedAt: new Date() })
+      .where(and(eq(schema.workoutExercises.id, workoutExerciseId), eq(schema.workoutExercises.workoutId, workoutId)));
+    return { status: "removed" };
+  });
+}
+
 /** A fresh row keeps completed and delayed offline sets attached to the movement actually performed. */
 export async function replaceWorkoutExercise(
   userId: string,

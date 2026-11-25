@@ -32,12 +32,14 @@ export function ExercisePicker({
   onChange,
   placeholder = "Выберите упражнение",
   disabled,
+  "aria-label": ariaLabel = "Упражнение",
 }: {
   exercises: ReadonlyArray<PickerExercise>;
   value: string | null;
   onChange: (id: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  "aria-label"?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -53,6 +55,7 @@ export function ExercisePicker({
           type="button"
           variant="outline"
           role="combobox"
+          aria-label={ariaLabel}
           aria-expanded={open}
           disabled={disabled}
           className={cn(
@@ -63,11 +66,12 @@ export function ExercisePicker({
           <span className="truncate">
             {selected ? selected.nameRu : placeholder}
           </span>
-          <ChevronsUpDown className="size-4 opacity-60" />
+          <ChevronsUpDown className="size-4 shrink-0 opacity-60" aria-hidden />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[min(420px,calc(100vw-2rem))] p-0" align="start">
         <Command
+          label="Поиск упражнения"
           filter={(itemValue, search) => {
             const exercise = exercises.find((e) => e.id === itemValue);
             if (!exercise) return 0;
@@ -78,7 +82,7 @@ export function ExercisePicker({
               : 0;
           }}
         >
-          <CommandInput placeholder="Поиск упражнения…" />
+          <CommandInput placeholder="Поиск упражнения…" aria-label="Поиск упражнения" />
           <CommandList>
             <CommandEmpty>Не найдено.</CommandEmpty>
             <CommandGroup>

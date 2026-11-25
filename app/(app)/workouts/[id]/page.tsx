@@ -96,9 +96,10 @@ export default async function WorkoutPage({ params }: Props) {
   // цели = точка решения; урок H4.3 — один компонент). Полную историю тянем
   // ТОЛЬКО при наличии цели; goalSeries — тот же источник, что /exercises/[id].
   const goalByExerciseId = new Map<string, GoalProgressView>();
+  const activeExercises = workout.exercises.filter((exercise) => !exercise.replacedAt);
   const replacementExercises = await listExercises(user.id);
   await Promise.all(
-    workout.exercises.map(async (ex) => {
+    activeExercises.map(async (ex) => {
       const [latest] = await exerciseSetHistory(user.id, ex.exerciseId, 1);
       const summary = summarizePreviousSession(latest ?? null);
       if (summary) previousByExerciseId.set(ex.exerciseId, summary);

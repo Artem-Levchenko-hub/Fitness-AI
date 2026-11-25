@@ -2,7 +2,7 @@
 
 import { ArrowLeftRight, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ExercisePicker, type PickerExercise } from "@/components/app/ExercisePicker";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { listPending } from "@/lib/storage/outbox";
 import { clearSetDraft } from "@/lib/storage/set-input-draft";
 import { replaceWorkoutExerciseAction } from "@/server/actions/workouts";
 
-export function WorkoutExerciseReplacement({ workoutId, workoutExerciseId, exerciseId, exercises, disabledReason, savingSet, replacing, onReplacingChange }: {
+export function WorkoutExerciseReplacement({ workoutId, workoutExerciseId, exerciseId, exercises, disabledReason, savingSet, replacing, onReplacingChange, onMutationStart, onMutationEnd }: {
   workoutId: string;
   workoutExerciseId: string;
   exerciseId: string;
@@ -19,12 +19,15 @@ export function WorkoutExerciseReplacement({ workoutId, workoutExerciseId, exerc
   savingSet: boolean;
   replacing: boolean;
   onReplacingChange: (value: boolean) => void;
+  onMutationStart: () => boolean;
+  onMutationEnd: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [online, setOnline] = useState(true);
+  const inFlight = useRef(false);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     update();
@@ -36,7 +39,9 @@ export function WorkoutExerciseReplacement({ workoutId, workoutExerciseId, exerc
   const reason = disabledReason || (!online ? "Для замены подключитесь к интернету" : "") || (choices.length === 0 ? "Нет доступных упражнений для замены" : "");
 
   async function replace() {
-    if (!selected || replacing || savingSet || reason) return;
+    if (!selected || replacing || savingSet || reason || inFlight.current) return;
+    if (navigator.onLine === false || !onMutationStart()) return;
+    inFlight.current = true;
     onReplacingChange(true);
     setError("");
     try {
@@ -59,7 +64,9 @@ export function WorkoutExerciseReplacement({ workoutId, workoutExerciseId, exerc
     } catch {
       setError("Не удалось заменить упражнение. Проверьте подключение и повторите");
     } finally {
+      inFlight.current = false;
       onReplacingChange(false);
+      onMutationEnd();
     }
   }
 
@@ -73,8 +80,8 @@ export function WorkoutExerciseReplacement({ workoutId, workoutExerciseId, exerc
       {open ? (
         <div className="border-border bg-muted/30 space-y-3 rounded-xl border p-3">
           <p className="text-muted-foreground text-xs leading-relaxed">Выполненные подходы останутся у исходного упражнения. Оставшиеся перейдут к замене. Вес выберите заново.</p>
-          <ExercisePicker exercises={choices} value={selected} onChange={setSelected} disabled={replacing || savingSet || !!reason} />
-          <div className="flex gap-2">
+          <ExercisePicker exercises={choices} value={selected} onChange={setSelected} disabled={replacing || savingSet || !!reason} aria-label="Упражнение для замены" />
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button type="button" disabled={!selected || replacing || savingSet || !!reason} onClick={() => void replace()}>
               {replacing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}Подтвердить замену
             </Button>

@@ -88,7 +88,7 @@ export const workoutExercises = pgTable(
     myoMiniSets: integer("myo_mini_sets"),
     myoMiniReps: integer("myo_mini_reps"),
     myoMiniRestSeconds: integer("myo_mini_rest_seconds"),
-    /** Замена завершает назначение этой строки; подходы остаются у исходного упражнения. */
+    /** Замена или удаление из плана завершает назначение; подходы остаются у исходного упражнения. */
     replacedAt: timestamp("replaced_at", { mode: "date", withTimezone: true }),
   },
   (t) => [

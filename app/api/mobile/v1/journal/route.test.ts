@@ -57,8 +57,22 @@ beforeEach(() => {
 
 describe("mobile strength journal", () => {
   it("retains a marked offline set from a retired exercise without changing its identity", async () => {
+    mocks.getActiveWorkoutForUser.mockResolvedValue({
+      id: workoutId,
+      name: "Ноги",
+      status: "active",
+      startedAt: new Date(completedAt),
+      exercises: [{
+        id: workoutExerciseId,
+        exerciseNameRu: "Приседания",
+        targetRestSeconds: 150,
+        replacedAt: new Date("2026-11-17T10:15:00Z"),
+        sets: [],
+      }],
+    });
+    expect((await (await GET()).json()).workout.exercises).toEqual([]);
     expect((await submit({ ...set, effort: "failure" })).status).toBe(200);
-    expect(mocks.recordSet).toHaveBeenCalledWith(userId, workoutId, expect.objectContaining({ workoutExerciseId, effort: "failure" }));
+    expect(mocks.recordSet).toHaveBeenCalledWith(userId, workoutId, expect.objectContaining({ workoutExerciseId, effort: "failure", completedAt: new Date(completedAt) }));
   });
 
   it("rejects unknown effort values in native uploads", async () => {

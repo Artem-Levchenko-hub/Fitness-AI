@@ -11,13 +11,15 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ExerciseDemo } from "@/components/app/ExerciseDemo";
 import { RestTimer } from "@/components/app/RestTimer";
 import { SetInput } from "@/components/app/SetInput";
 import { SetEffortBadge } from "@/components/app/SetEffortBadge";
 import { WorkoutExerciseReplacement } from "@/components/app/WorkoutExerciseReplacement";
+import { WorkoutExerciseAddition } from "@/components/app/WorkoutExerciseAddition";
+import { WorkoutExerciseRemoval } from "@/components/app/WorkoutExerciseRemoval";
 import type { PickerExercise } from "@/components/app/ExercisePicker";
 import {
   myoPhaseLabel,
@@ -79,6 +81,20 @@ export function ActiveWorkoutView({
   // восстанавливается из outbox (переживает reload). Реальный server-finish и
   // переход на разбор — дренаж H15.4.
   const [finishedOffline, setFinishedOffline] = useState(false);
+  const [planMutating, setPlanMutating] = useState(false);
+  const planMutationRef = useRef(false);
+  const [finishing, setFinishing] = useState(false);
+  const finishingRef = useRef(false);
+  const startPlanMutation = useCallback(() => {
+    if (planMutationRef.current || finishingRef.current) return false;
+    planMutationRef.current = true;
+    setPlanMutating(true);
+    return true;
+  }, []);
+  const endPlanMutation = useCallback(() => {
+    planMutationRef.current = false;
+    setPlanMutating(false);
+  }, []);
   useEffect(() => {
     let alive = true;
     const syncPending = () => {
@@ -119,6 +135,11 @@ export function ActiveWorkoutView({
   );
   const plannedExerciseCount = workout.exercises.filter((exercise) => !exercise.replacedAt).length;
   const visibleExercises = workout.exercises.filter((exercise) => !exercise.replacedAt || exercise.sets.length > 0 || (pendingByExerciseId.get(exercise.id)?.length ?? 0) > 0);
+  const activeExerciseIds = new Set(workout.exercises.filter((exercise) => !exercise.replacedAt).map((exercise) => exercise.exerciseId));
+  const availableExercises = replacementExercises.filter((choice) => !activeExerciseIds.has(choice.id));
+  const planDisabledReason = finishedOffline ? "Тренировка ожидает синхронизации завершения"
+    : finishing ? "Тренировка завершается"
+      : planMutating ? "Дождитесь сохранения изменений плана" : undefined;
 
   /** H12.4 — «Прервать» прямо из активной сессии (зеркало круговой/кардио:
    *  active-circuit.tsx / active-cardio.tsx). Раньше отменить зависшую силовую
@@ -127,6 +148,7 @@ export function ActiveWorkoutView({
    *  чисто-навигационной. cancelWorkoutAction ставит status=cancelled и уводит
    *  на /workouts. */
   async function handleCancel() {
+    if (planMutationRef.current || finishingRef.current) return;
     if (
       !confirm("Прервать тренировку? Прогресс сохранится, статус — cancelled.")
     ) {
@@ -134,7 +156,14 @@ export function ActiveWorkoutView({
     }
     const fd = new FormData();
     fd.append("workoutId", workout.id);
-    await cancelWorkoutAction(fd);
+    finishingRef.current = true;
+    setFinishing(true);
+    try {
+      await cancelWorkoutAction(fd);
+    } finally {
+      finishingRef.current = false;
+      setFinishing(false);
+    }
   }
 
   // H15.3c — офлайн-завершение через outbox. Детерминированный ключ
@@ -156,12 +185,21 @@ export function ActiveWorkoutView({
   }
 
   function handleFinish(e: React.FormEvent<HTMLFormElement>) {
+    if (planMutationRef.current || finishingRef.current) {
+      e.preventDefault();
+      return;
+    }
+    finishingRef.current = true;
+    setFinishing(true);
     // Офлайн → preventDefault отменяет server-action, финиш уходит в outbox.
     // Онлайн → preventDefault НЕ зовём → нативный finishWorkoutAction
     // отрабатывает без изменений (столп 4 — онлайн-путь не тронут).
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       e.preventDefault();
-      void finishOffline(new FormData(e.currentTarget));
+      void finishOffline(new FormData(e.currentTarget)).finally(() => {
+        finishingRef.current = false;
+        setFinishing(false);
+      });
     }
   }
 
@@ -176,7 +214,12 @@ export function ActiveWorkoutView({
         <p className="text-muted-foreground mt-3 text-xs leading-relaxed">Можно продолжить позже — записанные подходы сохраняются.</p>
       </div>
 
-      <ul className="space-y-3">
+      <WorkoutExerciseAddition workoutId={workout.id} exercises={availableExercises} disabledReason={planDisabledReason}
+        onMutationStart={startPlanMutation} onMutationEnd={endPlanMutation} />
+
+      {plannedExerciseCount === 0 ? <p className="text-muted-foreground px-1 text-sm leading-relaxed">В плане пока нет упражнений. Добавьте упражнение или завершите тренировку.</p> : null}
+
+      <ul className="space-y-3" aria-label="Упражнения тренировки">
         {visibleExercises.map((ex, idx) => (
           <ExerciseCard
             key={ex.id}
@@ -189,6 +232,10 @@ export function ActiveWorkoutView({
             onOfflineRecord={handleOfflineRecord}
             replacementExercises={replacementExercises}
             finishedOffline={finishedOffline}
+            planMutating={planMutating || finishing}
+            planDisabledReason={planDisabledReason}
+            onPlanMutationStart={startPlanMutation}
+            onPlanMutationEnd={endPlanMutation}
           />
         ))}
       </ul>
@@ -244,7 +291,7 @@ export function ActiveWorkoutView({
                 className="resize-none"
               />
             </div>
-            <Button type="submit" size="xl" variant="default" className="w-full">
+            <Button type="submit" size="xl" variant="default" className="w-full" disabled={planMutating || finishing}>
               <CheckCircle2 className="size-5" />
               Завершить тренировку
             </Button>
@@ -257,6 +304,7 @@ export function ActiveWorkoutView({
               size="sm"
               className="text-muted-foreground hover:text-destructive"
               onClick={handleCancel}
+              disabled={planMutating || finishing}
             >
               <X className="size-4" />
               Прервать
@@ -328,6 +376,10 @@ function ExerciseCard({
   onOfflineRecord,
   replacementExercises,
   finishedOffline,
+  planMutating,
+  planDisabledReason,
+  onPlanMutationStart,
+  onPlanMutationEnd,
 }: {
   workoutId: string;
   exercise: ActiveWorkout["exercises"][number];
@@ -338,6 +390,10 @@ function ExerciseCard({
   onOfflineRecord: (set: PendingSet) => void;
   replacementExercises: readonly PickerExercise[];
   finishedOffline: boolean;
+  planMutating: boolean;
+  planDisabledReason?: string;
+  onPlanMutationStart: () => boolean;
+  onPlanMutationEnd: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [savingSet, setSavingSet] = useState(false);
@@ -379,6 +435,7 @@ function ExerciseCard({
 
   return (
     <li
+      data-workout-exercise-id={exercise.id}
       className={cn(
         "bg-card border-border rounded-2xl border",
         completed && "ring-success/20 bg-success/5 ring-2",
@@ -409,7 +466,7 @@ function ExerciseCard({
           </h3>
           <p className="text-muted-foreground tabular mt-0.5 text-xs">
             {retired ? (
-              <span>{totalDone} подх. · заменено</span>
+              <span>{totalDone} подх. · убрано из плана</span>
             ) : exercise.myoReps ? (
               <span>
                 {totalDone}/{planned} · Myo: {exercise.targetRepsMin}–
@@ -470,6 +527,7 @@ function ExerciseCard({
                         variant="ghost"
                         size="icon"
                         aria-label="Удалить подход"
+                        disabled={planMutating || finishedOffline}
                         className="text-muted-foreground hover:text-destructive size-8"
                       >
                         <Trash2 className="size-3.5" />
@@ -580,19 +638,25 @@ function ExerciseCard({
                 }
                 restStartedAt={lastCompletedAt}
                 onOfflineRecord={onOfflineRecord}
-                disabled={replacing || finishedOffline}
+                disabled={replacing || planMutating || finishedOffline}
                 onSavingChange={setSavingSet}
               />
             </>
           ) : (
             <p className="bg-success/10 text-success rounded-lg p-3 text-center text-xs font-medium">
-              {retired ? "Упражнение заменено. Записанные подходы сохранены" : "Все целевые подходы выполнены"}
+              {retired ? "Убрано из плана. Записанные подходы сохранены" : "Все целевые подходы выполнены"}
             </p>
           )}
           {!completed ? (
             <WorkoutExerciseReplacement workoutId={workoutId} workoutExerciseId={exercise.id} exerciseId={exercise.exerciseId}
               exercises={replacementExercises} savingSet={savingSet} replacing={replacing} onReplacingChange={setReplacing}
-              disabledReason={finishedOffline ? "Тренировка ожидает синхронизации завершения" : pending.length > 0 ? "Дождитесь синхронизации записанных подходов перед заменой" : exercise.myoReps && totalDone > 0 ? "Myo-серия уже начата. Замена доступна до активационного подхода" : undefined} />
+              onMutationStart={onPlanMutationStart} onMutationEnd={onPlanMutationEnd}
+              disabledReason={planDisabledReason ?? (pending.length > 0 ? "Дождитесь синхронизации записанных подходов перед заменой" : exercise.myoReps && totalDone > 0 ? "Myo-серия уже начата. Замена доступна до активационного подхода" : undefined)} />
+          ) : null}
+          {!retired ? (
+            <WorkoutExerciseRemoval workoutId={workoutId} workoutExerciseId={exercise.id} exerciseName={exercise.exerciseNameRu}
+              disabledReason={planDisabledReason ?? (savingSet ? "Дождитесь сохранения подхода" : pending.length > 0 ? "Дождитесь синхронизации записанных подходов перед изменением плана" : undefined)}
+              onMutationStart={onPlanMutationStart} onMutationEnd={onPlanMutationEnd} />
           ) : null}
         </div>
       ) : null}
